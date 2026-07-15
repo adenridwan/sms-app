@@ -1,0 +1,100 @@
+Panduan Menjalankan Aplikasi SMS Enterprise
+
+  OPSI 1: Dengan Docker (Paling Mudah)
+
+  # 1. Masuk ke direktori project
+  cd E:\sms-app\backend
+
+  # 2. Copy environment file
+  copy .env.example .env
+
+  # 3. Jalankan semua containers
+  docker-compose up -d
+
+  # 4. Tunggu sampai semua container ready, lalu jalankan setup
+  docker-compose exec php composer install
+  docker-compose exec php php artisan key:generate
+  docker-compose exec php php artisan migrate --seed
+  docker-compose exec php php artisan storage:link
+
+  # 5. Install & build frontend
+  docker-compose exec node npm install
+  docker-compose exec node npm run build
+
+  # 6. Akses di browser: http://localhost:8080
+
+  ---
+  OPSI 2: Tanpa Docker (Manual)
+
+  Step 1: Install Dependencies
+
+  # Pastikan sudah install:
+  # - PHP 8.4+ dengan extensions: pdo_pgsql, redis, gd, zip
+  # - Composer 2.x
+  # - Node.js 20+ & npm
+  # - PostgreSQL 16
+
+  Step 2: Setup Database PostgreSQL
+
+  -- Buka pgAdmin atau psql
+  CREATE DATABASE sms_enterprise;
+
+  Step 3: Setup Laravel Backend
+
+  cd E:\sms-app\backend
+
+  # Install PHP dependencies
+  composer install
+
+  # Copy environment untuk lokal
+  copy .env.local.example .env
+
+  # Edit .env, sesuaikan DB_PASSWORD dengan password PostgreSQL Anda
+  # DB_PASSWORD=your_postgres_password
+
+  # Generate app key
+  php artisan key:generate
+
+  # Buat tabel sessions (karena SESSION_DRIVER=database)
+  php artisan session:table
+  php artisan migrate
+
+  # Jalankan seeder untuk data demo
+  php artisan db:seed
+
+  # Link storage
+  php artisan storage:link
+
+  Step 4: Jalankan Backend & Frontend
+
+  Terminal 1 - Laravel Server:
+  cd E:\sms-app\backend
+  php artisan serve
+
+  Terminal 2 - Vite Dev Server:
+  cd E:\sms-app\backend
+  npm install
+  npm run dev
+
+  Step 5: Akses Aplikasi
+
+  Buka browser: http://localhost:8000
+
+  ---
+  Akun Login Demo
+  ┌────────────────┬─────────────────────┬──────────┐
+  │      Role      │        Email        │ Password │
+  ├────────────────┼─────────────────────┼──────────┤
+  │ Super Admin    │ superadmin@sms.test │ password │
+  ├────────────────┼─────────────────────┼──────────┤
+  │ Admin          │ admin@sms.test      │ password │
+  ├────────────────┼─────────────────────┼──────────┤
+  │ Kepala Sekolah │ kepsek@sms.test     │ password │
+  ├────────────────┼─────────────────────┼──────────┤
+  │ Guru           │ guru1@sms.test      │ password │
+  ├────────────────┼─────────────────────┼──────────┤
+  │ Siswa          │ siswa.001@sms.test  │ password │
+  ├────────────────┼─────────────────────┼──────────┤
+  │ Wali Murid     │ wali1@sms.test      │ password │
+  └────────────────┴─────────────────────┴──────────┘
+  ---

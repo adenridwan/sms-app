@@ -1,0 +1,86 @@
+Saya ingin membangun aplikasi School Management System (SMS) Enterprise menggunakan teknologi berikut:
+Backend:
+- Laravel 12
+- PHP 8.4
+- PostgreSQL
+- Redis
+- Laravel Queue
+- Laravel Horizon
+- Laravel Sanctum
+- Spatie Permission
+- Docker
+
+Frontend:
+- React
+- Inertia.js
+- Tailwind CSS
+- shadcn/ui
+
+Mobile:
+- Flutter
+- REST API
+
+Arsitektur:
+- Clean Architecture
+- Repository Pattern
+- Service Layer
+- API First
+- Multi Tenant Ready
+- SOLID Principle
+
+Standar:
+- Gunakan Laravel Best Practice
+- PSR-12
+- Gunakan Form Request Validation
+- Gunakan Resource API
+- Gunakan Policy & Authorization
+- Gunakan Queue untuk proses berat
+- Semua kode harus modular
+- Sertakan struktur folder
+- Jelaskan alasan setiap keputusan teknis
+Berdasarkan Master Prompt di atas, buatkan struktur project School Management System.
+
+Output yang saya inginkan:
+
+1. Struktur Folder
+2. Database yang digunakan
+3. Struktur Docker
+4. Konfigurasi Laravel
+5. Package yang diperlukan
+6. Authentication
+7. Role Permission
+8. Environment
+9. Struktur API
+10. Naming Convention
+
+Buatkan UI Planning.
+
+Output:
+
+Sidebar
+
+Topbar
+
+Dashboard
+
+Color Palette
+
+Typography
+
+Component
+
+Card
+
+Table
+
+Form
+
+Button
+
+Dialog
+
+Notification
+
+Responsive Layout
+
+Gunakan konsep modern seperti Notion dan Linear.

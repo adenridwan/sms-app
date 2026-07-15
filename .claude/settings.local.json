@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"E:\\\\sms-app\\\\backend\\\\app\\\\Domain\\\\Notification\"\" 2>/dev/null || echo \"Directory not found, checking alternative paths \")"
+    ]
+  }
+}

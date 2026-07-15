@@ -1,0 +1,189 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # NGINX - Web Server
+  # ===========================================
+  nginx:
+    image: nginx:alpine
+    container_name: sms_nginx
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+      - "${APP_SSL_PORT:-443}:443"
+    volumes:
+      - ./backend:/var/www/html
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - php
+    networks:
+      - sms_network
+
+  # ===========================================
+  # PHP-FPM - Application Server
+  # ===========================================
+  php:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args:
+        PHP_VERSION: '8.4'
+    container_name: sms_php
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sms_network
+
+  # ===========================================
+  # PostgreSQL - Database
+  # ===========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: sms_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-sms_db}
+      POSTGRES_USER: ${DB_USERNAME:-sms_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sms_secret}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - sms_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - sms_network
+
+  # ===========================================
+  # Redis - Cache & Queue
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: sms_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-sms_redis_secret}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - sms_redis_data:/data
+    networks:
+      - sms_network
+
+  # ===========================================
+  # Laravel Horizon - Queue Manager
+  # ===========================================
+  horizon:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: sms_horizon
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan horizon
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      - php
+      - redis
+    networks:
+      - sms_network
+
+  # ===========================================
+  # Laravel Scheduler - Cron Jobs
+  # ===========================================
+  scheduler:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: sms_scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: >
+      sh -c "while true; do
+        php artisan schedule:run --verbose --no-interaction &
+        sleep 60
+      done"
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      - php
+    networks:
+      - sms_network
+
+  # ===========================================
+  # Node.js - Frontend Build (Development)
+  # ===========================================
+  node:
+    image: node:20-alpine
+    container_name: sms_node
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    networks:
+      - sms_network
+    profiles:
+      - dev
+
+  # ===========================================
+  # Mailpit - Email Testing (Development)
+  # ===========================================
+  mailpit:
+    image: axllent/mailpit
+    container_name: sms_mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAIL_PORT:-1025}:1025"
+      - "${MAIL_DASHBOARD_PORT:-8025}:8025"
+    networks:
+      - sms_network
+    profiles:
+      - dev
+
+  # ===========================================
+  # MinIO - S3 Compatible Storage (Optional)
+  # ===========================================
+  minio:
+    image: minio/minio
+    container_name: sms_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sms_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-sms_minio_secret}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - sms_minio_data:/data
+    networks:
+      - sms_network
+    profiles:
+      - storage
+
+# ===========================================
+# Networks
+# ===========================================
+networks:
+  sms_network:
+    driver: bridge
+
+# ===========================================
+# Volumes
+# ===========================================
+volumes:
+  sms_postgres_data:
+    driver: local
+  sms_redis_data:
+    driver: local
+  sms_minio_data:
+    driver: local

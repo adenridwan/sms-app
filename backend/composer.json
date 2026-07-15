@@ -1,0 +1,92 @@
+{
+    "name": "sms/enterprise",
+    "type": "project",
+    "description": "School Management System Enterprise",
+    "keywords": ["laravel", "school", "management", "education"],
+    "license": "proprietary",
+    "require": {
+        "php": "^8.4",
+        "laravel/framework": "^12.0",
+        "laravel/sanctum": "^4.0",
+        "laravel/horizon": "^5.0",
+        "laravel/tinker": "^2.10",
+        "inertiajs/inertia-laravel": "^2.0",
+        "spatie/laravel-permission": "^6.10",
+        "spatie/laravel-activitylog": "^4.9",
+        "spatie/laravel-query-builder": "^6.3",
+        "spatie/laravel-data": "^4.12",
+        "spatie/laravel-medialibrary": "^11.11",
+        "spatie/laravel-settings": "^3.4",
+        "barryvdh/laravel-dompdf": "^3.1",
+        "maatwebsite/excel": "^3.1",
+        "predis/predis": "^2.3",
+        "league/flysystem-aws-s3-v3": "^3.29",
+        "intervention/image-laravel": "^1.4",
+        "propaganistas/laravel-phone": "^5.3",
+        "stancl/tenancy": "^3.9"
+    },
+    "require-dev": {
+        "fakerphp/faker": "^1.24",
+        "laravel/pail": "^1.2",
+        "laravel/pint": "^1.19",
+        "laravel/sail": "^1.38",
+        "mockery/mockery": "^1.6",
+        "nunomaduro/collision": "^8.6",
+        "phpunit/phpunit": "^11.5",
+        "spatie/laravel-ignition": "^2.9",
+        "larastan/larastan": "^3.0",
+        "pestphp/pest": "^3.7",
+        "pestphp/pest-plugin-laravel": "^3.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+        },
+        "files": [
+            "app/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@php artisan package:discover --ansi"
+        ],
+        "post-update-cmd": [
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+        ],
+        "post-root-package-install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "post-create-project-cmd": [
+            "@php artisan key:generate --ansi",
+            "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
+            "@php artisan migrate --graceful --ansi"
+        ],
+        "pint": "pint",
+        "test": "pest",
+        "analyse": "phpstan analyse"
+    },
+    "extra": {
+        "laravel": {
+            "dont-discover": []
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
