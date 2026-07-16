@@ -5,6 +5,11 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -26,6 +31,7 @@ import {
     SidebarMenuSubItem,
     SidebarProvider,
     SidebarTrigger,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import {
     LayoutDashboard,
@@ -40,22 +46,27 @@ import {
     Bell,
     Settings,
     ChevronRight,
+    ChevronDown,
+    Check,
     LogOut,
     User,
     Moon,
     Sun,
+    Building2,
 } from 'lucide-react';
+
+interface MenuChild {
+    title: string;
+    href: string;
+    permission?: string;
+}
 
 interface MenuItem {
     title: string;
     icon: React.ElementType;
     href?: string;
     permission?: string;
-    children?: {
-        title: string;
-        href: string;
-        permission?: string;
-    }[];
+    children?: MenuChild[];
 }
 
 const menuItems: MenuItem[] = [
@@ -150,9 +161,102 @@ const menuItems: MenuItem[] = [
         title: 'Pengaturan',
         icon: Settings,
         permission: 'settings.view',
-        href: '/settings',
+        children: [
+            { title: 'Umum', href: '/settings', permission: 'settings.view' },
+            { title: 'Kelas', href: '/settings/class-rooms', permission: 'classrooms.view' },
+            { title: 'Jurusan', href: '/settings/majors', permission: 'majors.view' },
+            { title: 'Pengguna', href: '/settings/users', permission: 'users.view' },
+        ],
     },
 ];
+
+const getInitials = (name: string) =>
+    name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+
+/**
+ * Menu group with expandable/collapsible submenu.
+ * When the sidebar is collapsed (icon-only), clicking the group
+ * re-expands the sidebar and opens the submenu.
+ */
+function NavGroup({
+    item,
+    childrenItems,
+    currentPath,
+}: {
+    item: MenuItem;
+    childrenItems: MenuChild[];
+    currentPath: string;
+}) {
+    const { state, setOpen } = useSidebar();
+    const collapsed = state === 'collapsed';
+
+    const isPathActive = (href: string) =>
+        currentPath === href || currentPath.startsWith(href + '/');
+
+    // Only the deepest (longest) matching child is marked active
+    const activeChildHref = childrenItems
+        .filter((c) => isPathActive(c.href))
+        .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
+    const [isGroupOpen, setIsGroupOpen] = useState(!!activeChildHref);
+
+    const handleTriggerClick = () => {
+        if (collapsed) {
+            setOpen(true);
+            setIsGroupOpen(true);
+        }
+    };
+
+    return (
+        <Collapsible
+            open={isGroupOpen && !collapsed}
+            onOpenChange={(open) => {
+                if (!collapsed) setIsGroupOpen(open);
+            }}
+        >
+            <SidebarMenuItem>
+                <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                        tooltip={item.title}
+                        isActive={!!activeChildHref}
+                        onClick={handleTriggerClick}
+                    >
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                        <ChevronRight
+                            className={cn(
+                                'ml-auto h-4 w-4 shrink-0 transition-transform duration-200',
+                                isGroupOpen && !collapsed && 'rotate-90',
+                                'group-data-[state=collapsed]:hidden'
+                            )}
+                        />
+                    </SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                    <SidebarMenuSub>
+                        {childrenItems.map((child) => (
+                            <SidebarMenuSubItem key={child.href}>
+                                <SidebarMenuSubButton
+                                    asChild
+                                    isActive={child.href === activeChildHref}
+                                >
+                                    <Link href={child.href}>
+                                        <span>{child.title}</span>
+                                    </Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                        ))}
+                    </SidebarMenuSub>
+                </CollapsibleContent>
+            </SidebarMenuItem>
+        </Collapsible>
+    );
+}
 
 interface MainLayoutProps {
     children: React.ReactNode;
@@ -160,44 +264,83 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children, title }: MainLayoutProps) {
-    const { auth, tenant, app } = usePage<PageProps>().props;
-    const [isDark, setIsDark] = useState(false);
+    const { auth, tenant, tenants, app } = usePage<PageProps>().props;
+    const { url } = usePage();
+    const currentPath = url.split('?')[0];
 
-    const toggleTheme = () => {
-        setIsDark(!isDark);
-        document.documentElement.classList.toggle('dark');
+    // Tenant switcher for super admin: the selected tenant is persisted in
+    // localStorage and sent as the X-Tenant-ID header on every API request.
+    const isSuperAdmin = auth.user?.user_type === 'super_admin';
+    const tenantList = isSuperAdmin && tenants ? tenants : [];
+    const [activeTenantId] = useState<string | null>(() => {
+        if (!isSuperAdmin || tenantList.length === 0) return null;
+        const stored = localStorage.getItem('active_tenant_id');
+        if (stored && tenantList.some((t) => t.id === stored)) return stored;
+        // Default to the first tenant so tenant-scoped API calls always work
+        localStorage.setItem('active_tenant_id', tenantList[0].id);
+        return tenantList[0].id;
+    });
+    const activeTenant = tenantList.find((t) => t.id === activeTenantId) ?? null;
+
+    const switchTenant = (id: string) => {
+        if (id === activeTenantId) return;
+        localStorage.setItem('active_tenant_id', id);
+        // Full reload so every page refetches data under the new tenant context
+        window.location.reload();
+    };
+
+    const [isDark, setIsDark] = useState(
+        () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+    );
+
+    const setTheme = (dark: boolean) => {
+        setIsDark(dark);
+        document.documentElement.classList.toggle('dark', dark);
+        localStorage.setItem('theme', dark ? 'dark' : 'light');
     };
 
     const hasPermission = (permission?: string) => {
         if (!permission) return true;
         if (auth.user?.user_type === 'super_admin') return true;
-        return auth.user?.permissions.includes(permission);
+        return auth.user?.permissions?.includes(permission) ?? false;
     };
 
-    const getInitials = (name: string) => {
-        return name
-            .split(' ')
-            .map((n) => n[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 2);
-    };
+    const isPathActive = (href: string) =>
+        currentPath === href || currentPath.startsWith(href + '/');
+
+    const schoolName = tenant?.name || activeTenant?.name || app.name;
+    const userName = auth.user?.full_name || 'User';
 
     return (
         <SidebarProvider>
-            <Sidebar variant="inset">
-                <SidebarHeader className="border-b px-4 py-3">
-                    <Link href="/dashboard" className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                            <GraduationCap className="h-5 w-5" />
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-semibold">{tenant?.name || app.name}</span>
-                            <span className="text-xs text-muted-foreground">School Management</span>
+            <Sidebar>
+                {/* Sidebar Header: school logo & name */}
+                <SidebarHeader className="border-b px-3 py-3">
+                    <Link
+                        href="/dashboard"
+                        className="flex items-center gap-2.5 group-data-[state=collapsed]:justify-center"
+                    >
+                        {tenant?.logo ? (
+                            <img
+                                src={tenant.logo}
+                                alt={schoolName}
+                                className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-border"
+                            />
+                        ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
+                                <GraduationCap className="h-5 w-5" />
+                            </div>
+                        )}
+                        <div className="flex min-w-0 flex-col group-data-[state=collapsed]:hidden">
+                            <span className="truncate text-sm font-semibold">{schoolName}</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                                School Management
+                            </span>
                         </div>
                     </Link>
                 </SidebarHeader>
 
+                {/* Sidebar Menu: vertically scrollable */}
                 <SidebarContent className="scrollbar-thin">
                     <SidebarMenu className="px-2 py-2">
                         {menuItems.map((item) => {
@@ -210,28 +353,22 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                                 if (visibleChildren.length === 0) return null;
 
                                 return (
-                                    <SidebarMenuItem key={item.title}>
-                                        <SidebarMenuButton>
-                                            <item.icon className="h-4 w-4" />
-                                            <span>{item.title}</span>
-                                            <ChevronRight className="ml-auto h-4 w-4" />
-                                        </SidebarMenuButton>
-                                        <SidebarMenuSub>
-                                            {visibleChildren.map((child) => (
-                                                <SidebarMenuSubItem key={child.href}>
-                                                    <SidebarMenuSubButton asChild>
-                                                        <Link href={child.href}>{child.title}</Link>
-                                                    </SidebarMenuSubButton>
-                                                </SidebarMenuSubItem>
-                                            ))}
-                                        </SidebarMenuSub>
-                                    </SidebarMenuItem>
+                                    <NavGroup
+                                        key={item.title}
+                                        item={item}
+                                        childrenItems={visibleChildren}
+                                        currentPath={currentPath}
+                                    />
                                 );
                             }
 
                             return (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
+                                    <SidebarMenuButton
+                                        asChild
+                                        tooltip={item.title}
+                                        isActive={isPathActive(item.href!)}
+                                    >
                                         <Link href={item.href!}>
                                             <item.icon className="h-4 w-4" />
                                             <span>{item.title}</span>
@@ -243,41 +380,137 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                     </SidebarMenu>
                 </SidebarContent>
 
+                {/* Sidebar Footer: user info + logout */}
                 <SidebarFooter className="border-t p-2">
+                    <div className="flex items-center gap-2 rounded-lg p-1.5 group-data-[state=collapsed]:flex-col group-data-[state=collapsed]:gap-1.5 group-data-[state=collapsed]:p-0">
+                        <Link href="/profile" title="Profil" className="shrink-0">
+                            <Avatar className="h-8 w-8 ring-1 ring-border transition-shadow hover:ring-2 hover:ring-primary">
+                                <AvatarImage src={auth.user?.avatar ?? undefined} />
+                                <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                                    {getInitials(userName)}
+                                </AvatarFallback>
+                            </Avatar>
+                        </Link>
+                        <div className="flex min-w-0 flex-1 flex-col group-data-[state=collapsed]:hidden">
+                            <span className="truncate text-sm font-medium">{userName}</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                                {auth.user?.email}
+                            </span>
+                        </div>
+                        <Link
+                            href="/logout"
+                            method="post"
+                            as="button"
+                            title="Keluar"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        >
+                            <LogOut className="h-4 w-4" />
+                            <span className="sr-only">Keluar</span>
+                        </Link>
+                    </div>
+                </SidebarFooter>
+            </Sidebar>
+
+            <SidebarInset>
+                {/* Header / Navbar */}
+                <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <SidebarTrigger />
+                    <div className="min-w-0 flex-1">
+                        {title && (
+                            <h1 className="truncate text-lg font-semibold">{title}</h1>
+                        )}
+                    </div>
+
+                    {/* Tenant switcher (super admin only) */}
+                    {isSuperAdmin && tenantList.length > 0 && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="h-9 gap-2 px-2.5">
+                                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                                    <span className="hidden max-w-[12rem] truncate text-sm md:inline">
+                                        {activeTenant?.name ?? 'Pilih Sekolah'}
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-64">
+                                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                                    Kelola data sekolah
+                                </DropdownMenuLabel>
+                                {tenantList.map((t) => (
+                                    <DropdownMenuItem key={t.id} onClick={() => switchTenant(t.id)}>
+                                        <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                                        <span className="truncate">{t.name}</span>
+                                        {t.id === activeTenantId && (
+                                            <Check className="ml-auto h-4 w-4 text-primary" />
+                                        )}
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+
+                    {/* Notifications */}
+                    <Button variant="ghost" size="icon" className="relative">
+                        <Bell className="h-5 w-5" />
+                        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
+                            3
+                        </span>
+                        <span className="sr-only">Notifikasi</span>
+                    </Button>
+
+                    {/* User dropdown: theme, name, logout */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="w-full justify-start gap-2 px-2">
-                                <Avatar className="h-8 w-8">
-                                    <AvatarImage src={auth.user?.avatar} />
-                                    <AvatarFallback>
-                                        {auth.user?.full_name ? getInitials(auth.user.full_name) : 'U'}
+                            <Button
+                                variant="ghost"
+                                className="h-9 gap-2 rounded-full px-1.5 md:pr-2.5"
+                            >
+                                <Avatar className="h-7 w-7">
+                                    <AvatarImage src={auth.user?.avatar ?? undefined} />
+                                    <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                                        {getInitials(userName)}
                                     </AvatarFallback>
                                 </Avatar>
-                                <div className="flex flex-col items-start text-left">
-                                    <span className="text-sm font-medium">{auth.user?.full_name}</span>
-                                    <span className="text-xs text-muted-foreground">{auth.user?.email}</span>
-                                </div>
+                                <span className="hidden max-w-[10rem] truncate text-sm font-medium md:inline">
+                                    {userName}
+                                </span>
+                                <ChevronDown className="hidden h-4 w-4 text-muted-foreground md:inline" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuLabel>Akun Saya</DropdownMenuLabel>
+                        <DropdownMenuContent align="end" className="w-60">
+                            <DropdownMenuLabel className="flex flex-col">
+                                <span className="truncate">{userName}</span>
+                                <span className="truncate text-xs font-normal text-muted-foreground">
+                                    {auth.user?.email}
+                                </span>
+                            </DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem asChild>
                                 <Link href="/profile">
                                     <User className="mr-2 h-4 w-4" />
-                                    Profil
+                                    Profil Saya
                                 </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={toggleTheme}>
-                                {isDark ? (
-                                    <Sun className="mr-2 h-4 w-4" />
-                                ) : (
-                                    <Moon className="mr-2 h-4 w-4" />
-                                )}
-                                {isDark ? 'Mode Terang' : 'Mode Gelap'}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                                Tampilan
+                            </DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => setTheme(false)}>
+                                <Sun className="mr-2 h-4 w-4 text-amber-500" />
+                                Mode Terang
+                                {!isDark && <Check className="ml-auto h-4 w-4 text-primary" />}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setTheme(true)}>
+                                <Moon className="mr-2 h-4 w-4 text-indigo-400" />
+                                Mode Gelap
+                                {isDark && <Check className="ml-auto h-4 w-4 text-primary" />}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem asChild>
+                            <DropdownMenuItem
+                                asChild
+                                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                            >
                                 <Link href="/logout" method="post" as="button" className="w-full">
                                     <LogOut className="mr-2 h-4 w-4" />
                                     Keluar
@@ -285,26 +518,20 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                </SidebarFooter>
-            </Sidebar>
-
-            <SidebarInset>
-                {/* Header */}
-                <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4">
-                    <SidebarTrigger />
-                    <div className="flex-1">
-                        {title && <h1 className="text-lg font-semibold">{title}</h1>}
-                    </div>
-                    <Button variant="ghost" size="icon" className="relative">
-                        <Bell className="h-5 w-5" />
-                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
-                            3
-                        </span>
-                    </Button>
                 </header>
 
                 {/* Main Content */}
                 <main className="flex-1 p-4 md:p-6">{children}</main>
+
+                {/* Section Footer */}
+                <footer className="border-t bg-background px-4 py-3 md:px-6">
+                    <div className="flex flex-col items-center justify-between gap-1 text-xs text-muted-foreground md:flex-row">
+                        <p>
+                            &copy; {new Date().getFullYear()} {schoolName}. Hak cipta dilindungi.
+                        </p>
+                        <p>School Management System</p>
+                    </div>
+                </footer>
             </SidebarInset>
         </SidebarProvider>
     );

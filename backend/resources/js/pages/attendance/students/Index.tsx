@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Calendar, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Clock } from 'lucide-react';
+import { Calendar, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Clock, Pencil } from 'lucide-react';
 import { studentAttendanceApi } from '@/services/attendance';
 import type { DailyAttendanceRecord, AttendanceStatus } from '@/types/attendance';
 import type { ClassRoom } from '@/types';
@@ -320,6 +320,7 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                                             <TableHead>Jam Pulang</TableHead>
                                             <TableHead>Keterlambatan</TableHead>
                                             <TableHead className="w-[200px]">Ubah Status</TableHead>
+                                            <TableHead className="w-[60px]">Aksi</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -358,6 +359,16 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => openEditDialog(student)}
+                                                        title="Edit absensi & catatan"
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
                                                 </TableCell>
                                             </TableRow>
                                         ))}

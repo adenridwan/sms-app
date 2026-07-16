@@ -1,13 +1,16 @@
-import { Head, Link, useForm } from '@inertiajs/react';
-import { FormEvent } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
+import { FormEvent, useState } from 'react';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { GraduationCap, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, GraduationCap, Loader2 } from 'lucide-react';
+import { authApi } from '@/services/api';
 
 export default function Register() {
-    const { data, setData, post, processing, errors } = useForm({
+    const [data, setData] = useState({
         username: '',
         first_name: '',
         last_name: '',
@@ -16,10 +19,38 @@ export default function Register() {
         password: '',
         password_confirmation: '',
     });
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [formError, setFormError] = useState<string | null>(null);
+    const [processing, setProcessing] = useState(false);
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
-        post('/api/v1/auth/register');
+        setProcessing(true);
+        setErrors({});
+        setFormError(null);
+
+        try {
+            await authApi.register(data);
+            router.visit('/dashboard');
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response) {
+                const { message, errors: validationErrors } = error.response.data ?? {};
+
+                if (validationErrors) {
+                    const fieldErrors: Record<string, string> = {};
+                    Object.entries(validationErrors as Record<string, string[]>).forEach(([field, messages]) => {
+                        fieldErrors[field] = messages[0];
+                    });
+                    setErrors(fieldErrors);
+                } else {
+                    setFormError(message ?? 'Registrasi gagal. Silakan coba lagi.');
+                }
+            } else {
+                setFormError('Tidak dapat terhubung ke server. Silakan coba lagi.');
+            }
+        } finally {
+            setProcessing(false);
+        }
     };
 
     return (
@@ -40,6 +71,13 @@ export default function Register() {
 
                     <form onSubmit={submit}>
                         <CardContent className="space-y-4">
+                            {formError && (
+                                <Alert variant="destructive">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription>{formError}</AlertDescription>
+                                </Alert>
+                            )}
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="first_name">Nama Depan</Label>
@@ -48,7 +86,7 @@ export default function Register() {
                                         type="text"
                                         placeholder="John"
                                         value={data.first_name}
-                                        onChange={(e) => setData('first_name', e.target.value)}
+                                        onChange={(e) => setData({ ...data, first_name: e.target.value })}
                                         className={errors.first_name ? 'border-destructive' : ''}
                                     />
                                     {errors.first_name && (
@@ -63,7 +101,7 @@ export default function Register() {
                                         type="text"
                                         placeholder="Doe"
                                         value={data.last_name}
-                                        onChange={(e) => setData('last_name', e.target.value)}
+                                        onChange={(e) => setData({ ...data, last_name: e.target.value })}
                                         className={errors.last_name ? 'border-destructive' : ''}
                                     />
                                     {errors.last_name && (
@@ -79,7 +117,7 @@ export default function Register() {
                                     type="text"
                                     placeholder="johndoe"
                                     value={data.username}
-                                    onChange={(e) => setData('username', e.target.value)}
+                                    onChange={(e) => setData({ ...data, username: e.target.value })}
                                     className={errors.username ? 'border-destructive' : ''}
                                 />
                                 {errors.username && (
@@ -94,7 +132,7 @@ export default function Register() {
                                     type="email"
                                     placeholder="nama@sekolah.sch.id"
                                     value={data.email}
-                                    onChange={(e) => setData('email', e.target.value)}
+                                    onChange={(e) => setData({ ...data, email: e.target.value })}
                                     className={errors.email ? 'border-destructive' : ''}
                                 />
                                 {errors.email && (
@@ -109,7 +147,7 @@ export default function Register() {
                                     type="tel"
                                     placeholder="08123456789"
                                     value={data.phone}
-                                    onChange={(e) => setData('phone', e.target.value)}
+                                    onChange={(e) => setData({ ...data, phone: e.target.value })}
                                     className={errors.phone ? 'border-destructive' : ''}
                                 />
                                 {errors.phone && (
@@ -124,7 +162,7 @@ export default function Register() {
                                     type="password"
                                     placeholder="••••••••"
                                     value={data.password}
-                                    onChange={(e) => setData('password', e.target.value)}
+                                    onChange={(e) => setData({ ...data, password: e.target.value })}
                                     className={errors.password ? 'border-destructive' : ''}
                                 />
                                 {errors.password && (
@@ -139,7 +177,7 @@ export default function Register() {
                                     type="password"
                                     placeholder="••••••••"
                                     value={data.password_confirmation}
-                                    onChange={(e) => setData('password_confirmation', e.target.value)}
+                                    onChange={(e) => setData({ ...data, password_confirmation: e.target.value })}
                                     className={errors.password_confirmation ? 'border-destructive' : ''}
                                 />
                                 {errors.password_confirmation && (

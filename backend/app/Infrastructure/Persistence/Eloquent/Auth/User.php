@@ -68,6 +68,18 @@ class User extends Authenticatable implements MustVerifyEmail
     ];
 
     /**
+     * Accessors exposed through the API resource.
+     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'first_name',
+        'last_name',
+        'phone',
+        'full_name',
+    ];
+
+    /**
      * The attributes that should be cast.
      *
      * @return array<string, string>
@@ -99,6 +111,30 @@ class User extends Authenticatable implements MustVerifyEmail
     public function profile(): HasOne
     {
         return $this->hasOne(UserProfile::class, 'user_id');
+    }
+
+    /**
+     * Get the first name attribute from the profile when present.
+     */
+    public function getFirstNameAttribute(): ?string
+    {
+        return $this->profile?->first_name;
+    }
+
+    /**
+     * Get the last name attribute from the profile when present.
+     */
+    public function getLastNameAttribute(): ?string
+    {
+        return $this->profile?->last_name;
+    }
+
+    /**
+     * Get the phone attribute from the profile when present.
+     */
+    public function getPhoneAttribute(): ?string
+    {
+        return $this->profile?->phone;
     }
 
     /**
@@ -187,11 +223,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function getFullNameAttribute(): string
     {
-        if ($this->profile) {
-            return trim($this->profile->first_name . ' ' . $this->profile->last_name);
-        }
-
-        return $this->username;
+        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? '')) ?: $this->username;
     }
 
     /**

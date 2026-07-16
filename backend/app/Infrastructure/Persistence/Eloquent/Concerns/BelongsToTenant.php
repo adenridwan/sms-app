@@ -33,9 +33,26 @@ trait BelongsToTenant
      */
     protected static function getCurrentTenantId(): ?string
     {
-        // Try to get from authenticated user
-        if ($user = auth()->user()) {
-            return $user->tenant_id;
+        // Guard against infinite recursion: resolving the authenticated user
+        // (e.g. from the session) re-queries this very model, which would
+        // re-trigger this scope and call auth()->user() again before the
+        // guard has finished resolving it the first time.
+        static $resolvingAuthUser = false;
+
+        if (! $resolvingAuthUser) {
+            $resolvingAuthUser = true;
+
+            try {
+                $user = auth()->user();
+            } finally {
+                $resolvingAuthUser = false;
+            }
+
+            // Only use the user's tenant when it is set; a super admin has
+            // tenant_id = null and must fall through to the container/header.
+            if ($user?->tenant_id) {
+                return $user->tenant_id;
+            }
         }
 
         // Try to get from app container
@@ -56,10 +73,7 @@ trait BelongsToTenant
      */
     public function tenant(): BelongsTo
     {
-        return $this->belongsTo(
-            \App\Infrastructure\Persistence\Eloquent\Tenant\Tenant::class,
-            'tenant_id'
-        );
+        return $this->belongsTo(\App\Models\Tenant::class, 'tenant_id');
     }
 
     /**

@@ -60,7 +60,7 @@ class EnsureTenantMiddleware
 
         if ($subdomain && $subdomain !== 'www' && $subdomain !== 'api') {
             // Lookup tenant by subdomain
-            $tenant = \App\Infrastructure\Persistence\Eloquent\Tenant\Tenant::where('slug', $subdomain)->first();
+            $tenant = \App\Models\Tenant::where('slug', $subdomain)->first();
             return $tenant?->id;
         }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use Symfony\Component\HttpFoundation\Response;
@@ -134,5 +135,18 @@ abstract class ApiController extends Controller
     protected function deleted(string $message = 'Deleted successfully'): JsonResponse
     {
         return $this->success(null, $message);
+    }
+
+    /**
+     * Resolve the tenant ID for the current request.
+     *
+     * Regular users carry their own tenant_id; a super admin (tenant_id = null)
+     * must supply the tenant context via the X-Tenant-ID header.
+     */
+    protected function currentTenantId(?Request $request = null): ?string
+    {
+        $request ??= request();
+
+        return $request->user()?->tenant_id ?? $request->header('X-Tenant-ID');
     }
 }

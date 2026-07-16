@@ -41,7 +41,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, RefreshCw, Trash2, Edit, Calendar, Wand2 } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Edit, Wand2 } from 'lucide-react';
 import { holidayApi } from '@/services/attendance';
 import type { Holiday, HolidayFormData } from '@/types/attendance';
 

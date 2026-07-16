@@ -11,6 +11,7 @@ export interface User {
     is_active: boolean;
     email_verified_at: string | null;
     last_login_at: string | null;
+    user_type?: string;
     roles: string[];
     permissions?: string[];
     created_at: string;
@@ -28,6 +29,8 @@ export interface PageProps {
         user: User | null;
     };
     tenant: Tenant | null;
+    /** Daftar tenant untuk super admin (tenant switcher); null untuk user biasa */
+    tenants?: Tenant[] | null;
     flash: {
         success?: string;
         error?: string;
@@ -39,6 +42,7 @@ export interface PageProps {
         locale: string;
         timezone: string;
     };
+    [key: string]: unknown;
 }
 
 export interface PaginationLinks {
@@ -205,6 +209,61 @@ export interface ClassRoom {
         name: string;
     };
     is_active: boolean;
+    students_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Major {
+    id: string;
+    name: string;
+    code: string;
+    description: string | null;
+    is_active: boolean;
+    classrooms_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface GradeLevel {
+    id: string;
+    name: string;
+    code: string;
+    order: number;
+    description: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Classroom {
+    id: string;
+    name: string;
+    code: string;
+    room: string | null;
+    capacity: number;
+    is_active: boolean;
+    academic_year_id: string;
+    academic_year?: {
+        id: string;
+        name: string;
+    };
+    grade_level_id: string;
+    grade_level?: {
+        id: string;
+        name: string;
+        code: string;
+    };
+    major_id: string | null;
+    major?: {
+        id: string;
+        name: string;
+        code: string;
+    } | null;
+    homeroom_teacher_id: string | null;
+    homeroom_teacher?: {
+        id: string;
+        name: string;
+    } | null;
     students_count?: number;
     created_at: string;
     updated_at: string;

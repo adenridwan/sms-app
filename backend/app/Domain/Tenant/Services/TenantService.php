@@ -29,6 +29,14 @@ class TenantService
     }
 
     /**
+     * Get the current tenant (alias used by the `tenant()` helper and BelongsToTenant trait).
+     */
+    public function current(): ?Tenant
+    {
+        return $this->currentTenant;
+    }
+
+    /**
      * Get the current tenant ID.
      */
     public function getTenantId(): ?string

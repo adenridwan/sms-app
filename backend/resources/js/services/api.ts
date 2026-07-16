@@ -1,5 +1,5 @@
-import axios, { AxiosResponse } from 'axios';
-import type { ApiResponse, PaginatedResponse, Student, Teacher, ClassRoom, Subject, AcademicYear, Semester, Payment, FeeType, Attendance, DashboardStats, User } from '@/types';
+import axios from 'axios';
+import type { ApiResponse, PaginatedResponse, Student, Teacher, ClassRoom, Subject, AcademicYear, Semester, Payment, FeeType, Attendance, DashboardStats, User, Major, GradeLevel, Classroom } from '@/types';
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -10,12 +10,20 @@ const api = axios.create({
     withCredentials: true,
 });
 
-// Add CSRF token to requests
+// Add CSRF token & tenant context to requests
 api.interceptors.request.use((config) => {
     const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     if (token) {
         config.headers['X-CSRF-TOKEN'] = token;
     }
+
+    // Tenant context for super admin (chosen via tenant switcher in the header).
+    // Regular users are resolved from their own tenant_id server-side.
+    const tenantId = localStorage.getItem('active_tenant_id');
+    if (tenantId) {
+        config.headers['X-Tenant-ID'] = tenantId;
+    }
+
     return config;
 });
 
@@ -162,7 +170,7 @@ export const subjectsApi = {
 // Academic Years
 export const academicYearsApi = {
     list: (params?: Record<string, unknown>) =>
-        api.get<PaginatedResponse<AcademicYear>>('/academic/years', { params }),
+        api.get<ApiResponse<PaginatedResponse<AcademicYear>>>('/academic/years', { params }),
 
     get: (id: string) =>
         api.get<ApiResponse<AcademicYear>>(`/academic/years/${id}`),
@@ -199,6 +207,98 @@ export const semestersApi = {
 
     setActive: (id: string) =>
         api.post<ApiResponse<Semester>>(`/academic/semesters/${id}/set-active`),
+};
+
+// Import result shape (majors & classrooms import)
+export interface ImportResult {
+    created: number;
+    updated: number;
+    errors: string[];
+}
+
+// Majors (Jurusan)
+export const majorsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<Major>>>('/academic/majors', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<Major>>(`/academic/majors/${id}`),
+
+    create: (data: Partial<Major>) =>
+        api.post<ApiResponse<Major>>('/academic/majors', data),
+
+    update: (id: string, data: Partial<Major>) =>
+        api.put<ApiResponse<Major>>(`/academic/majors/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/academic/majors/${id}`),
+
+    export: () =>
+        api.get('/academic/majors/export', { responseType: 'blob' }),
+
+    template: () =>
+        api.get('/academic/majors/template', { responseType: 'blob' }),
+
+    import: (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post<ApiResponse<ImportResult>>('/academic/majors/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+};
+
+// Grade Levels (Tingkat)
+export const gradeLevelsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<GradeLevel>>>('/academic/grade-levels', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<GradeLevel>>(`/academic/grade-levels/${id}`),
+
+    create: (data: Partial<GradeLevel>) =>
+        api.post<ApiResponse<GradeLevel>>('/academic/grade-levels', data),
+
+    update: (id: string, data: Partial<GradeLevel>) =>
+        api.put<ApiResponse<GradeLevel>>(`/academic/grade-levels/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/academic/grade-levels/${id}`),
+};
+
+// Classrooms (Kelas - academic)
+export const classroomsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<Classroom>>>('/academic/classrooms', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<Classroom>>(`/academic/classrooms/${id}`),
+
+    create: (data: Partial<Classroom>) =>
+        api.post<ApiResponse<Classroom>>('/academic/classrooms', data),
+
+    update: (id: string, data: Partial<Classroom>) =>
+        api.put<ApiResponse<Classroom>>(`/academic/classrooms/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/academic/classrooms/${id}`),
+
+    students: (id: string) =>
+        api.get<ApiResponse<Student[]>>(`/academic/classrooms/${id}/students`),
+
+    export: () =>
+        api.get('/academic/classrooms/export', { responseType: 'blob' }),
+
+    template: () =>
+        api.get('/academic/classrooms/template', { responseType: 'blob' }),
+
+    import: (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post<ApiResponse<ImportResult>>('/academic/classrooms/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
 };
 
 // Payments

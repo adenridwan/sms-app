@@ -66,10 +66,17 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('settings')->name('settings.')->group(function () {
         Route::get('/', [PageController::class, 'settings'])->name('index');
         Route::get('/users', [PageController::class, 'users'])->name('users');
+        Route::get('/class-rooms', [PageController::class, 'settingsClassRooms'])->name('class-rooms');
+        Route::get('/majors', [PageController::class, 'settingsMajors'])->name('majors');
     });
 
     // Profile Routes
     Route::get('/profile', function () {
         return Inertia::render('Profile/Edit');
     })->name('profile.edit');
+});
+
+// Fallback: elegant 404 page for unknown routes
+Route::fallback(function () {
+    return Inertia::render('Error', ['status' => 404]);
 });

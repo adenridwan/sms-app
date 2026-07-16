@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     Table,
@@ -41,7 +40,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, RefreshCw, CheckCircle, XCircle, Eye, FileText, Image } from 'lucide-react';
+import { Plus, RefreshCw, CheckCircle, XCircle, Eye, Image, Trash2 } from 'lucide-react';
 import { leavePermissionApi } from '@/services/attendance';
 import type { LeavePermission, LeaveStatus, LeaveType } from '@/types/attendance';
 
@@ -73,6 +72,7 @@ export default function LeavePermissionIndex() {
     const [rejectingPermission, setRejectingPermission] = useState<LeavePermission | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
     const [approvingId, setApprovingId] = useState<string | null>(null);
+    const [deletingPermission, setDeletingPermission] = useState<LeavePermission | null>(null);
 
     const fetchPermissions = async () => {
         setLoading(true);
@@ -126,10 +126,12 @@ export default function LeavePermissionIndex() {
         }
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async () => {
+        if (!deletingPermission) return;
         try {
-            await leavePermissionApi.delete(id);
+            await leavePermissionApi.delete(deletingPermission.id);
             toast.success('Perizinan berhasil dihapus');
+            setDeletingPermission(null);
             fetchPermissions();
         } catch (error) {
             toast.error('Gagal menghapus perizinan');
@@ -309,6 +311,14 @@ export default function LeavePermissionIndex() {
                                                                 </Button>
                                                             </>
                                                         )}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="text-muted-foreground hover:text-red-600"
+                                                            onClick={() => setDeletingPermission(permission)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
@@ -428,6 +438,28 @@ export default function LeavePermissionIndex() {
                         </AlertDialogCancel>
                         <AlertDialogAction onClick={handleReject} className="bg-red-600 hover:bg-red-700">
                             Tolak
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Delete Dialog */}
+            <AlertDialog open={!!deletingPermission} onOpenChange={() => setDeletingPermission(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Perizinan</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus perizinan{' '}
+                            {deletingPermission && getPersonName(deletingPermission)}? Tindakan ini
+                            tidak dapat dibatalkan.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeletingPermission(null)}>
+                            Batal
+                        </AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                            Hapus
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

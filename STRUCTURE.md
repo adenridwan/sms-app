@@ -61,6 +61,8 @@ backend/
 │   ├── Infrastructure/            # Infrastructure Layer
 │   │   ├── Persistence/
 │   │   │   ├── Eloquent/          # Eloquent Models
+│   │   │   │   └── Academic/      # AcademicYear, Semester, GradeLevel,
+│   │   │   │                      #   Major, Classroom (HasUuid + BelongsToTenant)
 │   │   │   └── Repositories/      # Repository Implementations
 │   │   ├── Cache/                 # Redis Cache
 │   │   ├── Queue/                 # Job Queue Handlers
@@ -88,7 +90,16 @@ backend/
 │   │   │       └── V2/            # API Version 2 (Future)
 │   │   ├── Requests/              # Form Request Validation
 │   │   ├── Resources/             # API Resources
+│   │   │   └── Academic/          # MajorResource, GradeLevelResource,
+│   │   │                          #   ClassroomResource
 │   │   └── Middleware/            # HTTP Middleware
+│   │
+│   ├── Exports/                   # Excel Exports (maatwebsite/excel)
+│   │   └── Academic/              # MajorsExport, MajorsTemplateExport,
+│   │                              #   ClassroomsExport, ClassroomsTemplateExport
+│   ├── Imports/                   # Excel Imports
+│   │   └── Academic/              # MajorsImport, ClassroomsImport
+│   │                              #   (upsert by kode, laporan error per baris)
 │   │
 │   ├── Console/                   # Artisan Commands
 │   ├── Exceptions/                # Exception Handlers
@@ -131,68 +142,63 @@ backend/
 
 ## Frontend (React + Inertia.js + shadcn/ui)
 
+> Catatan: frontend web saat ini terintegrasi di dalam Laravel (`backend/resources/js`),
+> dirender via Inertia.js — bukan folder `frontend/` terpisah.
+
 ```
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── ui/                    # shadcn/ui Components
-│   │   │   ├── button/
-│   │   │   ├── card/
-│   │   │   ├── dialog/
-│   │   │   ├── dropdown/
-│   │   │   ├── input/
-│   │   │   ├── select/
-│   │   │   ├── table/
-│   │   │   ├── tabs/
-│   │   │   ├── toast/
-│   │   │   ├── avatar/
-│   │   │   ├── badge/
-│   │   │   ├── checkbox/
-│   │   │   ├── radio/
-│   │   │   ├── switch/
-│   │   │   ├── tooltip/
-│   │   │   ├── popover/
-│   │   │   ├── command/
-│   │   │   ├── calendar/
-│   │   │   └── sidebar/
-│   │   ├── common/                # Shared Components
-│   │   ├── forms/                 # Form Components
-│   │   ├── tables/                # Table Components
-│   │   ├── charts/                # Chart Components
-│   │   ├── navigation/            # Navigation Components
-│   │   ├── modals/                # Modal Components
-│   │   └── notifications/         # Notification Components
-│   │
-│   ├── pages/                     # Page Components (Inertia)
-│   │   ├── dashboard/
-│   │   ├── academic/
-│   │   ├── students/
-│   │   ├── teachers/
-│   │   ├── staff/
-│   │   ├── finance/
-│   │   ├── attendance/
-│   │   ├── library/
-│   │   ├── exams/
-│   │   ├── reports/
-│   │   ├── settings/
-│   │   └── auth/
-│   │
-│   ├── layouts/                   # Layout Components
-│   │   ├── main/                  # Main Dashboard Layout
-│   │   ├── auth/                  # Auth Layout
-│   │   └── error/                 # Error Pages Layout
-│   │
-│   ├── hooks/                     # Custom React Hooks
-│   ├── stores/                    # State Management
-│   ├── services/
-│   │   └── api/                   # API Service Layer
-│   ├── utils/                     # Utility Functions
-│   ├── types/                     # TypeScript Types
-│   ├── styles/                    # Global Styles
-│   └── assets/
-│       ├── images/
-│       ├── icons/
-│       └── fonts/
+backend/resources/js/
+├── app.tsx                        # Bootstrap Inertia + React Query + init tema
+│                                  #   (fallback ke pages/Error.tsx jika page belum ada)
+├── vite-env.d.ts                  # Deklarasi tipe vite/client
+│
+├── components/
+│   └── ui/                        # shadcn/ui Components
+│       ├── alert.tsx
+│       ├── alert-dialog.tsx
+│       ├── avatar.tsx
+│       ├── badge.tsx
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── checkbox.tsx
+│       ├── collapsible.tsx        # Expand/collapse submenu sidebar
+│       ├── dialog.tsx
+│       ├── dropdown-menu.tsx
+│       ├── input.tsx
+│       ├── label.tsx
+│       ├── progress.tsx
+│       ├── select.tsx
+│       ├── separator.tsx
+│       ├── sheet.tsx
+│       ├── sidebar.tsx            # Sidebar collapsible (icon-only saat ditutup)
+│       ├── sonner.tsx
+│       ├── switch.tsx
+│       ├── table.tsx
+│       ├── tabs.tsx
+│       ├── textarea.tsx
+│       └── tooltip.tsx
+│
+├── pages/                         # Page Components (Inertia)
+│   ├── Welcome.tsx
+│   ├── Dashboard.tsx
+│   ├── Error.tsx                  # Halaman error elegan (401/403/404/419/429/500/503)
+│   ├── auth/                      # Login, Register
+│   ├── students/                  # Index, Create
+│   ├── attendance/                # students, teachers, permissions, holidays,
+│   │                              #   qr-codes, reports, settings
+│   ├── settings/                  # Majors.tsx (Jurusan), ClassRooms.tsx (Kelas)
+│   │                              #   — CRUD + Import (dengan template) + Export
+│   └── scanner/                   # QR Scanner (kiosk)
+│
+├── layouts/
+│   └── MainLayout.tsx             # Sidebar (logo sekolah, menu collapsible, footer
+│                                  #   user+logout), navbar (dropdown tema/user/logout),
+│                                  #   footer section
+│
+├── hooks/                         # use-mobile, useOfflineQueue, useOfflineRoster
+├── stores/                        # State Management (Zustand)
+├── services/                      # api.ts, attendance.ts (API layer)
+├── types/                         # index.ts, attendance.ts (TypeScript Types)
+└── lib/                           # Utility Functions (cn, dll)
 ```
 
 ---

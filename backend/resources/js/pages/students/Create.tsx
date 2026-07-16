@@ -1,4 +1,4 @@
-import { Head, Link, useForm, router } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEvent } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -15,11 +15,7 @@ import {
 } from '@/components/ui/select';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
 
-interface Props {
-    classRooms?: Array<{ id: string; name: string }>;
-}
-
-export default function CreateStudent({ classRooms = [] }: Props) {
+export default function CreateStudent() {
     const { data, setData, post, processing, errors } = useForm({
         // User data
         first_name: '',

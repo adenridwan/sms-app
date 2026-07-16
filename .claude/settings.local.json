@@ -1,7 +1,29 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls -la \"E:\\\\sms-app\\\\backend\\\\app\\\\Domain\\\\Notification\"\" 2>/dev/null || echo \"Directory not found, checking alternative paths \")"
+      "Bash(ls -la \"E:\\\\sms-app\\\\backend\\\\app\\\\Domain\\\\Notification\"\" 2>/dev/null || echo \"Directory not found, checking alternative paths \")",
+      "Bash(xargs -I{} echo {})",
+      "Bash(docker compose *)",
+      "Bash(rm -f e:/sms-app/backend/public/hot)",
+      "Bash(curl -s http://localhost:8080/login)",
+      "Bash(curl -s -o /dev/null -w \"CSS status:%{http_code}\\\\n\" http://localhost:8080/build/assets/app-UBHzHYRH.css)",
+      "Bash(curl -s -o /dev/null -w \"JS status:%{http_code}\\\\n\" http://localhost:8080/build/assets/app-CRHPssbC.js)",
+      "Bash(MSYS_NO_PATHCONV=1 docker compose exec php cat /var/www/html/app/Domain/Tenant/Services/TenantService.php)",
+      "Bash(MSYS_NO_PATHCONV=1 docker compose exec php php -i)",
+      "Bash(MSYS_NO_PATHCONV=1 docker compose exec php cat /var/www/html/vendor/laravel/sanctum/src/Http/Middleware/EnsureFrontendRequestsAreStateful.php)",
+      "Bash(MSYS_NO_PATHCONV=1 docker compose exec php sh -c \"grep -n '^\\\\[2026-07-16 1[12]:' /var/www/html/storage/logs/laravel-2026-07-16.log | tail -20\")",
+      "Bash(MSYS_NO_PATHCONV=1 docker compose exec php sh -c \"grep -c '^\\\\[' /var/www/html/storage/logs/laravel-2026-07-16.log\")",
+      "Bash(MSYS_NO_PATHCONV=1 docker compose exec php sh -c \"grep -n '^\\\\[' /var/www/html/storage/logs/laravel-2026-07-16.log | tail -5\")",
+      "Bash(npx tsc:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(php:*)",
+      "Bash(php -l:*)",
+      "Bash(./node_modules/.bin/vite build:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(grep:*)",
+      "Bash(docker exec:*)",
+      "Bash(printf:*)"
     ]
   }
 }

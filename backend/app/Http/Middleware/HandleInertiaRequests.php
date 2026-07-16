@@ -53,6 +53,13 @@ class HandleInertiaRequests extends Middleware
                 'logo' => tenant()->logo,
             ] : null,
 
+            // Tenant list for super admin (used by the tenant switcher)
+            'tenants' => fn () => $request->user()?->isSuperAdmin()
+                ? \App\Models\Tenant::query()
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'logo'])
+                : null,
+
             // Flash messages
             'flash' => [
                 'success' => fn() => $request->session()->get('success'),

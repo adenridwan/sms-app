@@ -1,7 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -191,10 +191,6 @@ export default function ScannerIndex() {
             const value = (e.target as HTMLInputElement).value;
             handleScan(value);
         }
-    };
-
-    const formatTime = (timeStr: string) => {
-        return timeStr;
     };
 
     if (loading) {

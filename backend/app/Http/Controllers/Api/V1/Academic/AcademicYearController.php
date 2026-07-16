@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1\Academic;
 
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Resources\AcademicYearResource;
-use App\Models\Academic\AcademicYear;
+use App\Infrastructure\Persistence\Eloquent\Academic\AcademicYear;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;

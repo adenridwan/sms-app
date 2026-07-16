@@ -14,10 +14,9 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Save, RefreshCw, Clock, MapPin, Bell, MessageSquare, Send, CheckCircle } from 'lucide-react';
+import { Save, RefreshCw, Clock, MapPin, Bell, MessageSquare, Send } from 'lucide-react';
 import { attendanceSettingsApi } from '@/services/attendance';
 import type { AttendanceSettings, NotificationSettings } from '@/types/attendance';
 

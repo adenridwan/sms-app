@@ -200,9 +200,9 @@ export const attendanceSettingsApi = {
         late_tolerance_minutes: number;
         require_location: boolean;
         require_photo: boolean;
-        location_radius: number;
-        school_latitude: number;
-        school_longitude: number;
+        location_radius: number | null;
+        school_latitude: number | null;
+        school_longitude: number | null;
         working_days: number[];
         // Notification settings
         wa_enabled: boolean;

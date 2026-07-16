@@ -139,4 +139,20 @@ class PageController extends Controller
     {
         return Inertia::render('settings/General');
     }
+
+    /**
+     * Display class rooms settings page.
+     */
+    public function settingsClassRooms(): Response
+    {
+        return Inertia::render('settings/ClassRooms');
+    }
+
+    /**
+     * Display majors settings page.
+     */
+    public function settingsMajors(): Response
+    {
+        return Inertia::render('settings/Majors');
+    }
 }

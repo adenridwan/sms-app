@@ -63,10 +63,20 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Grade Levels
         Route::apiResource('grade-levels', \App\Http\Controllers\Api\V1\Academic\GradeLevelController::class);
 
-        // Majors
+        // Majors (static routes must be registered before apiResource)
+        Route::get('majors/template', [\App\Http\Controllers\Api\V1\Academic\MajorController::class, 'template'])->name('majors.template');
+        Route::get('majors/export', [\App\Http\Controllers\Api\V1\Academic\MajorController::class, 'export'])->name('majors.export');
+        Route::post('majors/import', [\App\Http\Controllers\Api\V1\Academic\MajorController::class, 'import'])
+            ->middleware('throttle:uploads')
+            ->name('majors.import');
         Route::apiResource('majors', \App\Http\Controllers\Api\V1\Academic\MajorController::class);
 
-        // Classrooms
+        // Classrooms (static routes must be registered before apiResource)
+        Route::get('classrooms/template', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'template'])->name('classrooms.template');
+        Route::get('classrooms/export', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'export'])->name('classrooms.export');
+        Route::post('classrooms/import', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'import'])
+            ->middleware('throttle:uploads')
+            ->name('classrooms.import');
         Route::apiResource('classrooms', \App\Http\Controllers\Api\V1\Academic\ClassroomController::class);
         Route::get('classrooms/{classroom}/students', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'students'])->name('classrooms.students');
         Route::get('classrooms/{classroom}/schedule', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'schedule'])->name('classrooms.schedule');

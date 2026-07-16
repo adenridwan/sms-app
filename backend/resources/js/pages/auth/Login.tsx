@@ -1,22 +1,49 @@
-import { Head, Link, useForm } from '@inertiajs/react';
-import { FormEvent } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
+import { FormEvent, useState } from 'react';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { GraduationCap, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, GraduationCap, Loader2 } from 'lucide-react';
+import { authApi } from '@/services/api';
 
 export default function Login() {
-    const { data, setData, post, processing, errors } = useForm({
-        email: '',
-        password: '',
-        remember: false,
-    });
+    const [data, setData] = useState({ email: '', password: '', remember: false });
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [formError, setFormError] = useState<string | null>(null);
+    const [processing, setProcessing] = useState(false);
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
-        post('/api/v1/auth/login');
+        setProcessing(true);
+        setErrors({});
+        setFormError(null);
+
+        try {
+            await authApi.login(data);
+            router.visit('/dashboard');
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response) {
+                const { message, errors: validationErrors } = error.response.data ?? {};
+
+                if (validationErrors) {
+                    const fieldErrors: Record<string, string> = {};
+                    Object.entries(validationErrors as Record<string, string[]>).forEach(([field, messages]) => {
+                        fieldErrors[field] = messages[0];
+                    });
+                    setErrors(fieldErrors);
+                } else {
+                    setFormError(message ?? 'Email atau password salah.');
+                }
+            } else {
+                setFormError('Tidak dapat terhubung ke server. Silakan coba lagi.');
+            }
+        } finally {
+            setProcessing(false);
+        }
     };
 
     return (
@@ -37,6 +64,13 @@ export default function Login() {
 
                     <form onSubmit={submit}>
                         <CardContent className="space-y-4">
+                            {formError && (
+                                <Alert variant="destructive">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription>{formError}</AlertDescription>
+                                </Alert>
+                            )}
+
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
                                 <Input
@@ -44,7 +78,7 @@ export default function Login() {
                                     type="email"
                                     placeholder="nama@sekolah.sch.id"
                                     value={data.email}
-                                    onChange={(e) => setData('email', e.target.value)}
+                                    onChange={(e) => setData({ ...data, email: e.target.value })}
                                     className={errors.email ? 'border-destructive' : ''}
                                 />
                                 {errors.email && (
@@ -67,7 +101,7 @@ export default function Login() {
                                     type="password"
                                     placeholder="••••••••"
                                     value={data.password}
-                                    onChange={(e) => setData('password', e.target.value)}
+                                    onChange={(e) => setData({ ...data, password: e.target.value })}
                                     className={errors.password ? 'border-destructive' : ''}
                                 />
                                 {errors.password && (
@@ -79,7 +113,7 @@ export default function Login() {
                                 <Checkbox
                                     id="remember"
                                     checked={data.remember}
-                                    onCheckedChange={(checked) => setData('remember', checked as boolean)}
+                                    onCheckedChange={(checked) => setData({ ...data, remember: checked as boolean })}
                                 />
                                 <Label htmlFor="remember" className="text-sm font-normal">
                                     Ingat saya

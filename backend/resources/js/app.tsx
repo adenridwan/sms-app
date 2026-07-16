@@ -8,6 +8,15 @@ import { Toaster } from '@/components/ui/sonner';
 
 const appName = import.meta.env.VITE_APP_NAME || 'SMS Enterprise';
 
+// Apply saved theme before first render to avoid flash
+const savedTheme = localStorage.getItem('theme');
+if (
+    savedTheme === 'dark' ||
+    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+) {
+    document.documentElement.classList.add('dark');
+}
+
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
@@ -23,6 +32,10 @@ createInertiaApp({
         resolvePageComponent(
             `./pages/${name}.tsx`,
             import.meta.glob('./pages/**/*.tsx')
+        ).catch(() =>
+            // Fallback for pages that are not implemented yet:
+            // render an elegant "coming soon" page instead of a blank error
+            resolvePageComponent('./pages/Error.tsx', import.meta.glob('./pages/**/*.tsx'))
         ),
     setup({ el, App, props }) {
         const root = createRoot(el);

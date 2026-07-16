@@ -4,18 +4,21 @@ import { cva, VariantProps } from 'class-variance-authority';
 import { PanelLeft } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const SIDEBAR_WIDTH = '16rem';
-const SIDEBAR_WIDTH_ICON = '3rem';
+const SIDEBAR_WIDTH_ICON = '3.5rem';
 
 type SidebarContextType = {
     state: 'expanded' | 'collapsed';
     open: boolean;
     setOpen: (open: boolean) => void;
+    openMobile: boolean;
+    setOpenMobile: (open: boolean) => void;
+    isMobile: boolean;
     toggleSidebar: () => void;
 };
 
@@ -33,17 +36,25 @@ const SidebarProvider = React.forwardRef<
     HTMLDivElement,
     React.ComponentProps<'div'> & { defaultOpen?: boolean }
 >(({ defaultOpen = true, className, children, ...props }, ref) => {
+    const isMobile = useIsMobile();
     const [open, setOpen] = React.useState(defaultOpen);
+    // The mobile drawer must always start closed - it is a separate overlay
+    // from the desktop sidebar's expanded/collapsed state.
+    const [openMobile, setOpenMobile] = React.useState(false);
 
     const toggleSidebar = React.useCallback(() => {
-        setOpen((prev) => !prev);
-    }, []);
+        if (isMobile) {
+            setOpenMobile((prev) => !prev);
+        } else {
+            setOpen((prev) => !prev);
+        }
+    }, [isMobile]);
 
     const state = open ? 'expanded' : 'collapsed';
 
     const contextValue = React.useMemo<SidebarContextType>(
-        () => ({ state, open, setOpen, toggleSidebar }),
-        [state, open, toggleSidebar]
+        () => ({ state, open, setOpen, openMobile, setOpenMobile, isMobile, toggleSidebar }),
+        [state, open, openMobile, isMobile, toggleSidebar]
     );
 
     return (
@@ -72,12 +83,12 @@ const Sidebar = React.forwardRef<
     HTMLDivElement,
     React.ComponentProps<'div'> & { variant?: 'sidebar' | 'floating' | 'inset' }
 >(({ variant = 'sidebar', className, children, ...props }, ref) => {
-    const { open, setOpen, state } = useSidebar();
+    const { state, openMobile, setOpenMobile } = useSidebar();
 
     return (
         <>
             {/* Mobile */}
-            <Sheet open={open} onOpenChange={setOpen}>
+            <Sheet open={openMobile} onOpenChange={setOpenMobile}>
                 <SheetContent side="left" className="w-[--sidebar-width] p-0 md:hidden">
                     <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                     <div className="flex h-full flex-col">{children}</div>
@@ -89,8 +100,8 @@ const Sidebar = React.forwardRef<
                 ref={ref}
                 data-state={state}
                 className={cn(
-                    'group hidden flex-col border-r bg-sidebar text-sidebar-foreground md:flex',
-                    'w-[--sidebar-width] transition-[width] duration-200 ease-linear',
+                    'group hidden flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground md:flex',
+                    'w-[--sidebar-width] transition-[width] duration-300 ease-in-out',
                     'data-[state=collapsed]:w-[--sidebar-width-icon]',
                     variant === 'inset' && 'rounded-lg border',
                     className
@@ -158,7 +169,10 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<'di
         return (
             <div
                 ref={ref}
-                className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-auto', className)}
+                className={cn(
+                    'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden',
+                    className
+                )}
                 {...props}
             />
         );
@@ -181,7 +195,7 @@ const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.ComponentProps<'li
 SidebarMenuItem.displayName = 'SidebarMenuItem';
 
 const sidebarMenuButtonVariants = cva(
-    'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
+    'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:ring-2 active:bg-primary/15 active:text-primary disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-primary data-[active=true]:font-medium data-[active=true]:text-primary-foreground data-[active=true]:shadow-sm data-[active=true]:hover:bg-primary data-[active=true]:hover:text-primary-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:[&>span]:hidden',
     {
         variants: {
             size: {
@@ -237,6 +251,7 @@ const SidebarMenuSub = React.forwardRef<HTMLUListElement, React.ComponentProps<'
             ref={ref}
             className={cn(
                 'mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5',
+                'group-data-[state=collapsed]:hidden',
                 className
             )}
             {...props}
@@ -261,8 +276,8 @@ const SidebarMenuSubButton = React.forwardRef<
             ref={ref}
             data-active={isActive}
             className={cn(
-                'flex h-8 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground',
-                'data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground',
+                'flex h-8 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:ring-2 active:bg-primary/15 active:text-primary disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
+                'data-[active=true]:bg-primary/15 data-[active=true]:font-medium data-[active=true]:text-primary',
                 'text-sm',
                 className
             )}

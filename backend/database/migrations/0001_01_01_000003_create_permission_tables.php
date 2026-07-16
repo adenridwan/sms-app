@@ -54,11 +54,17 @@ return new class extends Migration
             $table->unsignedBigInteger($columnNames['permission_pivot_key']);
             $table->string('model_type');
             $table->uuid($columnNames['model_morph_key']);
+            $table->uuid($columnNames['team_foreign_key'])->nullable();
 
             $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_permissions_model_id_model_type_index');
+            $table->index($columnNames['team_foreign_key'], 'model_has_permissions_team_foreign_key_index');
             $table->foreign($columnNames['permission_pivot_key'])
                 ->references('id')
                 ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            $table->foreign($columnNames['team_foreign_key'])
+                ->references('id')
+                ->on('tenants')
                 ->onDelete('cascade');
 
             $table->primary(
@@ -72,11 +78,17 @@ return new class extends Migration
             $table->unsignedBigInteger($columnNames['role_pivot_key']);
             $table->string('model_type');
             $table->uuid($columnNames['model_morph_key']);
+            $table->uuid($columnNames['team_foreign_key'])->nullable();
 
             $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
+            $table->index($columnNames['team_foreign_key'], 'model_has_roles_team_foreign_key_index');
             $table->foreign($columnNames['role_pivot_key'])
                 ->references('id')
                 ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            $table->foreign($columnNames['team_foreign_key'])
+                ->references('id')
+                ->on('tenants')
                 ->onDelete('cascade');
 
             $table->primary(

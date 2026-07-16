@@ -12,11 +12,6 @@ interface RosterEntry extends LookupResult {
     cached_at: number;
 }
 
-interface RosterMetadata {
-    key: string;
-    value: string | number;
-}
-
 let dbInstance: IDBDatabase | null = null;
 
 const openDB = (): Promise<IDBDatabase> => {

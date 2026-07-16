@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Auth;
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
+use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +29,8 @@ class ProfileController extends ApiController
     {
         $user = $request->user();
         $data = $request->validated();
+        $profileData = array_intersect_key($data, array_flip(['first_name', 'last_name', 'phone']));
+        $userData = array_intersect_key($data, array_flip(['username', 'email']));
 
         // Handle avatar upload
         if ($request->hasFile('avatar')) {
@@ -36,10 +39,16 @@ class ProfileController extends ApiController
                 Storage::disk('public')->delete($user->avatar);
             }
 
-            $data['avatar'] = $request->file('avatar')->store('avatars', 'public');
+            $userData['avatar'] = $request->file('avatar')->store('avatars', 'public');
         }
 
-        $user->update($data);
+        $user->update($userData);
+
+        UserProfile::query()->updateOrCreate(
+            ['user_id' => $user->id],
+            $profileData
+        );
+
         $user->load('roles');
 
         return $this->success(new UserResource($user), 'Profile updated successfully');
