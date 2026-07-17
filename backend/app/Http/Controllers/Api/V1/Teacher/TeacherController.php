@@ -6,7 +6,7 @@ use App\Http\Controllers\Api\ApiController;
 use App\Http\Requests\Teacher\StoreTeacherRequest;
 use App\Http\Requests\Teacher\UpdateTeacherRequest;
 use App\Http\Resources\TeacherResource;
-use App\Models\Teacher\Teacher;
+use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,21 +23,25 @@ class TeacherController extends ApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Teacher::with(['user', 'subjects'])
+        $query = Teacher::with(['user.profile'])
             ->when($request->search, function ($q, $search) {
                 $q->where(function ($query) use ($search) {
                     $query->where('nip', 'ilike', "%{$search}%")
                         ->orWhere('nuptk', 'ilike', "%{$search}%")
                         ->orWhereHas('user', function ($q) use ($search) {
-                            $q->where('first_name', 'ilike', "%{$search}%")
-                                ->orWhere('last_name', 'ilike', "%{$search}%")
+                            $q->where('username', 'ilike', "%{$search}%")
                                 ->orWhere('email', 'ilike', "%{$search}%");
+                        })
+                        ->orWhereHas('user.profile', function ($q) use ($search) {
+                            $q->where('first_name', 'ilike', "%{$search}%")
+                                ->orWhere('last_name', 'ilike', "%{$search}%");
                         });
                 });
             })
-            ->when($request->status, fn($q, $status) => $q->where('employment_status', $status))
-            ->when($request->gender, fn($q, $gender) => $q->where('gender', $gender))
-            ->when($request->subject_id, fn($q, $subjectId) => $q->whereHas('subjects', fn($q) => $q->where('id', $subjectId)));
+            ->when($request->status, fn($q, $status) => $q->where('status', $status))
+            ->when($request->employment_status, fn($q, $es) => $q->where('employment_status', $es))
+            ->when($request->gender, fn($q, $gender) => $q->whereHas('user.profile', fn($q) => $q->where('gender', $gender)))
+            ->when($request->subject_id, fn($q, $subjectId) => $q->whereHas('subjects', fn($q) => $q->where('subject_id', $subjectId)));
 
         // Sorting
         $sortField = $request->get('sort', 'created_at');

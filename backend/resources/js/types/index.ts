@@ -135,15 +135,13 @@ export interface Teacher {
     phone: string | null;
     education_level: string | null;
     education_major: string | null;
-    employment_status: 'active' | 'inactive' | 'retired' | 'resigned';
+    university: string | null;
+    employment_status: 'permanent' | 'contract' | 'honorary' | 'part_time';
     employment_status_label: string;
     join_date: string | null;
-    position: string | null;
-    specialization: string | null;
-    photo: string | null;
+    status: 'active' | 'inactive' | 'on_leave' | 'retired' | 'terminated';
+    status_label: string;
     photo_url: string | null;
-    subjects?: Subject[];
-    class_rooms?: ClassRoom[];
     created_at: string;
     updated_at: string;
 }

@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StudentResource;
+use App\Http\Resources\TeacherResource;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
+use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -80,13 +82,44 @@ class PageController extends Controller
      */
     public function teachers(): Response
     {
+        $filters = request()->only(['search', 'status', 'employment_status']);
+
+        $teachers = Teacher::with(['user.profile'])
+            ->when($filters['search'] ?? null, function ($q, $search) {
+                $q->where(function ($query) use ($search) {
+                    $query->where('nip', 'ilike', "%{$search}%")
+                        ->orWhere('nuptk', 'ilike', "%{$search}%")
+                        ->orWhereHas('user', fn ($u) => $u
+                            ->where('username', 'ilike', "%{$search}%")
+                            ->orWhere('email', 'ilike', "%{$search}%"))
+                        ->orWhereHas('user.profile', fn ($p) => $p
+                            ->where('first_name', 'ilike', "%{$search}%")
+                            ->orWhere('last_name', 'ilike', "%{$search}%"));
+                });
+            })
+            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($filters['employment_status'] ?? null, fn ($q, $es) => $q->where('employment_status', $es))
+            ->orderBy('nip')
+            ->paginate(15)
+            ->withQueryString();
+
         return Inertia::render('teachers/Index', [
             'teachers' => [
-                'data' => [],
+                'data' => TeacherResource::collection($teachers->items())->resolve(),
                 'meta' => [
-                    'total' => 0,
+                    'current_page' => $teachers->currentPage(),
+                    'from' => $teachers->firstItem() ?? 0,
+                    'last_page' => $teachers->lastPage(),
+                    'per_page' => $teachers->perPage(),
+                    'to' => $teachers->lastItem() ?? 0,
+                    'total' => $teachers->total(),
+                ],
+                'links' => [
+                    'prev' => $teachers->previousPageUrl(),
+                    'next' => $teachers->nextPageUrl(),
                 ],
             ],
+            'filters' => $filters,
         ]);
     }
 

@@ -14,6 +14,8 @@ class TeacherResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $profile = $this->user?->profile;
+
         return [
             'id' => $this->id,
             'nip' => $this->nip,
@@ -21,24 +23,26 @@ class TeacherResource extends JsonResource
             'user' => new UserResource($this->whenLoaded('user')),
             'full_name' => $this->user?->full_name,
             'email' => $this->user?->email,
-            'gender' => $this->gender,
-            'gender_label' => $this->gender === 'male' ? 'Laki-laki' : 'Perempuan',
-            'birth_place' => $this->birth_place,
-            'birth_date' => $this->birth_date?->format('Y-m-d'),
-            'religion' => $this->religion,
-            'address' => $this->address,
-            'phone' => $this->phone,
+            'gender' => $profile?->gender,
+            'gender_label' => match ($profile?->gender) {
+                'male' => 'Laki-laki',
+                'female' => 'Perempuan',
+                default => '-',
+            },
+            'birth_place' => $profile?->birth_place,
+            'birth_date' => $profile?->birth_date?->format('Y-m-d'),
+            'religion' => $profile?->religion,
+            'address' => $profile?->address,
+            'phone' => $this->no_hp ?? $profile?->phone,
             'education_level' => $this->education_level,
             'education_major' => $this->education_major,
+            'university' => $this->university,
             'employment_status' => $this->employment_status,
             'employment_status_label' => $this->getEmploymentStatusLabel(),
             'join_date' => $this->join_date?->format('Y-m-d'),
-            'position' => $this->position,
-            'specialization' => $this->specialization,
-            'photo' => $this->photo,
-            'photo_url' => $this->photo ? asset('storage/' . $this->photo) : null,
-            'subjects' => SubjectResource::collection($this->whenLoaded('subjects')),
-            'class_rooms' => ClassRoomResource::collection($this->whenLoaded('classRooms')),
+            'status' => $this->status,
+            'status_label' => $this->getStatusLabel(),
+            'photo_url' => $this->user?->avatar ? asset('storage/' . $this->user->avatar) : null,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
@@ -50,11 +54,26 @@ class TeacherResource extends JsonResource
     private function getEmploymentStatusLabel(): string
     {
         return match ($this->employment_status) {
+            'permanent' => 'Tetap',
+            'contract' => 'Kontrak',
+            'honorary' => 'Honorer',
+            'part_time' => 'Paruh Waktu',
+            default => ucfirst((string) $this->employment_status),
+        };
+    }
+
+    /**
+     * Get status label.
+     */
+    private function getStatusLabel(): string
+    {
+        return match ($this->status) {
             'active' => 'Aktif',
             'inactive' => 'Tidak Aktif',
+            'on_leave' => 'Cuti',
             'retired' => 'Pensiun',
-            'resigned' => 'Mengundurkan Diri',
-            default => ucfirst($this->employment_status),
+            'terminated' => 'Berhenti',
+            default => ucfirst((string) $this->status),
         };
     }
 }
