@@ -7,7 +7,7 @@ use App\Http\Requests\Student\StoreStudentRequest;
 use App\Http\Requests\Student\UpdateStudentRequest;
 use App\Http\Resources\StudentCollection;
 use App\Http\Resources\StudentResource;
-use App\Models\Student\Student;
+use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,22 +23,24 @@ class StudentController extends ApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Student::with(['user', 'currentClass'])
+        $query = Student::with(['user.profile', 'currentClass'])
             ->when($request->search, function ($q, $search) {
                 $q->where(function ($query) use ($search) {
-                    $query->where('nis', 'like', "%{$search}%")
-                        ->orWhere('nisn', 'like', "%{$search}%")
+                    $query->where('nis', 'ilike', "%{$search}%")
+                        ->orWhere('nisn', 'ilike', "%{$search}%")
                         ->orWhereHas('user', function ($q) use ($search) {
-                            $q->where('first_name', 'like', "%{$search}%")
-                                ->orWhere('last_name', 'like', "%{$search}%")
-                                ->orWhere('email', 'like', "%{$search}%");
+                            $q->where('username', 'ilike', "%{$search}%")
+                                ->orWhere('email', 'ilike', "%{$search}%");
+                        })
+                        ->orWhereHas('user.profile', function ($q) use ($search) {
+                            $q->where('first_name', 'ilike', "%{$search}%")
+                                ->orWhere('last_name', 'ilike', "%{$search}%");
                         });
                 });
             })
             ->when($request->status, fn($q, $status) => $q->where('status', $status))
-            ->when($request->gender, fn($q, $gender) => $q->where('gender', $gender))
-            ->when($request->class_id, fn($q, $classId) => $q->whereHas('currentClass', fn($q) => $q->where('id', $classId)))
-            ->when($request->entry_year, fn($q, $year) => $q->where('entry_year', $year));
+            ->when($request->gender, fn($q, $gender) => $q->whereHas('user.profile', fn($q) => $q->where('gender', $gender)))
+            ->when($request->class_id, fn($q, $classId) => $q->whereHas('currentClass', fn($q) => $q->where('classrooms.id', $classId)));
 
         // Sorting
         $sortField = $request->get('sort', 'created_at');

@@ -22,9 +22,9 @@ class ParentController extends ApiController
         $query = StudentParent::with(['user', 'students.user'])
             ->when($request->search, function ($q, $search) {
                 $q->whereHas('user', function ($q) use ($search) {
-                    $q->where('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
+                    $q->where('first_name', 'ilike', "%{$search}%")
+                        ->orWhere('last_name', 'ilike', "%{$search}%")
+                        ->orWhere('email', 'ilike', "%{$search}%");
                 });
             })
             ->when($request->relationship, fn($q, $rel) => $q->where('relationship', $rel));

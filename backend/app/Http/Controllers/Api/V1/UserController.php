@@ -21,10 +21,10 @@ class UserController extends ApiController
         $query = User::with('roles')
             ->when($request->search, function ($q, $search) {
                 $q->where(function ($query) use ($search) {
-                    $query->where('username', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%");
+                    $query->where('username', 'ilike', "%{$search}%")
+                        ->orWhere('email', 'ilike', "%{$search}%")
+                        ->orWhere('first_name', 'ilike', "%{$search}%")
+                        ->orWhere('last_name', 'ilike', "%{$search}%");
                 });
             })
             ->when($request->role, fn($q, $role) => $q->role($role))

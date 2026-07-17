@@ -17,8 +17,8 @@ class GradeLevelController extends ApiController
     {
         $query = GradeLevel::query()
             ->when($request->search, fn ($q, $search) => $q->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%");
+                $q->where('name', 'ilike', "%{$search}%")
+                    ->orWhere('code', 'ilike', "%{$search}%");
             }))
             ->orderBy('order');
 

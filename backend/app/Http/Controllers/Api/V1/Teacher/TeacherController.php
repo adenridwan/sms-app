@@ -26,12 +26,12 @@ class TeacherController extends ApiController
         $query = Teacher::with(['user', 'subjects'])
             ->when($request->search, function ($q, $search) {
                 $q->where(function ($query) use ($search) {
-                    $query->where('nip', 'like', "%{$search}%")
-                        ->orWhere('nuptk', 'like', "%{$search}%")
+                    $query->where('nip', 'ilike', "%{$search}%")
+                        ->orWhere('nuptk', 'ilike', "%{$search}%")
                         ->orWhereHas('user', function ($q) use ($search) {
-                            $q->where('first_name', 'like', "%{$search}%")
-                                ->orWhere('last_name', 'like', "%{$search}%")
-                                ->orWhere('email', 'like', "%{$search}%");
+                            $q->where('first_name', 'ilike', "%{$search}%")
+                                ->orWhere('last_name', 'ilike', "%{$search}%")
+                                ->orWhere('email', 'ilike', "%{$search}%");
                         });
                 });
             })

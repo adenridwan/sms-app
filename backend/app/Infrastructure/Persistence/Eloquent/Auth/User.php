@@ -95,6 +95,35 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Tenant scope source for the User model.
+     *
+     * Unlike other tenant-scoped models, user identity resolution (Sanctum
+     * token / session auth) must never be filtered by the client-supplied
+     * X-Tenant-ID header or the tenant container, otherwise super admin
+     * accounts (tenant_id = null) can never be authenticated when that
+     * header is present. Users are only scoped by the authenticated
+     * user's own tenant.
+     */
+    protected static function getCurrentTenantId(): ?string
+    {
+        // Guard against infinite recursion: resolving the authenticated user
+        // re-queries this very model, which re-triggers the tenant scope.
+        static $resolvingAuthUser = false;
+
+        if ($resolvingAuthUser) {
+            return null;
+        }
+
+        $resolvingAuthUser = true;
+
+        try {
+            return auth()->user()?->tenant_id;
+        } finally {
+            $resolvingAuthUser = false;
+        }
+    }
+
+    /**
      * Get the tenant that owns the user.
      */
     public function tenant(): BelongsTo

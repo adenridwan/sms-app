@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\StudentResource;
+use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,19 +23,47 @@ class PageController extends Controller
      */
     public function students(): Response
     {
+        $filters = request()->only(['search', 'status', 'gender']);
+
+        $students = Student::with(['user.profile', 'currentClass'])
+            ->when($filters['search'] ?? null, function ($q, $search) {
+                $q->where(function ($query) use ($search) {
+                    $query->where('nis', 'ilike', "%{$search}%")
+                        ->orWhere('nisn', 'ilike', "%{$search}%")
+                        ->orWhereHas('user', fn ($u) => $u
+                            ->where('username', 'ilike', "%{$search}%")
+                            ->orWhere('email', 'ilike', "%{$search}%"))
+                        ->orWhereHas('user.profile', fn ($p) => $p
+                            ->where('first_name', 'ilike', "%{$search}%")
+                            ->orWhere('last_name', 'ilike', "%{$search}%"));
+                });
+            })
+            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($filters['gender'] ?? null, fn ($q, $gender) => $q->whereHas(
+                'user.profile',
+                fn ($p) => $p->where('gender', $gender)
+            ))
+            ->orderBy('nis')
+            ->paginate(15)
+            ->withQueryString();
+
         return Inertia::render('students/Index', [
             'students' => [
-                'data' => [],
+                'data' => StudentResource::collection($students->items())->resolve(),
                 'meta' => [
-                    'current_page' => 1,
-                    'from' => 0,
-                    'last_page' => 1,
-                    'per_page' => 15,
-                    'to' => 0,
-                    'total' => 0,
+                    'current_page' => $students->currentPage(),
+                    'from' => $students->firstItem() ?? 0,
+                    'last_page' => $students->lastPage(),
+                    'per_page' => $students->perPage(),
+                    'to' => $students->lastItem() ?? 0,
+                    'total' => $students->total(),
+                ],
+                'links' => [
+                    'prev' => $students->previousPageUrl(),
+                    'next' => $students->nextPageUrl(),
                 ],
             ],
-            'filters' => request()->only(['search', 'status', 'gender']),
+            'filters' => $filters,
         ]);
     }
 

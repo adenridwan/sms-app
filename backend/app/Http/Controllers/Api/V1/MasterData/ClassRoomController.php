@@ -18,7 +18,7 @@ class ClassRoomController extends ApiController
     {
         $query = ClassRoom::with(['academicYear', 'homeroomTeacher.user'])
             ->withCount('students')
-            ->when($request->search, fn($q, $search) => $q->where('name', 'like', "%{$search}%"))
+            ->when($request->search, fn($q, $search) => $q->where('name', 'ilike', "%{$search}%"))
             ->when($request->level, fn($q, $level) => $q->where('level', $level))
             ->when($request->major, fn($q, $major) => $q->where('major', $major))
             ->when($request->academic_year_id, fn($q, $yearId) => $q->where('academic_year_id', $yearId))

@@ -17,7 +17,7 @@ class AcademicYearController extends ApiController
     public function index(Request $request): JsonResponse
     {
         $query = AcademicYear::withCount('classRooms')
-            ->when($request->search, fn($q, $search) => $q->where('name', 'like', "%{$search}%"))
+            ->when($request->search, fn($q, $search) => $q->where('name', 'ilike', "%{$search}%"))
             ->when($request->has('is_active'), fn($q) => $q->where('is_active', $request->boolean('is_active')));
 
         $sortField = $request->get('sort', 'start_date');

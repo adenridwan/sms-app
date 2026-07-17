@@ -41,6 +41,18 @@ class UserProfile extends Model
     ];
 
     /**
+     * The attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'birth_date' => 'date',
+        ];
+    }
+
+    /**
      * Get the user that owns this profile.
      */
     public function user(): BelongsTo

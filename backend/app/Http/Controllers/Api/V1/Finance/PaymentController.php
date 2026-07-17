@@ -19,12 +19,12 @@ class PaymentController extends ApiController
     {
         $query = Payment::with(['student.user', 'feeType'])
             ->when($request->search, function ($q, $search) {
-                $q->where('invoice_number', 'like', "%{$search}%")
+                $q->where('invoice_number', 'ilike', "%{$search}%")
                     ->orWhereHas('student', function ($q) use ($search) {
-                        $q->where('nis', 'like', "%{$search}%")
+                        $q->where('nis', 'ilike', "%{$search}%")
                             ->orWhereHas('user', function ($q) use ($search) {
-                                $q->where('first_name', 'like', "%{$search}%")
-                                    ->orWhere('last_name', 'like', "%{$search}%");
+                                $q->where('first_name', 'ilike', "%{$search}%")
+                                    ->orWhere('last_name', 'ilike', "%{$search}%");
                             });
                     });
             })

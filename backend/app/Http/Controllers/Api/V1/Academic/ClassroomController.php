@@ -25,8 +25,8 @@ class ClassroomController extends ApiController
         $query = Classroom::with(['academicYear', 'gradeLevel', 'major'])
             ->withCount('enrollments')
             ->when($request->search, fn ($q, $search) => $q->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%");
+                $q->where('name', 'ilike', "%{$search}%")
+                    ->orWhere('code', 'ilike', "%{$search}%");
             }))
             ->when($request->grade_level_id, fn ($q, $id) => $q->where('grade_level_id', $id))
             ->when($request->major_id, fn ($q, $id) => $q->where('major_id', $id))

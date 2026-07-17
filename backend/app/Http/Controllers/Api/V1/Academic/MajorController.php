@@ -22,8 +22,8 @@ class MajorController extends ApiController
     {
         $query = Major::withCount('classrooms')
             ->when($request->search, fn ($q, $search) => $q->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%");
+                $q->where('name', 'ilike', "%{$search}%")
+                    ->orWhere('code', 'ilike', "%{$search}%");
             }))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')));
 

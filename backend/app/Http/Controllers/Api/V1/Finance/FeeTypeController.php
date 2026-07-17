@@ -17,8 +17,8 @@ class FeeTypeController extends ApiController
     {
         $query = FeeType::query()
             ->when($request->search, function ($q, $search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%");
+                $q->where('name', 'ilike', "%{$search}%")
+                    ->orWhere('code', 'ilike', "%{$search}%");
             })
             ->when($request->category, fn($q, $category) => $q->where('category', $category))
             ->when($request->has('is_active'), fn($q) => $q->where('is_active', $request->boolean('is_active')))

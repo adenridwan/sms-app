@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Persistence\Eloquent\Student;
 
+use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
 use App\Infrastructure\Persistence\Eloquent\Auth\User;
 use App\Infrastructure\Persistence\Eloquent\Concerns\HasUuid;
 use App\Infrastructure\Persistence\Eloquent\Concerns\BelongsToTenant;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -108,6 +110,21 @@ class Student extends Model
     public function enrollments(): HasMany
     {
         return $this->hasMany(StudentEnrollment::class, 'student_id');
+    }
+
+    /**
+     * Get current classroom via the active enrollment
+     */
+    public function currentClass(): HasOneThrough
+    {
+        return $this->hasOneThrough(
+            Classroom::class,
+            StudentEnrollment::class,
+            'student_id',   // FK on student_enrollments referencing students
+            'id',           // key on classrooms
+            'id',           // local key on students
+            'classroom_id'  // key on student_enrollments referencing classrooms
+        )->where('student_enrollments.status', 'active');
     }
 
     /**
