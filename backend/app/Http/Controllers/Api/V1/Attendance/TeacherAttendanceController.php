@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1\Attendance;
 use App\Domain\Attendance\Services\AttendanceStatusResolver;
 use App\Http\Controllers\Api\ApiController;
 use App\Infrastructure\Persistence\Eloquent\Attendance\EmployeeAttendance;
+use App\Infrastructure\Persistence\Eloquent\Auth\User;
+use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +28,10 @@ class TeacherAttendanceController extends ApiController
             ->when($request->user_id, fn($q, $id) => $q->forUser($id))
             ->when($request->status, fn($q, $status) => $q->where('status', $status))
             ->when($request->from_date, fn($q, $date) => $q->where('attendance_date', '>=', $date))
-            ->when($request->to_date, fn($q, $date) => $q->where('attendance_date', '<=', $date));
+            ->when($request->to_date, fn($q, $date) => $q->where('attendance_date', '<=', $date))
+            // R4: guru non-admin hanya lihat barisnya sendiri, apa pun
+            // parameter user_id yang dikirim — mencegah override.
+            ->when(!$this->isFullAccess($request->user()), fn($q) => $q->where('user_id', $request->user()->id));
 
         $sortField = $request->get('sort', 'attendance_date');
         $sortDirection = $request->get('direction', 'desc');
@@ -48,9 +53,14 @@ class TeacherAttendanceController extends ApiController
 
         $date = $data['date'];
 
-        // Get all active teachers
+        // Get all active teachers — guru non-admin hanya lihat barisnya
+        // sendiri (R4), role admin-tier (Student::ALL_ACCESS_ROLES) lihat semua.
         $teachers = Teacher::with('user.profile')
             ->active()
+            ->when(
+                !$this->isFullAccess($request->user()),
+                fn ($q) => $q->where('user_id', $request->user()->id)
+            )
             ->get();
 
         // Get existing attendances
@@ -98,6 +108,10 @@ class TeacherAttendanceController extends ApiController
      */
     public function update(Request $request, EmployeeAttendance $attendance): JsonResponse
     {
+        if (!$this->isFullAccess($request->user()) && $attendance->user_id !== $request->user()->id) {
+            return $this->forbidden('Anda tidak memiliki akses ke absensi guru ini.');
+        }
+
         $data = $request->validate([
             'status' => ['sometimes', 'in:present,absent,late,sick,permitted,on_duty,work_from_home'],
             'check_in_time' => ['nullable', 'date_format:H:i'],
@@ -125,7 +139,8 @@ class TeacherAttendanceController extends ApiController
 
         $query = EmployeeAttendance::query()
             ->betweenDates($data['from_date'], $data['to_date'])
-            ->when($data['user_id'] ?? null, fn($q, $id) => $q->forUser($id));
+            ->when($data['user_id'] ?? null, fn($q, $id) => $q->forUser($id))
+            ->when(!$this->isFullAccess($request->user()), fn($q) => $q->where('user_id', $request->user()->id));
 
         $stats = $query->select('status', DB::raw('COUNT(*) as total'))
             ->groupBy('status')
@@ -167,6 +182,17 @@ class TeacherAttendanceController extends ApiController
                 'avg_minutes' => round($lateStats->avg_minutes ?? 0, 1),
             ],
         ]);
+    }
+
+    /**
+     * Role admin-tier (Student::ALL_ACCESS_ROLES — dipakai ulang di sini
+     * karena ini daftar kanonik "boleh lihat/edit semua orang" R4 di seluruh
+     * modul absensi, bukan konsep khusus siswa) melihat & mengedit absensi
+     * semua guru; selain itu (guru/wali_kelas biasa) hanya barisnya sendiri.
+     */
+    private function isFullAccess(User $user): bool
+    {
+        return $user->getRoleNames()->intersect(Student::ALL_ACCESS_ROLES)->isNotEmpty();
     }
 
     /**

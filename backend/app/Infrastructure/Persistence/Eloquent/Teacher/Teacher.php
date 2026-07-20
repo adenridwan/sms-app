@@ -13,10 +13,45 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
-class Teacher extends Model
+class Teacher extends Model implements HasMedia
 {
-    use HasFactory, HasUuid, BelongsToTenant, SoftDeletes;
+    use HasFactory, HasUuid, BelongsToTenant, SoftDeletes, InteractsWithMedia;
+
+    /**
+     * Koleksi dokumen pemberkasan guru (Fase G2, TEACHER-MODULE-PLAN.md §2.6).
+     * Semua opsional. KTP & NPWP hanya satu file (unggahan baru menimpa);
+     * sisanya boleh lebih dari satu file.
+     *
+     * @var array<string, bool> nama koleksi => apakah singleFile
+     */
+    public const DOCUMENT_COLLECTIONS = [
+        'ijazah' => false,
+        'ktp' => true,
+        'npwp' => true,
+        'sertifikat_pendidik' => false,
+        'surat_penugasan' => false,
+        'lainnya' => false,
+    ];
+
+    public const DOCUMENT_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+
+    public const DOCUMENT_MAX_KB = 5120;
+
+    public function registerMediaCollections(): void
+    {
+        foreach (self::DOCUMENT_COLLECTIONS as $name => $singleFile) {
+            $collection = $this->addMediaCollection($name)
+                ->acceptsMimeTypes(self::DOCUMENT_MIME_TYPES);
+
+            if ($singleFile) {
+                $collection->singleFile();
+            }
+        }
+    }
 
     protected $table = 'teachers';
 
@@ -97,6 +132,28 @@ class Teacher extends Model
     public function subjects(): HasMany
     {
         return $this->hasMany(TeacherSubject::class, 'teacher_id');
+    }
+
+    /**
+     * Ringkasan dokumen per koleksi untuk ditampilkan di form/detail.
+     * Panggil setelah eager-load relasi 'media' agar tidak N+1.
+     *
+     * @return array<string, array<int, array{id:int,name:string,url:string,mime_type:?string,size:int,created_at:?string}>>
+     */
+    public function documentsSummary(): array
+    {
+        return collect(array_keys(self::DOCUMENT_COLLECTIONS))
+            ->mapWithKeys(fn (string $collection) => [
+                $collection => $this->getMedia($collection)->map(fn (Media $media) => [
+                    'id' => $media->id,
+                    'name' => $media->name,
+                    'url' => $media->getUrl(),
+                    'mime_type' => $media->mime_type,
+                    'size' => $media->size,
+                    'created_at' => $media->created_at?->toISOString(),
+                ])->values()->all(),
+            ])
+            ->all();
     }
 
     /**

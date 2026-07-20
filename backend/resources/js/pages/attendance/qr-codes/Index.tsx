@@ -1,5 +1,7 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
+import { printAttendanceCardsWithTemplate } from '@/lib/attendanceCardPrint';
+import type { PageProps } from '@/types';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +33,7 @@ interface Props {
 }
 
 export default function QrCodeIndex({ classrooms }: Props) {
+    const { tenant } = usePage<PageProps>().props;
     const [activeTab, setActiveTab] = useState('students');
     const [classroomId, setClassroomId] = useState('');
     const [studentQrCodes, setStudentQrCodes] = useState<QrCodeData[]>([]);
@@ -113,56 +116,21 @@ export default function QrCodeIndex({ classrooms }: Props) {
         document.body.removeChild(link);
     };
 
-    const handlePrintAll = () => {
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
-            return;
-        }
-
+    const handlePrintAll = async () => {
         const qrCodes = activeTab === 'students' ? studentQrCodes : teacherQrCodes;
         const title = activeTab === 'students'
-            ? `QR Code Siswa - ${classrooms.find(c => c.id === classroomId)?.name || 'Kelas'}`
-            : 'QR Code Guru';
+            ? `Kartu Siswa - ${classrooms.find(c => c.id === classroomId)?.name || 'Kelas'}`
+            : 'Kartu Guru';
 
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>${title}</title>
-                <style>
-                    body { font-family: Arial, sans-serif; }
-                    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 20px; }
-                    .card { border: 1px solid #ddd; padding: 15px; text-align: center; page-break-inside: avoid; }
-                    .card img { width: 150px; height: 150px; }
-                    .name { font-weight: bold; margin-top: 10px; }
-                    .id { color: #666; font-size: 14px; }
-                    @media print {
-                        .grid { grid-template-columns: repeat(3, 1fr); }
-                        .card { break-inside: avoid; }
-                    }
-                </style>
-            </head>
-            <body>
-                <h1 style="text-align: center;">${title}</h1>
-                <div class="grid">
-                    ${qrCodes.map(qr => `
-                        <div class="card">
-                            <img src="${qr.qr_code}" alt="QR Code" />
-                            <div class="name">${qr.name}</div>
-                            <div class="id">${qr.nis || qr.nip || ''}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            </body>
-            </html>
-        `);
+        const opened = await printAttendanceCardsWithTemplate(activeTab === 'students' ? 'student' : 'teacher', qrCodes, {
+            title,
+            schoolName: tenant?.name,
+            schoolLogo: tenant?.logo,
+        });
 
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-            printWindow.print();
-        }, 500);
+        if (!opened) {
+            toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+        }
     };
 
     const QrCard = ({ qr, type }: { qr: QrCodeData; type: 'student' | 'teacher' }) => (

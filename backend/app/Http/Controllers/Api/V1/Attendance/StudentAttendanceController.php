@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\V1\Attendance;
 
 use App\Domain\Attendance\Enums\AttendanceStatus;
+use App\Domain\Attendance\Jobs\SendClassAttendanceRecap;
 use App\Domain\Attendance\Services\AttendanceStatusResolver;
 use App\Http\Controllers\Api\ApiController;
+use App\Infrastructure\Persistence\Eloquent\Attendance\NotificationSetting;
 use App\Infrastructure\Persistence\Eloquent\Attendance\StudentAttendance;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Student\StudentEnrollment;
@@ -24,10 +26,11 @@ class StudentAttendanceController extends ApiController
     public function index(Request $request): JsonResponse
     {
         $query = StudentAttendance::with(['student.user', 'classroom'])
+            ->whereHas('student', fn($q) => $q->visibleTo($request->user()))
             ->when($request->date, fn($q, $date) => $q->forDate($date))
             ->when($request->classroom_id, fn($q, $id) => $q->forClassroom($id))
             ->when($request->student_id, fn($q, $id) => $q->forStudent($id))
-            ->when($request->status, fn($q, $status) => $q->withStatus($status))
+            ->when($request->status, fn($q, $status) => $this->applyStatusFilter($q, $status))
             ->when($request->from_date, fn($q, $date) => $q->where('attendance_date', '>=', $date))
             ->when($request->to_date, fn($q, $date) => $q->where('attendance_date', '<=', $date));
 
@@ -53,6 +56,8 @@ class StudentAttendanceController extends ApiController
 
         $date = $data['date'];
         $classroomId = $data['classroom_id'];
+
+        $this->authorizeClassroomAccess($request->user(), $classroomId);
 
         // Get all active students in classroom
         $enrollments = StudentEnrollment::with(['student.user'])
@@ -83,7 +88,7 @@ class StudentAttendanceController extends ApiController
                 'name' => $student->user?->full_name,
                 'student_number_in_class' => $enrollment->student_number_in_class,
                 'attendance_id' => $attendance?->id,
-                'status' => $status->value,
+                'status' => $status->slug(),
                 'status_label' => $status->label(),
                 'status_color' => $status->color(),
                 'check_in_time' => $attendance?->check_in_time?->format('H:i'),
@@ -114,9 +119,11 @@ class StudentAttendanceController extends ApiController
             'date' => ['required', 'date'],
             'attendances' => ['required', 'array', 'min:1'],
             'attendances.*.student_id' => ['required', 'uuid', 'exists:students,id'],
-            'attendances.*.status' => ['required', 'in:hadir,sakit,izin,tanpa_keterangan,alfa'],
+            'attendances.*.status' => ['required', 'in:' . self::storableStatusValues()],
             'attendances.*.notes' => ['nullable', 'string', 'max:500'],
         ]);
+
+        $this->authorizeClassroomAccess($request->user(), $data['classroom_id']);
 
         $enrollment = StudentEnrollment::where('classroom_id', $data['classroom_id'])
             ->where('status', 'active')
@@ -133,13 +140,15 @@ class StudentAttendanceController extends ApiController
             $updated = 0;
 
             foreach ($data['attendances'] as $att) {
+                $dbStatus = AttendanceStatus::fromSlug($att['status'])->value;
+
                 $existing = StudentAttendance::where('student_id', $att['student_id'])
                     ->forDate($data['date'])
                     ->first();
 
                 if ($existing) {
                     $existing->update([
-                        'status' => $att['status'],
+                        'status' => $dbStatus,
                         'notes' => $att['notes'] ?? $existing->notes,
                     ]);
                     $updated++;
@@ -157,7 +166,7 @@ class StudentAttendanceController extends ApiController
                         'academic_year_id' => $studentEnrollment?->academic_year_id,
                         'semester_id' => $studentEnrollment?->academicYear?->activeSemester?->id,
                         'attendance_date' => $data['date'],
-                        'status' => $att['status'],
+                        'status' => $dbStatus,
                         'notes' => $att['notes'] ?? null,
                         'recorded_by' => $request->user()->id,
                     ]);
@@ -178,17 +187,69 @@ class StudentAttendanceController extends ApiController
     }
 
     /**
+     * Kirim notifikasi rekap harian satu kelas ke wali murid (mode batch,
+     * Fase 3 ATTENDANCE-PLAN.md §5). Pengiriman berjalan di queue karena
+     * berisi puluhan panggilan HTTP ke provider WA.
+     */
+    public function notifyDaily(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'classroom_id' => ['required', 'uuid', 'exists:classrooms,id'],
+            'date' => ['required', 'date'],
+        ]);
+
+        $this->authorizeClassroomAccess($request->user(), $data['classroom_id']);
+
+        $tenantId = $request->user()->tenant_id;
+        $settings = NotificationSetting::getForTenant($tenantId);
+
+        if (!$settings->isWhatsAppConfigured() && !$settings->isTelegramConfigured()) {
+            return $this->error('Belum ada kanal notifikasi (WhatsApp/Telegram) yang dikonfigurasi.', 422);
+        }
+
+        $recipients = StudentEnrollment::where('classroom_id', $data['classroom_id'])
+            ->where('status', 'active')
+            ->whereHas('student.guardians', fn($q) => $q->where('is_primary_contact', true)->whereNotNull('phone'))
+            ->count();
+
+        SendClassAttendanceRecap::dispatch(
+            $tenantId,
+            $data['classroom_id'],
+            $data['date'],
+            $request->user()->id
+        );
+
+        return $this->success(
+            ['recipients' => $recipients],
+            "Notifikasi rekap sedang dikirim untuk {$recipients} siswa dengan kontak wali."
+        );
+    }
+
+    /**
      * Update a single attendance
      */
     public function update(Request $request, StudentAttendance $attendance): JsonResponse
     {
+        // Hanya boleh mengubah absensi siswa yang berada dalam cakupannya (R4)
+        $isVisible = Student::visibleTo($request->user())
+            ->whereKey($attendance->student_id)
+            ->exists();
+
+        if (! $isVisible) {
+            return $this->forbidden('Anda tidak memiliki akses ke absensi siswa ini.');
+        }
+
         $data = $request->validate([
-            'status' => ['sometimes', 'in:hadir,sakit,izin,tanpa_keterangan,alfa'],
+            'status' => ['sometimes', 'in:' . self::storableStatusValues()],
             'check_in_time' => ['nullable', 'date_format:H:i'],
             'check_out_time' => ['nullable', 'date_format:H:i'],
             'notes' => ['nullable', 'string', 'max:500'],
             'menit_keterlambatan' => ['nullable', 'integer', 'min:0'],
         ]);
+
+        if (isset($data['status'])) {
+            $data['status'] = AttendanceStatus::fromSlug($data['status'])->value;
+        }
 
         $attendance->update($data);
         $attendance->load(['student.user', 'classroom']);
@@ -209,6 +270,7 @@ class StudentAttendanceController extends ApiController
         ]);
 
         $query = StudentAttendance::query()
+            ->whereHas('student', fn($q) => $q->visibleTo($request->user()))
             ->betweenDates($data['from_date'], $data['to_date'])
             ->when($data['classroom_id'] ?? null, fn($q, $id) => $q->forClassroom($id))
             ->when($data['student_id'] ?? null, fn($q, $id) => $q->forStudent($id));
@@ -227,6 +289,7 @@ class StudentAttendanceController extends ApiController
             ->first();
 
         $total = array_sum($stats);
+        $byStatus = AttendanceStatus::summaryFromRaw($stats);
 
         return $this->success([
             'period' => [
@@ -235,15 +298,15 @@ class StudentAttendanceController extends ApiController
             ],
             'total_records' => $total,
             'by_status' => [
-                'hadir' => $stats['hadir'] ?? 0,
-                'sakit' => $stats['sakit'] ?? 0,
-                'izin' => $stats['izin'] ?? 0,
-                'tanpa_keterangan' => $stats['tanpa_keterangan'] ?? 0,
-                'alfa' => $stats['alfa'] ?? 0,
+                'hadir' => $byStatus['hadir'],
+                'sakit' => $byStatus['sakit'],
+                'izin' => $byStatus['izin'],
+                'tanpa_keterangan' => $byStatus['alfa'],
+                'alfa' => $byStatus['alfa'],
             ],
             'percentages' => [
-                'hadir' => $total > 0 ? round((($stats['hadir'] ?? 0) / $total) * 100, 2) : 0,
-                'tidak_hadir' => $total > 0 ? round(((($stats['alfa'] ?? 0) + ($stats['tanpa_keterangan'] ?? 0)) / $total) * 100, 2) : 0,
+                'hadir' => $total > 0 ? round($byStatus['hadir'] / $total * 100, 2) : 0,
+                'tidak_hadir' => $total > 0 ? round($byStatus['alfa'] / $total * 100, 2) : 0,
             ],
             'lateness' => [
                 'total_late' => $lateStats->total_late ?? 0,
@@ -269,7 +332,8 @@ class StudentAttendanceController extends ApiController
         $recentDate = now()->subDays($minDays + 7)->toDateString();
 
         $query = StudentAttendance::with(['student.user', 'classroom'])
-            ->whereIn('status', ['alfa', 'tanpa_keterangan'])
+            ->whereHas('student', fn($q) => $q->visibleTo($request->user()))
+            ->whereIn('status', [AttendanceStatus::Alfa->value, AttendanceStatus::TanpaKeterangan->value])
             ->where('attendance_date', '>=', $recentDate)
             ->when($data['classroom_id'] ?? null, fn($q, $id) => $q->forClassroom($id));
 
@@ -319,7 +383,8 @@ class StudentAttendanceController extends ApiController
 
         $limit = $data['limit'] ?? 10;
 
-        $students = Student::with('user')
+        $students = Student::visibleTo($request->user())
+            ->with('user')
             ->select('students.*')
             ->when($data['classroom_id'] ?? null, function ($q, $classroomId) {
                 $q->whereHas('enrollments', function ($eq) use ($classroomId) {
@@ -343,26 +408,78 @@ class StudentAttendanceController extends ApiController
     /**
      * Calculate summary from results array
      */
+    /**
+     * Pastikan user boleh mengakses roster kelas ini (R3/R4).
+     *
+     * Role administratif bebas; guru/wali_kelas hanya kelas diampu;
+     * role lain (siswa, orang tua) ditolak karena roster kelas bukan
+     * cakupan mereka.
+     */
+    private function authorizeClassroomAccess($user, string $classroomId): void
+    {
+        $roles = $user->getRoleNames();
+
+        if ($roles->intersect(Student::ALL_ACCESS_ROLES)->isNotEmpty()) {
+            return;
+        }
+
+        if ($roles->intersect(['guru', 'wali_kelas'])->isNotEmpty()
+            && in_array($classroomId, $user->teachingClassroomIds(), true)) {
+            return;
+        }
+
+        abort(403, 'Anda tidak memiliki akses ke kelas ini.');
+    }
+
     private function calculateSummary(array $results): array
     {
-        $summary = [
-            'total' => count($results),
-            'hadir' => 0,
-            'sakit' => 0,
-            'izin' => 0,
-            'alfa' => 0,
-            'tanpa_keterangan' => 0,
-            'belum_scan' => 0,
-        ];
+        $rawCounts = [];
+        $belumScan = 0;
 
         foreach ($results as $result) {
             $status = $result['status'];
-            if (isset($summary[$status])) {
-                $summary[$status]++;
+            if ($status === AttendanceStatus::BelumScan->value) {
+                $belumScan++;
+                continue;
             }
+            $rawCounts[$status] = ($rawCounts[$status] ?? 0) + 1;
         }
 
+        $summary = AttendanceStatus::summaryFromRaw($rawCounts);
+        $summary['total'] = count($results);
+        $summary['belum_scan'] = $belumScan;
+
         return $summary;
+    }
+
+    /**
+     * Query param `status` datang dalam kosakata Indonesia (dropdown filter
+     * frontend); terjemahkan ke nilai DB (Inggris) sebelum difilter.
+     */
+    private function applyStatusFilter($query, string $status)
+    {
+        $dbValues = match ($status) {
+            'hadir' => [AttendanceStatus::Hadir->value, 'late'],
+            'sakit' => [AttendanceStatus::Sakit->value],
+            'izin' => [AttendanceStatus::Izin->value],
+            'tanpa_keterangan' => [AttendanceStatus::TanpaKeterangan->value],
+            'alfa' => [AttendanceStatus::Alfa->value],
+            default => [$status],
+        };
+
+        return $query->whereIn('status', $dbValues);
+    }
+
+    /**
+     * Comma-separated allow-list untuk validasi `status` di request —
+     * memakai slug Indonesia (kontrak wire dua arah: daily() mengeluarkan
+     * slug, storeBulk/update menerima slug), diturunkan dari enum supaya
+     * tidak bisa menyimpang lagi. Terjemahan ke nilai DB (Inggris) terjadi
+     * lewat AttendanceStatus::fromSlug() sebelum ditulis.
+     */
+    private static function storableStatusValues(): string
+    {
+        return implode(',', AttendanceStatus::storableSlugs());
     }
 
     /**

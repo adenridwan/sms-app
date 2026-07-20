@@ -24,7 +24,21 @@ import type {
     LeavePermissionFormData,
     HolidayFormData,
     LookupResult,
+    CardLayout,
+    CardTemplateResponse,
 } from '@/types/attendance';
+
+// Card Template API (Fase 5 — editor kartu ID drag-and-drop)
+export const cardTemplateApi = {
+    get: (type: 'student' | 'teacher') =>
+        api.get<ApiResponse<CardTemplateResponse>>(`/attendance/card-templates/${type}`),
+
+    update: (type: 'student' | 'teacher', layout_json: CardLayout) =>
+        api.put<ApiResponse<CardTemplateResponse>>(`/attendance/card-templates/${type}`, { layout_json }),
+
+    reset: (type: 'student' | 'teacher') =>
+        api.delete<ApiResponse<CardTemplateResponse>>(`/attendance/card-templates/${type}`),
+};
 
 // Scanner API
 export const scannerApi = {
@@ -63,6 +77,9 @@ export const studentAttendanceApi = {
 
     topLate: (params?: { limit?: number; classroom_id?: string }) =>
         api.get<ApiResponse<TopLateStudent[]>>('/attendance/students/top-late', { params }),
+
+    notifyDaily: (data: { classroom_id: string; date: string }) =>
+        api.post<ApiResponse<{ recipients: number }>>('/attendance/students/notify-daily', data),
 };
 
 // Teacher Attendance API
@@ -181,6 +198,9 @@ export const attendanceReportApi = {
 
     downloadPdf: (params: { month: number; year: number; classroom_id?: string; type?: 'student' | 'teacher' }) =>
         api.get('/attendance/reports/pdf', { params, responseType: 'blob' }),
+
+    downloadExcel: (params: { month: number; year: number; classroom_id?: string; type?: 'student' | 'teacher' }) =>
+        api.get('/attendance/reports/excel', { params, responseType: 'blob' }),
 
     weeklyTrend: (params?: { classroom_id?: string; type?: 'student' | 'teacher' }) =>
         api.get<ApiResponse<WeeklyTrend>>('/attendance/reports/weekly-trend', { params }),
@@ -309,6 +329,7 @@ export const publicAttendanceApi = {
 };
 
 export default {
+    cardTemplate: cardTemplateApi,
     scanner: scannerApi,
     studentAttendance: studentAttendanceApi,
     teacherAttendance: teacherAttendanceApi,

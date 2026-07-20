@@ -21,8 +21,27 @@ Route::middleware('guest')->group(function () {
     Route::get('/register', [PageController::class, 'register'])->name('register');
 });
 
-// Authenticated Routes
+// Logout — sebelumnya hanya didefinisikan di routes/auth.php, sebuah file
+// yang TIDAK PERNAH dimuat oleh bootstrap/app.php (tidak masuk withRouting()
+// dan tidak ada file lain yang me-require-nya). Tombol Keluar di sidebar
+// (MainLayout.tsx, href="/logout") sudah lama menuju rute yang tidak
+// terdaftar, jatuh ke Route::fallback dan menampilkan halaman 404.
+Route::middleware('auth')->post('/logout', function () {
+    auth()->logout();
+    request()->session()->invalidate();
+    request()->session()->regenerateToken();
+
+    return redirect('/login');
+})->name('logout');
+
+// Wajib ganti password: HARUS di luar grup 'password.current' di bawah
+// (kalau tidak, terjadi redirect loop bagi pengguna yang justru dikirim ke sini).
 Route::middleware(['auth'])->group(function () {
+    Route::get('/change-password', [PageController::class, 'changePassword'])->name('change-password');
+});
+
+// Authenticated Routes
+Route::middleware(['auth', 'password.current'])->group(function () {
     // Dashboard
     Route::get('/dashboard', [PageController::class, 'dashboard'])->name('dashboard');
 
@@ -30,22 +49,28 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('students')->name('students.')->group(function () {
         Route::get('/', [PageController::class, 'students'])->name('index');
         Route::get('/create', [PageController::class, 'createStudent'])->name('create');
-        Route::get('/{student}', [PageController::class, 'students'])->name('show');
-        Route::get('/{student}/edit', [PageController::class, 'students'])->name('edit');
+        Route::get('/{student}', [PageController::class, 'showStudent'])->name('show');
+        Route::get('/{student}/edit', [PageController::class, 'editStudent'])->name('edit');
     });
 
     // Teachers Module
     Route::prefix('teachers')->name('teachers.')->group(function () {
         Route::get('/', [PageController::class, 'teachers'])->name('index');
-        Route::get('/create', [PageController::class, 'teachers'])->name('create');
-        Route::get('/{teacher}', [PageController::class, 'teachers'])->name('show');
-        Route::get('/{teacher}/edit', [PageController::class, 'teachers'])->name('edit');
+        Route::get('/create', [PageController::class, 'createTeacher'])->name('create');
+        Route::get('/{teacher}', [PageController::class, 'showTeacher'])->name('show');
+        Route::get('/{teacher}/edit', [PageController::class, 'editTeacher'])->name('edit');
     });
 
     // Academic Module
     Route::prefix('academic')->name('academic.')->group(function () {
         Route::get('/years', [PageController::class, 'academicYears'])->name('years');
         Route::get('/schedules', [PageController::class, 'schedules'])->name('schedules');
+        // Kelas & Jurusan dipindah kesini dari menu Pengaturan supaya tidak
+        // dobel (lihat redirect /settings/class-rooms dan /settings/majors
+        // di bawah agar tautan/bookmark lama tidak mati).
+        Route::get('/classrooms', [PageController::class, 'academicClassRooms'])->name('classrooms');
+        Route::get('/majors', [PageController::class, 'academicMajors'])->name('majors');
+        Route::get('/grade-levels', [PageController::class, 'academicGradeLevels'])->name('grade-levels');
     });
 
     // Master Data Module
@@ -61,13 +86,28 @@ Route::middleware(['auth'])->group(function () {
 
     // Attendance Module
     Route::get('/attendance', [PageController::class, 'attendance'])->name('attendance');
+    Route::get('/attendance/students', [PageController::class, 'attendanceStudents'])->name('attendance.students');
+    Route::get('/attendance/teachers', [PageController::class, 'attendanceTeachers'])->name('attendance.teachers');
+    Route::get('/attendance/permissions/create', [PageController::class, 'attendancePermissionsCreate'])->name('attendance.permissions.create');
+    Route::get('/attendance/permissions', [PageController::class, 'attendancePermissions'])->name('attendance.permissions');
+    Route::get('/attendance/holidays', [PageController::class, 'attendanceHolidays'])->name('attendance.holidays');
+    Route::get('/attendance/qr-codes', [PageController::class, 'attendanceQrCodes'])->name('attendance.qr-codes');
+    Route::get('/attendance/reports', [PageController::class, 'attendanceReports'])->name('attendance.reports');
+    Route::get('/attendance/settings', [PageController::class, 'attendanceSettings'])->name('attendance.settings');
+    Route::get('/attendance/card-templates', [PageController::class, 'attendanceCardTemplates'])->name('attendance.card-templates');
+    Route::get('/scanner', [PageController::class, 'scanner'])->name('scanner');
 
     // Settings Module
     Route::prefix('settings')->name('settings.')->group(function () {
         Route::get('/', [PageController::class, 'settings'])->name('index');
-        Route::get('/users', [PageController::class, 'users'])->name('users');
-        Route::get('/class-rooms', [PageController::class, 'settingsClassRooms'])->name('class-rooms');
-        Route::get('/majors', [PageController::class, 'settingsMajors'])->name('majors');
+        Route::get('/users', [PageController::class, 'users'])
+            ->middleware('role:super_admin')
+            ->name('users');
+        // Kelas & Jurusan dipindah ke menu Akademik (biar tidak dobel);
+        // route lama dipertahankan sebagai redirect saja supaya tautan atau
+        // bookmark yang sudah ada tidak berujung 404.
+        Route::redirect('/class-rooms', '/academic/classrooms')->name('class-rooms');
+        Route::redirect('/majors', '/academic/majors')->name('majors');
     });
 
     // Profile Routes

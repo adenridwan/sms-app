@@ -234,8 +234,36 @@ export interface QrCodeData {
     nis?: string;
     nip?: string;
     name: string;
+    /** Nama kelas siswa (untuk kartu cetak) */
+    classroom?: string | null;
+    /** Label status kepegawaian guru: Tetap/Kontrak/Honorer/Paruh Waktu */
+    employment_status_label?: string | null;
+    /** URL foto profil (users.avatar); null bila belum diunggah */
+    photo_url?: string | null;
     unique_code: string;
     qr_code: string;
+}
+
+// Card Template (Fase 5 — editor kartu ID drag-and-drop)
+export type CardElementKey = 'logo' | 'schoolName' | 'photo' | 'qr' | 'name' | 'idNumber' | 'subLine';
+
+export interface CardElementLayout {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontSize?: number;
+}
+
+export interface CardLayout {
+    cardBackground: string;
+    headerBackground: string;
+    elements: Record<CardElementKey, CardElementLayout>;
+}
+
+export interface CardTemplateResponse {
+    layout: CardLayout;
+    is_custom: boolean;
 }
 
 // Attendance Summary

@@ -39,12 +39,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/logout', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'logout'])->name('logout');
         Route::get('/me', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'me'])->name('me');
         Route::put('/profile', [\App\Http\Controllers\Api\V1\Auth\ProfileController::class, 'update'])->name('profile.update');
-        Route::put('/password', [\App\Http\Controllers\Api\V1\Auth\PasswordController::class, 'update'])->name('password.update');
+        // Nama method controller adalah `change` — route dulu salah rujuk ke `update` (selalu 500)
+        Route::put('/password', [\App\Http\Controllers\Api\V1\Auth\PasswordController::class, 'change'])->name('password.update');
     });
 
     // Dashboard
     Route::get('/dashboard', [\App\Http\Controllers\Api\V1\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/stats', [\App\Http\Controllers\Api\V1\DashboardController::class, 'stats'])->name('dashboard.stats');
+    Route::get('/dashboard/class/{classroom}', [\App\Http\Controllers\Api\V1\DashboardController::class, 'classStats'])
+        ->whereUuid('classroom')
+        ->name('dashboard.class');
 
     // ===========================================
     // Academic Module
@@ -80,6 +84,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::apiResource('classrooms', \App\Http\Controllers\Api\V1\Academic\ClassroomController::class);
         Route::get('classrooms/{classroom}/students', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'students'])->name('classrooms.students');
         Route::get('classrooms/{classroom}/schedule', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'schedule'])->name('classrooms.schedule');
+        // Guru pengampu (Fase G3, TEACHER-MODULE-PLAN.md) — penempatan manual per tahun ajaran
+        Route::get('classrooms/{classroom}/teachers', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'teachers'])->name('classrooms.teachers');
+        Route::put('classrooms/{classroom}/teachers', [\App\Http\Controllers\Api\V1\Academic\ClassroomController::class, 'syncTeachers'])->name('classrooms.teachers.sync');
 
         // Subjects
         Route::apiResource('subjects', \App\Http\Controllers\Api\V1\Academic\SubjectController::class);
@@ -104,6 +111,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('{student}/fees', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'fees'])->name('fees');
         Route::get('{student}/achievements', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'achievements'])->name('achievements');
         Route::post('{student}/enroll', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'store'])->name('enroll');
+        Route::post('{student}/photo', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'uploadPhoto'])->name('photo.upload');
+        Route::delete('{student}/photo', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'deletePhoto'])->name('photo.delete');
 
         // Guardians
         Route::apiResource('guardians', \App\Http\Controllers\Api\V1\Student\GuardianController::class);
@@ -114,10 +123,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // ===========================================
     Route::prefix('teachers')->name('teachers.')->group(function () {
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Teacher\TeacherController::class)->parameter('', 'teacher');
-        Route::get('{teacher}/subjects', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'subjects'])->name('subjects');
-        Route::get('{teacher}/schedule', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'schedule'])->name('schedule');
-        Route::get('{teacher}/classrooms', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'classrooms'])->name('classrooms');
-        Route::post('{teacher}/assign-subjects', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'assignSubjects'])->name('assign-subjects');
+        // Penempatan kelas (menu Kelas) & kompetensi mapel (menu Mata Pelajaran)
+        // sengaja tidak dikelola dari sini — lihat TEACHER-MODULE-PLAN.md §2.
+        // Ringkasan penugasan (read-only) untuk halaman Detail Guru — Fase G2.
+        Route::get('{teacher}/assignment', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'assignment'])->name('assignment');
+        Route::post('{teacher}/photo', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'uploadPhoto'])->name('photo.upload');
+        Route::delete('{teacher}/photo', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'deletePhoto'])->name('photo.delete');
+        Route::post('{teacher}/documents', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'uploadDocument'])->name('documents.upload');
+        Route::delete('{teacher}/documents/{media}', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'deleteDocument'])->name('documents.delete');
     });
 
     // ===========================================
@@ -140,6 +153,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('students', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'index'])->name('students.index');
         Route::get('students/daily', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'daily'])->name('students.daily');
         Route::post('students/bulk', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'storeBulk'])->name('students.bulk');
+        Route::post('students/notify-daily', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'notifyDaily'])->name('students.notify-daily');
         Route::put('students/{attendance}', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'update'])->name('students.update');
         Route::get('students/summary', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'summary'])->name('students.summary');
         Route::get('students/consecutive-absences', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'consecutiveAbsences'])->name('students.consecutive-absences');
@@ -173,9 +187,19 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('qr/teachers/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkTeachers'])->name('qr.teachers.bulk');
         Route::get('qr/teachers/{teacher}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadTeacher'])->name('qr.teacher.download');
 
+        // RFID
+        Route::put('rfid/students/{student}', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'updateStudent'])->name('rfid.students.update');
+        Route::put('rfid/teachers/{teacher}', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'updateTeacher'])->name('rfid.teachers.update');
+
+        // Card Templates (Fase 5 — editor kartu ID drag-and-drop)
+        Route::get('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'show'])->name('card-templates.show');
+        Route::put('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'update'])->name('card-templates.update');
+        Route::delete('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'reset'])->name('card-templates.reset');
+
         // Reports
         Route::get('reports/monthly', [\App\Http\Controllers\Api\V1\Attendance\AttendanceReportController::class, 'monthly'])->name('reports.monthly');
         Route::get('reports/pdf', [\App\Http\Controllers\Api\V1\Attendance\AttendanceReportController::class, 'downloadPdf'])->name('reports.pdf');
+        Route::get('reports/excel', [\App\Http\Controllers\Api\V1\Attendance\AttendanceReportController::class, 'downloadExcel'])->name('reports.excel');
         Route::get('reports/weekly-trend', [\App\Http\Controllers\Api\V1\Attendance\AttendanceReportController::class, 'weeklyTrend'])->name('reports.weekly-trend');
 
         // Settings
@@ -311,11 +335,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Admin Only Routes
     // ===========================================
     Route::middleware(['role:super_admin|admin'])->prefix('admin')->name('admin.')->group(function () {
-        // Users Management
-        Route::apiResource('users', \App\Http\Controllers\Api\V1\Admin\UserController::class);
-        Route::post('users/{user}/activate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'activate'])->name('users.activate');
-        Route::post('users/{user}/deactivate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'deactivate'])->name('users.deactivate');
-        Route::post('users/{user}/reset-password', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'resetPassword'])->name('users.reset-password');
+        // Users Management (super admin only)
+        Route::middleware(['role:super_admin'])->group(function () {
+            Route::get('users/roles', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'roles'])->name('users.roles');
+            Route::get('users/student-options', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'studentOptions'])->name('users.student-options');
+            Route::apiResource('users', \App\Http\Controllers\Api\V1\Admin\UserController::class);
+            Route::post('users/{user}/activate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'activate'])->name('users.activate');
+            Route::post('users/{user}/deactivate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'deactivate'])->name('users.deactivate');
+            Route::post('users/{user}/reset-password', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'resetPassword'])->name('users.reset-password');
+        });
 
         // Roles & Permissions
         Route::apiResource('roles', \App\Http\Controllers\Api\V1\Admin\RoleController::class);

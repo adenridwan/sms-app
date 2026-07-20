@@ -43,6 +43,7 @@ class HandleInertiaRequests extends Middleware
                     'full_name' => $request->user()->full_name,
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+                    'must_change_password' => $request->user()->mustChangePassword(),
                 ] : null,
             ],
 

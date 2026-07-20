@@ -28,6 +28,9 @@ class PasswordController extends ApiController
             'password' => Hash::make($request->password),
         ]);
 
+        // Pengguna berhasil mengganti password sendiri — bukan lagi wajib ganti
+        $user->clearPasswordMustChange();
+
         return $this->success(null, 'Password berhasil diubah');
     }
 }

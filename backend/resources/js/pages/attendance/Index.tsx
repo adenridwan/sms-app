@@ -12,6 +12,7 @@ import {
     BarChart3,
     Settings,
     ScanLine,
+    LayoutTemplate,
     Clock,
     CheckCircle2,
     XCircle,
@@ -72,6 +73,14 @@ export default function AttendanceIndex({ stats }: Props) {
             href: '/attendance/reports',
             color: 'text-cyan-600',
             bg: 'bg-cyan-50',
+        },
+        {
+            title: 'Template Kartu',
+            description: 'Atur tata letak kartu ID drag-and-drop',
+            icon: LayoutTemplate,
+            href: '/attendance/card-templates',
+            color: 'text-pink-600',
+            bg: 'bg-pink-50',
         },
         {
             title: 'Pengaturan',

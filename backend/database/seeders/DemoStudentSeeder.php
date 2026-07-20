@@ -29,10 +29,16 @@ class DemoStudentSeeder extends Seeder
     ];
 
     /**
+     * Sequential counter so generated NIS/NISN/usernames are unique.
+     */
+    protected int $sequence = 0;
+
+    /**
      * Run the database seeds.
      */
     public function run(): void
     {
+        $this->sequence = (int) DB::table('students')->count();
         $tenant = DB::table('tenants')->first();
         if (!$tenant) return;
 
@@ -103,13 +109,14 @@ class DemoStudentSeeder extends Seeder
         $userId = Str::uuid()->toString();
         $studentId = Str::uuid()->toString();
 
-        $nis = date('Y') . str_pad(rand(1, 9999), 4, '0', STR_PAD_LEFT);
-        $nisn = '00' . str_pad(rand(10000000, 99999999), 8, '0', STR_PAD_LEFT);
-        $username = strtolower($firstName . '.' . substr($lastName, 0, 3) . rand(10, 99));
+        $seq = ++$this->sequence;
+        $nis = date('Y') . str_pad($seq, 4, '0', STR_PAD_LEFT);
+        $nisn = '00' . str_pad(10000000 + $seq, 8, '0', STR_PAD_LEFT);
+        $username = strtolower($firstName . '.' . substr($lastName, 0, 3)) . $seq;
         $email = $username . '@student.sms.local';
 
         // Create user
-        DB::table('users')->insertOrIgnore([
+        $inserted = DB::table('users')->insertOrIgnore([
             'id' => $userId,
             'tenant_id' => $tenantId,
             'username' => $username,
@@ -121,6 +128,11 @@ class DemoStudentSeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // User was skipped (already exists) — dependent rows would violate FKs
+        if ($inserted === 0) {
+            return;
+        }
 
         // Create profile
         $birthYear = match($gradeLevel->code) {
@@ -148,7 +160,7 @@ class DemoStudentSeeder extends Seeder
         ]);
 
         // Create student
-        DB::table('students')->insertOrIgnore([
+        $inserted = DB::table('students')->insertOrIgnore([
             'id' => $studentId,
             'tenant_id' => $tenantId,
             'user_id' => $userId,
@@ -160,6 +172,11 @@ class DemoStudentSeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Student was skipped (duplicate NIS/NISN) — enrollment would violate its FK
+        if ($inserted === 0) {
+            return;
+        }
 
         // Create enrollment
         DB::table('student_enrollments')->insertOrIgnore([

@@ -1,5 +1,10 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { qrCodeApi } from '@/services/attendance';
+import { studentsApi } from '@/services/api';
+import { printAttendanceCardsWithTemplate } from '@/lib/attendanceCardPrint';
+import type { PageProps } from '@/types';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,8 +23,17 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, MoreHorizontal, Eye, Pencil, Trash2, Download, Upload } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Pencil, Trash2, Download, Upload, Printer, Camera } from 'lucide-react';
 import type { Student, PaginatedResponse } from '@/types';
 
 interface Props {
@@ -32,7 +46,81 @@ interface Props {
 }
 
 export default function StudentsIndex({ students, filters }: Props) {
+    const { tenant } = usePage<PageProps>().props;
     const [search, setSearch] = useState(filters.search || '');
+    const [printingId, setPrintingId] = useState<string | null>(null);
+    const [photoStudent, setPhotoStudent] = useState<Student | null>(null);
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    const [photoUploading, setPhotoUploading] = useState(false);
+    const photoInputRef = useRef<HTMLInputElement>(null);
+
+    const openPhotoDialog = (student: Student) => {
+        setPhotoStudent(student);
+        setPhotoPreview(student.photo_url ?? null);
+    };
+
+    const handlePhotoSelect = async (file: File) => {
+        if (!photoStudent) return;
+
+        setPhotoUploading(true);
+        try {
+            const response = await studentsApi.uploadPhoto(photoStudent.id, file);
+            setPhotoPreview(response.data.data?.photo_url ?? null);
+            toast.success('Foto berhasil diperbarui');
+            router.reload({ only: ['students'] });
+        } catch {
+            toast.error('Gagal mengunggah foto');
+        } finally {
+            setPhotoUploading(false);
+        }
+    };
+
+    const handlePhotoDelete = async () => {
+        if (!photoStudent) return;
+
+        setPhotoUploading(true);
+        try {
+            await studentsApi.deletePhoto(photoStudent.id);
+            setPhotoPreview(null);
+            toast.success('Foto berhasil dihapus');
+            router.reload({ only: ['students'] });
+        } catch {
+            toast.error('Gagal menghapus foto');
+        } finally {
+            setPhotoUploading(false);
+        }
+    };
+
+    const handlePrintCard = async (student: Student) => {
+        setPrintingId(student.id);
+        try {
+            const response = await qrCodeApi.student(student.id);
+            const qr = response.data.data;
+            if (!qr) {
+                toast.error('Data QR siswa tidak ditemukan');
+                return;
+            }
+
+            const opened = await printAttendanceCardsWithTemplate('student', [
+                {
+                    ...qr,
+                    classroom: qr.classroom ?? student.current_class?.name ?? null,
+                },
+            ], {
+                title: `Kartu Siswa - ${qr.name}`,
+                schoolName: tenant?.name,
+                schoolLogo: tenant?.logo,
+            });
+
+            if (!opened) {
+                toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+            }
+        } catch {
+            toast.error('Gagal memuat kartu siswa');
+        } finally {
+            setPrintingId(null);
+        }
+    };
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -170,6 +258,17 @@ export default function StudentsIndex({ students, filters }: Props) {
                                                                 </Link>
                                                             </DropdownMenuItem>
                                                             <DropdownMenuItem
+                                                                disabled={printingId === student.id}
+                                                                onClick={() => handlePrintCard(student)}
+                                                            >
+                                                                <Printer className="mr-2 h-4 w-4" />
+                                                                Cetak Kartu
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => openPhotoDialog(student)}>
+                                                                <Camera className="mr-2 h-4 w-4" />
+                                                                Foto Profil
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
                                                                 className="text-destructive"
                                                                 onClick={() => handleDelete(student.id)}
                                                             >
@@ -217,6 +316,61 @@ export default function StudentsIndex({ students, filters }: Props) {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Photo Dialog */}
+            <Dialog open={!!photoStudent} onOpenChange={(open) => !open && setPhotoStudent(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Foto Profil</DialogTitle>
+                        <DialogDescription>{photoStudent?.full_name}</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col items-center gap-4 py-4">
+                        <Avatar className="h-32 w-32">
+                            <AvatarImage src={photoPreview ?? undefined} />
+                            <AvatarFallback className="text-2xl">
+                                {photoStudent?.full_name?.charAt(0) ?? '?'}
+                            </AvatarFallback>
+                        </Avatar>
+                        <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handlePhotoSelect(file);
+                                e.target.value = '';
+                            }}
+                        />
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                disabled={photoUploading}
+                                onClick={() => photoInputRef.current?.click()}
+                            >
+                                <Camera className="mr-2 h-4 w-4" />
+                                {photoUploading ? 'Memproses...' : 'Pilih Foto'}
+                            </Button>
+                            {photoPreview && (
+                                <Button
+                                    variant="outline"
+                                    className="text-destructive"
+                                    disabled={photoUploading}
+                                    onClick={handlePhotoDelete}
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Hapus
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPhotoStudent(null)}>
+                            Tutup
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </MainLayout>
     );
 }

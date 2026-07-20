@@ -50,6 +50,8 @@ class PermissionSeeder extends Seeder
             'classrooms.manage' => 'Kelola Kelas',
             'majors.view' => 'Lihat Jurusan',
             'majors.manage' => 'Kelola Jurusan',
+            'grade-levels.view' => 'Lihat Tingkat Kelas',
+            'grade-levels.manage' => 'Kelola Tingkat Kelas',
             'schedules.view' => 'Lihat Jadwal',
             'schedules.manage' => 'Kelola Jadwal',
         ],

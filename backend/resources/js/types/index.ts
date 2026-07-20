@@ -9,11 +9,33 @@ export interface User {
     avatar: string | null;
     avatar_url: string | null;
     is_active: boolean;
+    status?: string;
     email_verified_at: string | null;
     last_login_at: string | null;
     user_type?: string;
+    must_change_password?: boolean;
     roles: string[];
     permissions?: string[];
+    teacher?: {
+        id: string;
+        nip: string | null;
+        join_date: string | null;
+        employment_status: string | null;
+        education_level: string | null;
+        status: string | null;
+    } | null;
+    staff?: {
+        employee_id: string | null;
+        join_date: string | null;
+        employment_status: string | null;
+    } | null;
+    guardian_students?: Array<{
+        student_id: string;
+        relationship: string;
+        is_primary_contact: boolean;
+        nis?: string | null;
+        name?: string | null;
+    }>;
     created_at: string;
     updated_at: string;
 }
@@ -74,6 +96,8 @@ export interface Student {
     nis: string;
     nisn: string | null;
     nik: string | null;
+    unique_code?: string | null;
+    rfid_code?: string | null;
     user?: User;
     full_name: string;
     email: string;
@@ -86,6 +110,8 @@ export interface Student {
     address: string | null;
     phone: string | null;
     previous_school: string | null;
+    entry_date?: string | null;
+    entry_type?: string | null;
     entry_year: number;
     entry_class: string | null;
     entry_semester: number;
@@ -121,29 +147,119 @@ export interface StudentParent {
 // Teacher Types
 export interface Teacher {
     id: string;
+    user_id?: string;
+    unique_code?: string | null;
+    rfid_code?: string | null;
     nip: string | null;
     nuptk: string | null;
-    user?: User;
+    username?: string;
     full_name: string;
+    first_name?: string | null;
+    last_name?: string | null;
     email: string;
-    gender: 'male' | 'female';
+    phone: string | null;
+    avatar_url?: string | null;
+    gender: 'male' | 'female' | null;
     gender_label: string;
     birth_place: string | null;
     birth_date: string | null;
     religion: string | null;
     address: string | null;
-    phone: string | null;
+    id_number?: string | null;
     education_level: string | null;
     education_major: string | null;
     university: string | null;
+    teaching_experience_years?: number | null;
     employment_status: 'permanent' | 'contract' | 'honorary' | 'part_time';
     employment_status_label: string;
+    certification_status?: 'certified' | 'not_certified' | 'in_progress';
+    certification_status_label?: string;
+    certification_number?: string | null;
     join_date: string | null;
     status: 'active' | 'inactive' | 'on_leave' | 'retired' | 'terminated';
     status_label: string;
-    photo_url: string | null;
+    account_is_active?: boolean;
+    must_change_password?: boolean;
+    // Hanya terisi bila di-eager-load server-side (halaman Edit/Detail);
+    // tidak ada pada respons daftar (index) — lihat TeacherResource.
+    documents?: TeacherDocuments;
     created_at: string;
     updated_at: string;
+}
+
+export interface TeacherFormData {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+    gender: string;
+    birth_place: string;
+    birth_date: string;
+    religion: string;
+    address: string;
+    id_number: string;
+    nip: string;
+    nuptk: string;
+    join_date: string;
+    employment_status: string;
+    status: string;
+    certification_status: string;
+    certification_number: string;
+    education_level: string;
+    education_major: string;
+    university: string;
+    teaching_experience_years: string;
+}
+
+// Dokumen pemberkasan guru (Fase G2 — semua opsional, lihat TEACHER-MODULE-PLAN.md)
+export type TeacherDocumentCollection =
+    | 'ijazah'
+    | 'ktp'
+    | 'npwp'
+    | 'sertifikat_pendidik'
+    | 'surat_penugasan'
+    | 'lainnya';
+
+export interface TeacherDocument {
+    id: number;
+    name: string;
+    url: string;
+    mime_type: string | null;
+    size: number;
+    created_at: string | null;
+}
+
+export type TeacherDocuments = Record<TeacherDocumentCollection, TeacherDocument[]>;
+
+// Ringkasan penugasan guru (read-only) — dikelola dari menu Kelas / Jadwal
+export interface TeacherAssignmentClassroom {
+    id: string;
+    name: string;
+    students_count: number;
+}
+
+export interface TeacherAssignmentSubject {
+    id: string;
+    name: string;
+    code: string;
+    is_primary: boolean;
+}
+
+export interface TeacherAssignmentSchedule {
+    day_of_week: number;
+    day_name: string;
+    subject: string;
+    classroom: string;
+    start_time: string;
+    end_time: string;
+}
+
+export interface TeacherAssignment {
+    active_academic_year: string | null;
+    classrooms: TeacherAssignmentClassroom[];
+    homeroom_classroom: { id: string; name: string } | null;
+    subjects: TeacherAssignmentSubject[];
+    schedules: TeacherAssignmentSchedule[];
 }
 
 // Academic Types
@@ -229,6 +345,8 @@ export interface GradeLevel {
     code: string;
     order: number;
     description: string | null;
+    is_active: boolean;
+    classrooms_count?: number;
     created_at: string;
     updated_at: string;
 }

@@ -50,13 +50,14 @@ class RouteServiceProvider extends ServiceProvider
                 ->name('api.v1.')
                 ->group(base_path('routes/api_v1.php'));
 
-            // Web Routes
+            // Web Routes (termasuk /logout — dulu ada routes/auth.php terpisah
+            // untuk ini, tapi file itu tidak menambah apa pun yang benar-benar
+            // berfungsi selain logout: /register & /login di sana adalah
+            // duplikat path-case yang salah dari punya web.php, dan
+            // forgot-password/reset-password/verify-email merender komponen
+            // Inertia yang tidak pernah ada. Sudah digabung ke web.php.)
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));
-
-            // Auth Routes
-            Route::middleware('web')
-                ->group(base_path('routes/auth.php'));
         });
     }
 }

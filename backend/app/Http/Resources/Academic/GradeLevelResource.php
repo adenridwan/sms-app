@@ -20,6 +20,8 @@ class GradeLevelResource extends JsonResource
             'code' => $this->code,
             'order' => $this->order,
             'description' => $this->description,
+            'is_active' => $this->is_active,
+            'classrooms_count' => $this->whenCounted('classrooms'),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

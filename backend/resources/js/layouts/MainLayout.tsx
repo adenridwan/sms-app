@@ -59,6 +59,8 @@ interface MenuChild {
     title: string;
     href: string;
     permission?: string;
+    /** Hanya tampil untuk super admin */
+    superAdminOnly?: boolean;
 }
 
 interface MenuItem {
@@ -84,6 +86,8 @@ const menuItems: MenuItem[] = [
             { title: 'Tahun Ajaran', href: '/academic/years', permission: 'academic-years.view' },
             { title: 'Kurikulum', href: '/academic/curricula', permission: 'curricula.view' },
             { title: 'Mata Pelajaran', href: '/academic/subjects', permission: 'subjects.view' },
+            { title: 'Tingkat Kelas', href: '/academic/grade-levels', permission: 'grade-levels.view' },
+            { title: 'Jurusan', href: '/academic/majors', permission: 'majors.view' },
             { title: 'Kelas', href: '/academic/classrooms', permission: 'classrooms.view' },
             { title: 'Jadwal', href: '/academic/schedules', permission: 'schedules.view' },
         ],
@@ -114,8 +118,8 @@ const menuItems: MenuItem[] = [
         permission: 'attendance.view',
         children: [
             { title: 'Absensi Siswa', href: '/attendance/students' },
-            { title: 'Absensi Pegawai', href: '/attendance/employees' },
-            { title: 'Rekap Absensi', href: '/attendance/summary' },
+            { title: 'Absensi Pegawai', href: '/attendance/teachers' },
+            { title: 'Rekap Absensi', href: '/attendance/reports' },
         ],
     },
     {
@@ -163,9 +167,7 @@ const menuItems: MenuItem[] = [
         permission: 'settings.view',
         children: [
             { title: 'Umum', href: '/settings', permission: 'settings.view' },
-            { title: 'Kelas', href: '/settings/class-rooms', permission: 'classrooms.view' },
-            { title: 'Jurusan', href: '/settings/majors', permission: 'majors.view' },
-            { title: 'Pengguna', href: '/settings/users', permission: 'users.view' },
+            { title: 'Pengguna', href: '/settings/users', superAdminOnly: true },
         ],
     },
 ];
@@ -347,8 +349,10 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                             if (!hasPermission(item.permission)) return null;
 
                             if (item.children) {
-                                const visibleChildren = item.children.filter((child) =>
-                                    hasPermission(child.permission)
+                                const visibleChildren = item.children.filter(
+                                    (child) =>
+                                        hasPermission(child.permission) &&
+                                        (!child.superAdminOnly || isSuperAdmin)
                                 );
                                 if (visibleChildren.length === 0) return null;
 

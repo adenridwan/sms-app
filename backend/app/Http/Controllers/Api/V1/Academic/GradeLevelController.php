@@ -15,11 +15,12 @@ class GradeLevelController extends ApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = GradeLevel::query()
+        $query = GradeLevel::withCount('classrooms')
             ->when($request->search, fn ($q, $search) => $q->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', "%{$search}%")
                     ->orWhere('code', 'ilike', "%{$search}%");
             }))
+            ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
             ->orderBy('order');
 
         $perPage = min((int) $request->get('per_page', 50), 100);
@@ -33,6 +34,8 @@ class GradeLevelController extends ApiController
      */
     public function store(Request $request): JsonResponse
     {
+        abort_unless($request->user()->can('grade-levels.manage'), 403);
+
         if (! $this->currentTenantId($request)) {
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }
@@ -42,12 +45,17 @@ class GradeLevelController extends ApiController
             'code' => ['required', 'string', 'max:20'],
             'order' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string', 'max:500'],
+            'is_active' => ['boolean'],
         ]);
 
         if (GradeLevel::where('code', $data['code'])->exists()) {
             return $this->validationError(['code' => ['Kode tingkat sudah digunakan.']]);
         }
 
+        // create() tidak membaca ulang baris dari DB, jadi default kolom
+        // is_active (true) tidak otomatis terisi di model in-memory bila
+        // klien tidak mengirim field ini — set eksplisit di sini.
+        $data['is_active'] = $data['is_active'] ?? true;
         $gradeLevel = GradeLevel::create($data);
 
         return $this->success(new GradeLevelResource($gradeLevel), 'Tingkat kelas berhasil ditambahkan', 201);
@@ -66,11 +74,14 @@ class GradeLevelController extends ApiController
      */
     public function update(Request $request, GradeLevel $gradeLevel): JsonResponse
     {
+        abort_unless($request->user()->can('grade-levels.manage'), 403);
+
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:100'],
             'code' => ['sometimes', 'string', 'max:20'],
             'order' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string', 'max:500'],
+            'is_active' => ['boolean'],
         ]);
 
         if (isset($data['code']) && GradeLevel::where('code', $data['code'])->where('id', '!=', $gradeLevel->id)->exists()) {
@@ -87,6 +98,8 @@ class GradeLevelController extends ApiController
      */
     public function destroy(GradeLevel $gradeLevel): JsonResponse
     {
+        abort_unless(request()->user()->can('grade-levels.manage'), 403);
+
         if ($gradeLevel->classrooms()->exists()) {
             return $this->error('Tingkat kelas tidak dapat dihapus karena masih digunakan oleh kelas', 422);
         }

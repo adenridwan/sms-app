@@ -31,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'tenant' => \App\Http\Middleware\EnsureTenantMiddleware::class,
+            'password.current' => \App\Http\Middleware\EnsurePasswordIsCurrent::class,
         ]);
 
         // Middleware priority

@@ -6,18 +6,34 @@ use App\Http\Controllers\Api\ApiController;
 use App\Http\Requests\Teacher\StoreTeacherRequest;
 use App\Http\Requests\Teacher\UpdateTeacherRequest;
 use App\Http\Resources\TeacherResource;
+use App\Infrastructure\Persistence\Eloquent\Auth\User;
+use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
-use App\Models\User;
+use App\Services\TeacherAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
+/**
+ * Data Guru (master): identitas, kepegawaian, dan akun login guru.
+ *
+ * Penempatan kelas & mapel SENGAJA tidak dikelola di sini (lihat
+ * TEACHER-MODULE-PLAN.md §2) — supaya tabel guru tidak berubah setiap
+ * pergantian tahun ajaran. Kelola dari menu Kelas (wali/pengampu) dan
+ * menu Mata Pelajaran (kompetensi).
+ */
 class TeacherController extends ApiController
 {
+    public function __construct(
+        private TeacherAssignmentService $assignments,
+    ) {}
+
     /**
      * Display a listing of the resource.
      */
@@ -38,24 +54,17 @@ class TeacherController extends ApiController
                         });
                 });
             })
-            ->when($request->status, fn($q, $status) => $q->where('status', $status))
-            ->when($request->employment_status, fn($q, $es) => $q->where('employment_status', $es))
-            ->when($request->gender, fn($q, $gender) => $q->whereHas('user.profile', fn($q) => $q->where('gender', $gender)))
-            ->when($request->subject_id, fn($q, $subjectId) => $q->whereHas('subjects', fn($q) => $q->where('subject_id', $subjectId)));
+            ->when($request->status, fn ($q, $status) => $q->where('status', $status))
+            ->when($request->employment_status, fn ($q, $es) => $q->where('employment_status', $es))
+            ->when($request->gender, fn ($q, $gender) => $q->whereHas('user.profile', fn ($q) => $q->where('gender', $gender)));
 
-        // Sorting
-        $sortField = $request->get('sort', 'created_at');
-        $sortDirection = $request->get('direction', 'desc');
+        $sortField = in_array($request->get('sort'), ['nip', 'created_at'], true)
+            ? $request->get('sort')
+            : 'created_at';
+        $sortDirection = $request->get('direction') === 'asc' ? 'asc' : 'desc';
+        $query->orderBy($sortField, $sortDirection);
 
-        if ($sortField === 'name') {
-            $query->join('users', 'teachers.user_id', '=', 'users.id')
-                ->orderBy('users.first_name', $sortDirection)
-                ->select('teachers.*');
-        } else {
-            $query->orderBy($sortField, $sortDirection);
-        }
-
-        $perPage = $request->get('per_page', 15);
+        $perPage = min((int) $request->get('per_page', 15), 100);
         $teachers = $query->paginate($perPage);
 
         return $this->success(TeacherResource::collection($teachers)->response()->getData(true));
@@ -63,180 +72,261 @@ class TeacherController extends ApiController
 
     /**
      * Store a newly created resource in storage.
+     *
+     * Membuat akun guru sekaligus (R1, ROLE-ACCESS-PLAN.md): users +
+     * user_profiles + teachers dalam satu transaksi. Password awal =
+     * tanggal lahir format ddmmyyyy; wajib diganti saat login pertama.
      */
     public function store(StoreTeacherRequest $request): JsonResponse
     {
         $data = $request->validated();
 
-        try {
-            DB::beginTransaction();
+        $tenantId = $this->currentTenantId($request);
+        if (! $tenantId) {
+            return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
+        }
 
-            // Create user account
+        $fullName = trim($data['first_name'] . ' ' . ($data['last_name'] ?? ''));
+        $username = $this->generateUniqueUsername($fullName);
+        $initialPassword = Carbon::parse($data['birth_date'])->format('dmY');
+
+        $teacher = DB::transaction(function () use ($data, $tenantId, $username, $initialPassword) {
             $user = User::create([
-                'username' => $data['username'] ?? Str::slug($data['first_name'] . '-' . Str::random(4)),
+                'tenant_id' => $tenantId,
+                'username' => $username,
                 'email' => $data['email'],
-                'password' => Hash::make($data['password'] ?? 'password123'),
+                'password' => Hash::make($initialPassword),
+                'status' => 'active',
+                'user_type' => 'teacher',
+            ]);
+            $user->forceFill(['email_verified_at' => now()])->save();
+            $user->assignRole('guru');
+            $user->markPasswordMustChange();
+
+            UserProfile::create([
+                'user_id' => $user->id,
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'] ?? null,
                 'phone' => $data['phone'] ?? null,
-                'is_active' => true,
+                'gender' => $data['gender'],
+                'birth_place' => $data['birth_place'] ?? null,
+                'birth_date' => $data['birth_date'],
+                'religion' => $data['religion'] ?? null,
+                'address' => $data['address'] ?? null,
+                'id_number' => $data['id_number'] ?? null,
             ]);
 
-            // Assign teacher role
-            $user->assignRole('guru');
-
-            // Handle photo upload
-            $photoPath = null;
-            if ($request->hasFile('photo')) {
-                $photoPath = $request->file('photo')->store('teachers', 'public');
-            }
-
-            // Create teacher
             $teacher = Teacher::create([
+                'tenant_id' => $tenantId,
                 'user_id' => $user->id,
                 'nip' => $data['nip'] ?? null,
                 'nuptk' => $data['nuptk'] ?? null,
-                'gender' => $data['gender'],
-                'birth_place' => $data['birth_place'] ?? null,
-                'birth_date' => $data['birth_date'] ?? null,
-                'religion' => $data['religion'] ?? null,
-                'address' => $data['address'] ?? null,
-                'phone' => $data['phone'] ?? null,
+                'no_hp' => $data['phone'] ?? null,
+                'join_date' => $data['join_date'] ?? now()->toDateString(),
+                'employment_status' => $data['employment_status'] ?? 'permanent',
+                'status' => $data['status'] ?? 'active',
+                'certification_status' => $data['certification_status'] ?? 'not_certified',
+                'certification_number' => $data['certification_number'] ?? null,
                 'education_level' => $data['education_level'] ?? null,
                 'education_major' => $data['education_major'] ?? null,
-                'employment_status' => 'active',
-                'join_date' => $data['join_date'] ?? now(),
-                'position' => $data['position'] ?? null,
-                'specialization' => $data['specialization'] ?? null,
-                'photo' => $photoPath,
+                'university' => $data['university'] ?? null,
+                'teaching_experience_years' => $data['teaching_experience_years'] ?? 0,
             ]);
 
-            // Attach subjects
-            if (!empty($data['subject_ids'])) {
-                $teacher->subjects()->attach($data['subject_ids']);
-            }
+            $teacher->load(['user.profile']);
 
-            DB::commit();
+            return $teacher;
+        });
 
-            $teacher->load(['user', 'subjects']);
-
-            return $this->success(
-                new TeacherResource($teacher),
-                'Guru berhasil ditambahkan',
-                201
-            );
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return $this->error('Gagal menambahkan guru: ' . $e->getMessage(), 500);
-        }
+        return $this->success([
+            ...(new TeacherResource($teacher))->resolve(),
+            // Ditampilkan hanya sekali pada respons ini agar admin bisa
+            // menyampaikan kredensial ke guru; tidak pernah disimpan ulang.
+            'initial_username' => $username,
+            'initial_password' => $initialPassword,
+        ], 'Guru berhasil ditambahkan', 201);
     }
 
     /**
-     * Display the specified resource.
+     * Display the specified resource (termasuk ringkasan dokumen — G2).
      */
     public function show(Teacher $teacher): JsonResponse
     {
-        $teacher->load(['user', 'subjects', 'classRooms']);
+        $teacher->load(['user.profile', 'media']);
 
         return $this->success(new TeacherResource($teacher));
     }
 
     /**
+     * Ringkasan penugasan guru (read-only) untuk halaman Detail Guru —
+     * lihat TeacherAssignmentService untuk alasan dipisah dari TeacherResource.
+     */
+    public function assignment(Teacher $teacher): JsonResponse
+    {
+        return $this->success($this->assignments->overview($teacher));
+    }
+
+    /**
      * Update the specified resource in storage.
+     *
+     * Password TIDAK diubah di sini secara sengaja — reset password
+     * adalah aksi terpisah (menu Pengguna) yang juga menandai wajib
+     * ganti password, konsisten dengan Admin\UserController.
      */
     public function update(UpdateTeacherRequest $request, Teacher $teacher): JsonResponse
     {
         $data = $request->validated();
 
-        try {
-            DB::beginTransaction();
-
-            // Update user data
-            $userData = array_filter([
-                'first_name' => $data['first_name'] ?? null,
-                'last_name' => $data['last_name'] ?? null,
-                'email' => $data['email'] ?? null,
-                'phone' => $data['phone'] ?? null,
-            ]);
-
-            if (!empty($userData)) {
-                $teacher->user->update($userData);
+        DB::transaction(function () use ($data, $teacher) {
+            $userFields = array_intersect_key($data, array_flip(['email']));
+            if ($userFields !== []) {
+                $teacher->user->update($userFields);
             }
 
-            // Handle photo upload
-            if ($request->hasFile('photo')) {
-                if ($teacher->photo) {
-                    Storage::disk('public')->delete($teacher->photo);
-                }
-                $data['photo'] = $request->file('photo')->store('teachers', 'public');
+            $profileFields = array_intersect_key($data, array_flip([
+                'first_name', 'last_name', 'phone', 'gender', 'birth_place',
+                'birth_date', 'religion', 'address', 'id_number',
+            ]));
+            if ($profileFields !== []) {
+                UserProfile::updateOrCreate(['user_id' => $teacher->user_id], $profileFields);
             }
 
-            // Remove user-related fields
-            unset($data['first_name'], $data['last_name'], $data['email'], $data['username'], $data['password']);
-
-            // Handle subjects sync
-            if (isset($data['subject_ids'])) {
-                $teacher->subjects()->sync($data['subject_ids']);
-                unset($data['subject_ids']);
+            $teacherFields = array_intersect_key($data, array_flip([
+                'nip', 'nuptk', 'join_date', 'employment_status', 'status',
+                'certification_status', 'certification_number', 'education_level',
+                'education_major', 'university', 'teaching_experience_years',
+            ]));
+            if (array_key_exists('phone', $data)) {
+                $teacherFields['no_hp'] = $data['phone'];
             }
+            if ($teacherFields !== []) {
+                $teacher->update($teacherFields);
+            }
+        });
 
-            // Update teacher
-            $teacher->update($data);
+        $teacher->refresh()->load(['user.profile']);
 
-            DB::commit();
-
-            $teacher->load(['user', 'subjects', 'classRooms']);
-
-            return $this->success(new TeacherResource($teacher), 'Guru berhasil diperbarui');
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return $this->error('Gagal memperbarui guru: ' . $e->getMessage(), 500);
-        }
+        return $this->success(new TeacherResource($teacher), 'Guru berhasil diperbarui');
     }
 
     /**
      * Remove the specified resource from storage.
+     *
+     * Soft delete guru + akun terkait (akun langsung tidak bisa login
+     * lagi), konsisten dengan siklus hidup di StudentController.
      */
-    public function destroy(Teacher $teacher): JsonResponse
+    public function destroy(Request $request, Teacher $teacher): JsonResponse
     {
-        try {
-            DB::beginTransaction();
-
-            if ($teacher->photo) {
-                Storage::disk('public')->delete($teacher->photo);
-            }
-
-            $teacher->subjects()->detach();
-            $teacher->user->delete();
-            $teacher->delete();
-
-            DB::commit();
-
-            return $this->success(null, 'Guru berhasil dihapus');
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return $this->error('Gagal menghapus guru: ' . $e->getMessage(), 500);
+        if ($teacher->user_id === $request->user()->id) {
+            return $this->error('Tidak dapat menghapus akun sendiri', 422);
         }
+
+        DB::transaction(function () use ($teacher) {
+            $teacher->user?->delete();
+            $teacher->delete();
+        });
+
+        return $this->success(null, 'Guru berhasil dihapus');
     }
 
     /**
-     * Get teacher schedules.
+     * Upload/ganti foto profil guru (disimpan di users.avatar — satu
+     * sumber foto dipakai bersama sidebar & dashboard, bukan kolom
+     * terpisah di tabel teachers; lihat TEACHER-MODULE-PLAN.md keputusan #5).
      */
-    public function schedules(Teacher $teacher): JsonResponse
+    public function uploadPhoto(Request $request, Teacher $teacher): JsonResponse
     {
-        // TODO: Implement schedules
-        return $this->success([]);
+        abort_unless($request->user()->can('teachers.update'), 403);
+
+        $request->validate([
+            'photo' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
+        ]);
+
+        $user = $teacher->user;
+
+        if ($user->avatar) {
+            Storage::disk('public')->delete($user->avatar);
+        }
+
+        $user->update(['avatar' => $request->file('photo')->store('avatars', 'public')]);
+
+        return $this->success(['avatar_url' => asset('storage/' . $user->avatar)], 'Foto berhasil diperbarui');
     }
 
     /**
-     * Get teacher attendance.
+     * Hapus foto profil guru.
      */
-    public function attendance(Teacher $teacher): JsonResponse
+    public function deletePhoto(Request $request, Teacher $teacher): JsonResponse
     {
-        // TODO: Implement attendance
-        return $this->success([]);
+        abort_unless($request->user()->can('teachers.update'), 403);
+
+        $user = $teacher->user;
+
+        if ($user->avatar) {
+            Storage::disk('public')->delete($user->avatar);
+            $user->update(['avatar' => null]);
+        }
+
+        return $this->success(null, 'Foto berhasil dihapus');
+    }
+
+    /**
+     * Upload dokumen pemberkasan ke salah satu koleksi (semua opsional —
+     * TEACHER-MODULE-PLAN.md keputusan #6). KTP/NPWP singleFile: unggahan
+     * baru otomatis menimpa yang lama (ditangani medialibrary).
+     */
+    public function uploadDocument(Request $request, Teacher $teacher): JsonResponse
+    {
+        abort_unless($request->user()->can('teachers.update'), 403);
+
+        $data = $request->validate([
+            'collection' => ['required', Rule::in(array_keys(Teacher::DOCUMENT_COLLECTIONS))],
+            'file' => [
+                'required', 'file',
+                'mimes:pdf,jpg,jpeg,png',
+                'max:' . Teacher::DOCUMENT_MAX_KB,
+            ],
+        ]);
+
+        $teacher->addMediaFromRequest('file')->toMediaCollection($data['collection']);
+
+        $teacher->load('media');
+
+        return $this->success($teacher->documentsSummary(), 'Dokumen berhasil diunggah');
+    }
+
+    /**
+     * Hapus satu dokumen.
+     */
+    public function deleteDocument(Request $request, Teacher $teacher, Media $media): JsonResponse
+    {
+        abort_unless($request->user()->can('teachers.update'), 403);
+
+        if ($media->model_type !== Teacher::class || $media->model_id !== $teacher->id) {
+            abort(404);
+        }
+
+        $media->delete();
+
+        $teacher->load('media');
+
+        return $this->success($teacher->documentsSummary(), 'Dokumen berhasil dihapus');
+    }
+
+    /**
+     * Buat username unik dari nama (slug), tambahkan angka bila bentrok.
+     */
+    private function generateUniqueUsername(string $fullName): string
+    {
+        $base = Str::slug($fullName, '.') ?: 'guru';
+        $username = $base;
+        $suffix = 1;
+
+        while (User::withoutTenant()->where('username', $username)->exists()) {
+            $suffix++;
+            $username = "{$base}{$suffix}";
+        }
+
+        return $username;
     }
 }

@@ -83,7 +83,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return fallback;
 }
 
-export default function SettingsMajors() {
+export default function AcademicMajors() {
     const [majors, setMajors] = useState<Major[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -243,7 +243,7 @@ export default function SettingsMajors() {
 
     return (
         <MainLayout title="Jurusan">
-            <Head title="Pengaturan Jurusan" />
+            <Head title="Akademik - Jurusan" />
 
             <div className="space-y-6">
                 {/* Header */}

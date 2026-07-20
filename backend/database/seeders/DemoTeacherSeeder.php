@@ -76,11 +76,11 @@ class DemoTeacherSeeder extends Seeder
             $username = strtolower(
                 str_replace([' ', '.', ','], '', $teacher['first']) .
                 substr(str_replace([' ', '.', ','], '', $teacher['last']), 0, 3) .
-                rand(10, 99)
+                ($index + 10)
             );
 
             // Create user
-            DB::table('users')->insertOrIgnore([
+            $inserted = DB::table('users')->insertOrIgnore([
                 'id' => $userId,
                 'tenant_id' => $tenant->id,
                 'username' => $username,
@@ -92,6 +92,11 @@ class DemoTeacherSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // User was skipped (already exists) — dependent rows would violate FKs
+            if ($inserted === 0) {
+                continue;
+            }
 
             // Create profile
             DB::table('user_profiles')->insertOrIgnore([
@@ -111,9 +116,9 @@ class DemoTeacherSeeder extends Seeder
 
             // Create teacher
             $nip = '19' . rand(70, 90) . str_pad(rand(1, 12), 2, '0', STR_PAD_LEFT) . str_pad(rand(1, 28), 2, '0', STR_PAD_LEFT) .
-                   ' ' . date('Y') . str_pad(rand(1, 12), 2, '0', STR_PAD_LEFT) . ' ' . rand(1, 2) . ' ' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+                   ' ' . date('Y') . str_pad(rand(1, 12), 2, '0', STR_PAD_LEFT) . ' ' . rand(1, 2) . ' ' . str_pad($index + 1, 3, '0', STR_PAD_LEFT);
 
-            DB::table('teachers')->insertOrIgnore([
+            $inserted = DB::table('teachers')->insertOrIgnore([
                 'id' => $teacherId,
                 'tenant_id' => $tenant->id,
                 'user_id' => $userId,
@@ -127,6 +132,11 @@ class DemoTeacherSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Teacher was skipped (duplicate NIP) — subject link would violate its FK
+            if ($inserted === 0) {
+                continue;
+            }
 
             // Assign subject
             if (isset($subjects[$teacher['subject']])) {

@@ -23,7 +23,7 @@ class ParentResource extends JsonResource
             'relationship' => $this->relationship,
             'relationship_label' => $this->getRelationshipLabel(),
             'occupation' => $this->occupation,
-            'income' => $this->income,
+            'income_range' => $this->income_range,
             'address' => $this->address,
             'is_primary_contact' => $this->is_primary_contact,
             'created_at' => $this->created_at?->toISOString(),

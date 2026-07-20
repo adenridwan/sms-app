@@ -83,16 +83,22 @@ class QrCodeGeneratorService
     }
 
     /**
-     * Generate QR code as base64 PNG
+     * Generate QR code as a base64 SVG data URI.
+     *
+     * Deliberately SVG, not PNG: the PNG backend requires the PHP `imagick`
+     * extension, which isn't guaranteed to be installed (confirmed absent
+     * on this Windows dev box — this was the root cause of "Cetak Kartu"
+     * failing, see ATTENDANCE-PLAN.md). SVG needs no native image library
+     * and renders identically in a plain <img src="..."> tag.
      */
     public function generateQrImage(string $code, int $size = 300): string
     {
-        $qrCode = QrCode::format('png')
+        $qrCode = QrCode::format('svg')
             ->size($size)
             ->margin(1)
             ->generate($code);
 
-        return 'data:image/png;base64,' . base64_encode($qrCode);
+        return 'data:image/svg+xml;base64,' . base64_encode($qrCode);
     }
 
     /**
@@ -117,6 +123,7 @@ class QrCodeGeneratorService
                 'student_id' => $student->id,
                 'nis' => $student->nis,
                 'name' => $student->user?->full_name,
+                'photo_url' => $student->user?->avatar ? asset('storage/' . $student->user->avatar) : null,
                 'unique_code' => $student->unique_code,
                 'qr_code' => $this->generateQrImage($student->unique_code, $size),
             ];

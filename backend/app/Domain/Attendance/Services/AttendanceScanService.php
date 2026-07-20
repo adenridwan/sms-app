@@ -98,6 +98,10 @@ class AttendanceScanService
             );
         }
 
+        if ($geofenceError = $this->checkGeofence($location, $student->tenant_id)) {
+            return $this->errorResponse($geofenceError);
+        }
+
         // Calculate lateness
         $lateMinutes = $this->lateCalculationService->calculate($now, $student->tenant_id);
         $lateInfo = $this->lateCalculationService->getLateCategoryInfo($lateMinutes);
@@ -265,6 +269,10 @@ class AttendanceScanService
             );
         }
 
+        if ($geofenceError = $this->checkGeofence($location, $teacher->tenant_id)) {
+            return $this->errorResponse($geofenceError);
+        }
+
         $lateMinutes = $this->lateCalculationService->calculate($now, $teacher->tenant_id);
 
         $attendance = EmployeeAttendance::updateOrCreate(
@@ -335,6 +343,10 @@ class AttendanceScanService
             );
         }
 
+        if ($geofenceError = $this->checkGeofence($location, $teacher->tenant_id)) {
+            return $this->errorResponse($geofenceError);
+        }
+
         $oldData = $attendance->toArray();
 
         $attendance->update([
@@ -403,6 +415,47 @@ class AttendanceScanService
             ],
             'check_in_deadline' => $settings->getCheckInDeadline()->format('H:i:s'),
         ];
+    }
+
+    /**
+     * Enforce geofencing when a tenant has `require_location` enabled.
+     * Returns an error message to reject the scan, or null to let it through.
+     * Tenants that never enable `require_location` (the default) are
+     * unaffected — this preserves existing behavior for everyone else.
+     */
+    private function checkGeofence(?array $location, string $tenantId): ?string
+    {
+        $settings = AttendanceSetting::getForTenant($tenantId);
+
+        if (! $settings->require_location) {
+            return null;
+        }
+
+        if (! $location) {
+            return 'Lokasi wajib diaktifkan untuk melakukan absen.';
+        }
+
+        if (! $settings->hasSchoolLocation()) {
+            // Admin belum mengatur koordinat sekolah — gap konfigurasi,
+            // bukan pelanggaran siswa/guru, jadi lolos (fail-open).
+            return null;
+        }
+
+        $distance = $settings->distanceFromSchool(
+            (float) $location['latitude'],
+            (float) $location['longitude']
+        );
+        $radius = (float) $settings->location_radius;
+
+        if ($distance > $radius) {
+            return sprintf(
+                'Anda berada %.0f m dari sekolah, di luar radius maksimal %.0f m.',
+                $distance,
+                $radius
+            );
+        }
+
+        return null;
     }
 
     private function successResponse(array $data, string $message = 'Sukses'): array
