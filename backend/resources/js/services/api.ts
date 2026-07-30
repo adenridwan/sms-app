@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse, PaginatedResponse, Student, Teacher, ClassRoom, Subject, AcademicYear, Semester, Payment, FeeType, Attendance, DashboardStats, User, Major, GradeLevel, Classroom } from '@/types';
+import type { ApiResponse, PaginatedResponse, Student, Teacher, TeacherFormData, TeacherAssignment, TeacherDocumentCollection, TeacherDocuments, ClassRoom, Subject, AcademicYear, Semester, Payment, FeeType, Attendance, DashboardStats, User, Major, GradeLevel, Classroom } from '@/types';
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -55,13 +55,17 @@ export const authApi = {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
 
+    // Route memakai PUT (lihat routes/api_v1.php: auth.password.update)
     changePassword: (data: { current_password: string; password: string; password_confirmation: string }) =>
-        api.post<ApiResponse>('/auth/password', data),
+        api.put<ApiResponse>('/auth/password', data),
 };
 
 // Dashboard
 export const dashboardApi = {
     getStats: () => api.get<ApiResponse<DashboardStats>>('/dashboard'),
+
+    classStats: (classroomId: string) =>
+        api.get<ApiResponse<Record<string, unknown>>>(`/dashboard/class/${classroomId}`),
 };
 
 // Students
@@ -77,10 +81,10 @@ export const studentsApi = {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
 
-    update: (id: string, data: FormData) =>
-        api.post<ApiResponse<Student>>(`/students/${id}`, data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+    // Foto profil sudah lewat endpoint terpisah (uploadPhoto/deletePhoto di
+    // bawah, Fase 3a) — update() cukup field teks biasa, tidak perlu multipart.
+    update: (id: string, data: Record<string, unknown>) =>
+        api.put<ApiResponse<Student>>(`/students/${id}`, data),
 
     delete: (id: string) =>
         api.delete<ApiResponse>(`/students/${id}`),
@@ -98,34 +102,82 @@ export const studentsApi = {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
     },
+
+    uploadPhoto: (id: string, file: File) => {
+        const formData = new FormData();
+        formData.append('photo', file);
+        return api.post<ApiResponse<{ photo_url: string }>>(`/students/${id}/photo`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    deletePhoto: (id: string) =>
+        api.delete<ApiResponse>(`/students/${id}/photo`),
+
+    // Kode kartu RFID — endpoint dibuat Fase 2 (RfidController), baru
+    // dipakai UI-nya sekarang di students/Edit.tsx.
+    updateRfid: (id: string, rfid_code: string | null) =>
+        api.put<ApiResponse<{ student_id: string; rfid_code: string | null }>>(
+            `/attendance/rfid/students/${id}`,
+            { rfid_code }
+        ),
 };
 
-// Teachers
+// Teachers (Data Guru — master: identitas, kepegawaian, akun login.
+// Penempatan kelas & mapel dikelola dari menu Kelas / Mata Pelajaran,
+// lihat TEACHER-MODULE-PLAN.md §2)
+export interface CreateTeacherResponse extends Teacher {
+    initial_username: string;
+    initial_password: string;
+}
+
 export const teachersApi = {
     list: (params?: Record<string, unknown>) =>
-        api.get<PaginatedResponse<Teacher>>('/teachers', { params }),
+        api.get<ApiResponse<PaginatedResponse<Teacher>>>('/teachers', { params }),
 
     get: (id: string) =>
         api.get<ApiResponse<Teacher>>(`/teachers/${id}`),
 
-    create: (data: FormData) =>
-        api.post<ApiResponse<Teacher>>('/teachers', data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+    create: (data: Partial<TeacherFormData>) =>
+        api.post<ApiResponse<CreateTeacherResponse>>('/teachers', data),
 
-    update: (id: string, data: FormData) =>
-        api.post<ApiResponse<Teacher>>(`/teachers/${id}`, data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+    update: (id: string, data: Partial<TeacherFormData>) =>
+        api.put<ApiResponse<Teacher>>(`/teachers/${id}`, data),
 
     delete: (id: string) =>
         api.delete<ApiResponse>(`/teachers/${id}`),
 
-    schedules: (id: string) =>
-        api.get<ApiResponse>(`/teachers/${id}/schedules`),
+    getAssignment: (id: string) =>
+        api.get<ApiResponse<TeacherAssignment>>(`/teachers/${id}/assignment`),
 
-    attendance: (id: string, params?: Record<string, unknown>) =>
-        api.get<ApiResponse>(`/teachers/${id}/attendance`, { params }),
+    uploadPhoto: (id: string, file: File) => {
+        const formData = new FormData();
+        formData.append('photo', file);
+        return api.post<ApiResponse<{ avatar_url: string }>>(`/teachers/${id}/photo`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    deletePhoto: (id: string) =>
+        api.delete<ApiResponse>(`/teachers/${id}/photo`),
+
+    updateRfid: (id: string, rfid_code: string | null) =>
+        api.put<ApiResponse<{ teacher_id: string; rfid_code: string | null }>>(
+            `/attendance/rfid/teachers/${id}`,
+            { rfid_code }
+        ),
+
+    uploadDocument: (id: string, collection: TeacherDocumentCollection, file: File) => {
+        const formData = new FormData();
+        formData.append('collection', collection);
+        formData.append('file', file);
+        return api.post<ApiResponse<TeacherDocuments>>(`/teachers/${id}/documents`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    deleteDocument: (id: string, mediaId: number) =>
+        api.delete<ApiResponse<TeacherDocuments>>(`/teachers/${id}/documents/${mediaId}`),
 };
 
 // Class Rooms
@@ -168,6 +220,16 @@ export const subjectsApi = {
 };
 
 // Academic Years
+// `create_semesters` (opsional) minta backend sekalian membuat Semester Ganjil
+// & Genap dari rentang tanggal tahun ajaran — lihat AcademicYearController.
+export interface AcademicYearPayload {
+    name: string;
+    start_date: string;
+    end_date: string;
+    is_active?: boolean;
+    create_semesters?: boolean;
+}
+
 export const academicYearsApi = {
     list: (params?: Record<string, unknown>) =>
         api.get<ApiResponse<PaginatedResponse<AcademicYear>>>('/academic/years', { params }),
@@ -175,38 +237,48 @@ export const academicYearsApi = {
     get: (id: string) =>
         api.get<ApiResponse<AcademicYear>>(`/academic/years/${id}`),
 
-    create: (data: Partial<AcademicYear>) =>
+    create: (data: AcademicYearPayload) =>
         api.post<ApiResponse<AcademicYear>>('/academic/years', data),
 
-    update: (id: string, data: Partial<AcademicYear>) =>
+    update: (id: string, data: Partial<AcademicYearPayload>) =>
         api.put<ApiResponse<AcademicYear>>(`/academic/years/${id}`, data),
 
     delete: (id: string) =>
         api.delete<ApiResponse>(`/academic/years/${id}`),
 
-    setActive: (id: string) =>
-        api.post<ApiResponse<AcademicYear>>(`/academic/years/${id}/set-active`),
+    // Route-nya bernama /activate (dulu di sini ditulis /set-active → 404).
+    activate: (id: string) =>
+        api.post<ApiResponse<AcademicYear>>(`/academic/years/${id}/activate`),
 };
 
 // Semesters
+export interface SemesterPayload {
+    academic_year_id: string;
+    name: string;
+    semester_number: 1 | 2;
+    start_date: string;
+    end_date: string;
+    is_active?: boolean;
+}
+
 export const semestersApi = {
     list: (params?: Record<string, unknown>) =>
-        api.get<PaginatedResponse<Semester>>('/academic/semesters', { params }),
+        api.get<ApiResponse<PaginatedResponse<Semester>>>('/academic/semesters', { params }),
 
     get: (id: string) =>
         api.get<ApiResponse<Semester>>(`/academic/semesters/${id}`),
 
-    create: (data: Partial<Semester>) =>
+    create: (data: SemesterPayload) =>
         api.post<ApiResponse<Semester>>('/academic/semesters', data),
 
-    update: (id: string, data: Partial<Semester>) =>
+    update: (id: string, data: Partial<SemesterPayload>) =>
         api.put<ApiResponse<Semester>>(`/academic/semesters/${id}`, data),
 
     delete: (id: string) =>
         api.delete<ApiResponse>(`/academic/semesters/${id}`),
 
-    setActive: (id: string) =>
-        api.post<ApiResponse<Semester>>(`/academic/semesters/${id}/set-active`),
+    activate: (id: string) =>
+        api.post<ApiResponse<Semester>>(`/academic/semesters/${id}/activate`),
 };
 
 // Import result shape (majors & classrooms import)
@@ -214,6 +286,7 @@ export interface ImportResult {
     created: number;
     updated: number;
     errors: string[];
+    grade_levels_created?: number; // Only for classrooms import
 }
 
 // Majors (Jurusan)
@@ -285,6 +358,16 @@ export const classroomsApi = {
 
     students: (id: string) =>
         api.get<ApiResponse<Student[]>>(`/academic/classrooms/${id}/students`),
+
+    // Guru pengampu (Fase G3) — penempatan manual per tahun ajaran, lihat
+    // TEACHER-MODULE-PLAN.md §2/§5. Ditata di sini, bukan di Data Guru.
+    getTeachers: (id: string) =>
+        api.get<ApiResponse<Array<{ id: string; name: string | null }>>>(`/academic/classrooms/${id}/teachers`),
+
+    syncTeachers: (id: string, teacherIds: string[]) =>
+        api.put<ApiResponse<Array<{ id: string; name: string | null }>>>(`/academic/classrooms/${id}/teachers`, {
+            teacher_ids: teacherIds,
+        }),
 
     export: () =>
         api.get('/academic/classrooms/export', { responseType: 'blob' }),
@@ -373,28 +456,40 @@ export const attendanceApi = {
         api.get<ApiResponse>(`/attendance/student/${studentId}`, { params }),
 };
 
-// Users
+// Users (super admin only)
 export const usersApi = {
     list: (params?: Record<string, unknown>) =>
-        api.get<PaginatedResponse<User>>('/users', { params }),
+        api.get<ApiResponse<PaginatedResponse<User>>>('/admin/users', { params }),
 
     get: (id: string) =>
-        api.get<ApiResponse<User>>(`/users/${id}`),
+        api.get<ApiResponse<User>>(`/admin/users/${id}`),
 
     create: (data: Partial<User> & { password: string; roles?: string[] }) =>
-        api.post<ApiResponse<User>>('/users', data),
+        api.post<ApiResponse<User>>('/admin/users', data),
 
     update: (id: string, data: Partial<User> & { password?: string; roles?: string[] }) =>
-        api.put<ApiResponse<User>>(`/users/${id}`, data),
+        api.put<ApiResponse<User>>(`/admin/users/${id}`, data),
 
     delete: (id: string) =>
-        api.delete<ApiResponse>(`/users/${id}`),
+        api.delete<ApiResponse>(`/admin/users/${id}`),
 
     roles: () =>
-        api.get<ApiResponse<Array<{ id: string; name: string }>>>('/users/roles'),
+        api.get<ApiResponse<Array<{ id: string; name: string }>>>('/admin/users/roles'),
 
-    toggleActive: (id: string) =>
-        api.post<ApiResponse<User>>(`/users/${id}/toggle-active`),
+    studentOptions: (search: string) =>
+        api.get<ApiResponse<Array<{ id: string; nis: string; name: string | null; class_name: string | null }>>>(
+            '/admin/users/student-options',
+            { params: { search } }
+        ),
+
+    activate: (id: string) =>
+        api.post<ApiResponse<User>>(`/admin/users/${id}/activate`),
+
+    deactivate: (id: string) =>
+        api.post<ApiResponse<User>>(`/admin/users/${id}/deactivate`),
+
+    resetPassword: (id: string, password: string) =>
+        api.post<ApiResponse>(`/admin/users/${id}/reset-password`, { password }),
 };
 
 export default api;

@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Calendar, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Clock, Pencil } from 'lucide-react';
+import { Calendar, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Clock, Pencil, Send, ScanLine } from 'lucide-react';
 import { studentAttendanceApi } from '@/services/attendance';
 import type { DailyAttendanceRecord, AttendanceStatus } from '@/types/attendance';
 import type { ClassRoom } from '@/types';
@@ -77,6 +77,7 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
     const [summary, setSummary] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [sending, setSending] = useState(false);
     const [editingStudent, setEditingStudent] = useState<DailyAttendanceRecord | null>(null);
     const [editForm, setEditForm] = useState({ status: '' as AttendanceStatus, notes: '' });
 
@@ -139,6 +140,29 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
         }
     };
 
+    const handleNotifyDaily = async () => {
+        if (!classroomId || !date) return;
+
+        if (!confirm('Kirim notifikasi rekap absensi hari ini ke wali murid satu kelas?')) {
+            return;
+        }
+
+        setSending(true);
+        try {
+            const response = await studentAttendanceApi.notifyDaily({
+                classroom_id: classroomId,
+                date,
+            });
+            toast.success(response.data.message || 'Notifikasi rekap sedang dikirim');
+        } catch (error: unknown) {
+            const message = (error as { response?: { data?: { message?: string } } })
+                ?.response?.data?.message;
+            toast.error(message || 'Gagal mengirim notifikasi rekap');
+        } finally {
+            setSending(false);
+        }
+    };
+
     const handleEditSave = async () => {
         if (!editingStudent || !editingStudent.attendance_id) {
             toast.error('Tidak dapat mengedit - siswa belum memiliki record absensi');
@@ -179,6 +203,12 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                             Kelola kehadiran harian siswa per kelas
                         </p>
                     </div>
+                    <Button asChild variant="outline">
+                        <Link href="/scanner">
+                            <ScanLine className="mr-2 h-4 w-4" />
+                            Buka Scanner
+                        </Link>
+                    </Button>
                 </div>
 
                 {/* Filters */}
@@ -223,6 +253,14 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                                 <Button onClick={handleSaveAll} disabled={saving || students.length === 0}>
                                     <Save className="mr-2 h-4 w-4" />
                                     {saving ? 'Menyimpan...' : 'Simpan Semua'}
+                                </Button>
+                                <Button
+                                    onClick={handleNotifyDaily}
+                                    variant="outline"
+                                    disabled={sending || !classroomId || students.length === 0}
+                                >
+                                    <Send className="mr-2 h-4 w-4" />
+                                    {sending ? 'Mengirim...' : 'Kirim Notifikasi'}
                                 </Button>
                             </div>
                         </div>

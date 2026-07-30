@@ -81,6 +81,15 @@ class Student extends Model
     }
 
     /**
+     * Alias untuk guardians — dipakai StudentResource ('parents')
+     * dan StudentController@show yang eager-load 'parents.user'.
+     */
+    public function parents(): HasMany
+    {
+        return $this->hasMany(StudentGuardian::class, 'student_id');
+    }
+
+    /**
      * Get primary guardian
      */
     public function primaryGuardian()
@@ -172,6 +181,60 @@ class Student extends Model
         $this->save();
 
         return $this->unique_code;
+    }
+
+    /**
+     * Role yang boleh melihat seluruh siswa dalam satu tenant (R4).
+     */
+    public const ALL_ACCESS_ROLES = [
+        'super_admin',
+        'admin',
+        'kepala_sekolah',
+        'wakil_kepala_sekolah',
+        'tata_usaha',
+        'bendahara',
+        'pustakawan',
+    ];
+
+    /**
+     * Scope data siswa sesuai role user (rumus R4, ROLE-ACCESS-PLAN.md).
+     *
+     * - Role administratif: semua siswa (tenant scope tetap berlaku).
+     * - guru / wali_kelas: siswa dengan enrollment aktif di kelas diampu (R3).
+     * - siswa: dirinya sendiri.
+     * - orang_tua: anak-anaknya via student_guardians.user_id.
+     * - Selain itu: tidak ada baris.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        $roles = $user->getRoleNames();
+
+        if ($roles->intersect(self::ALL_ACCESS_ROLES)->isNotEmpty()) {
+            return $query;
+        }
+
+        if ($roles->intersect(['guru', 'wali_kelas'])->isNotEmpty()) {
+            $classroomIds = $user->teachingClassroomIds();
+
+            if ($classroomIds === []) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            return $query->whereHas('enrollments', fn (Builder $q) => $q
+                ->where('status', 'active')
+                ->whereIn('classroom_id', $classroomIds));
+        }
+
+        if ($roles->contains('siswa')) {
+            return $query->where('user_id', $user->id);
+        }
+
+        if ($roles->contains('orang_tua')) {
+            return $query->whereHas('guardians', fn (Builder $q) => $q
+                ->where('user_id', $user->id));
+        }
+
+        return $query->whereRaw('1 = 0');
     }
 
     /**

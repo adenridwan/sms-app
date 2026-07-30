@@ -22,7 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { Download, RefreshCw, FileText, TrendingUp, Users, GraduationCap } from 'lucide-react';
+import { Download, RefreshCw, FileText, FileSpreadsheet, TrendingUp, Users, GraduationCap } from 'lucide-react';
 import { attendanceReportApi } from '@/services/attendance';
 import type { MonthlyReport, WeeklyTrend } from '@/types/attendance';
 import type { ClassRoom } from '@/types';
@@ -58,6 +58,7 @@ export default function ReportsIndex({ classrooms }: Props) {
     const [weeklyTrend, setWeeklyTrend] = useState<WeeklyTrend | null>(null);
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [exportingExcel, setExportingExcel] = useState(false);
 
     const fetchReport = async () => {
         setLoading(true);
@@ -126,6 +127,38 @@ export default function ReportsIndex({ classrooms }: Props) {
         }
     };
 
+    const handleDownloadExcel = async () => {
+        setExportingExcel(true);
+        try {
+            const params: { month: number; year: number; classroom_id?: string; type?: 'student' | 'teacher' } = {
+                month,
+                year,
+                type: activeTab === 'students' ? 'student' : 'teacher',
+            };
+            if (activeTab === 'students' && classroomId !== 'all') {
+                params.classroom_id = classroomId;
+            }
+
+            const response = await attendanceReportApi.downloadExcel(params);
+            const blob = new Blob([response.data], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `laporan-absensi-${activeTab}-${months.find(m => m.value === month)?.label}-${year}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            toast.success('Excel berhasil diunduh');
+        } catch (error) {
+            toast.error('Gagal mengunduh Excel');
+        } finally {
+            setExportingExcel(false);
+        }
+    };
+
     const getAttendanceRate = (rate: number) => {
         if (rate >= 90) return 'text-green-600';
         if (rate >= 75) return 'text-yellow-600';
@@ -145,10 +178,16 @@ export default function ReportsIndex({ classrooms }: Props) {
                             Lihat statistik dan laporan kehadiran
                         </p>
                     </div>
-                    <Button onClick={handleDownloadPdf} disabled={downloading || !report}>
-                        <Download className={`mr-2 h-4 w-4 ${downloading ? 'animate-spin' : ''}`} />
-                        {downloading ? 'Mengunduh...' : 'Download PDF'}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleDownloadExcel} disabled={exportingExcel || !report}>
+                            <FileSpreadsheet className={`mr-2 h-4 w-4 ${exportingExcel ? 'animate-spin' : ''}`} />
+                            {exportingExcel ? 'Mengekspor...' : 'Export Excel'}
+                        </Button>
+                        <Button onClick={handleDownloadPdf} disabled={downloading || !report}>
+                            <Download className={`mr-2 h-4 w-4 ${downloading ? 'animate-spin' : ''}`} />
+                            {downloading ? 'Mengunduh...' : 'Download PDF'}
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Tabs */}

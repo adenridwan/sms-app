@@ -1,5 +1,9 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
+import { toast } from 'sonner';
+import { qrCodeApi } from '@/services/attendance';
+import { printAttendanceCardsWithTemplate } from '@/lib/attendanceCardPrint';
+import type { PageProps } from '@/types';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +23,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, MoreHorizontal, Eye, Pencil } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Pencil, Printer } from 'lucide-react';
 import type { Teacher, PaginatedResponse } from '@/types';
 
 interface Props {
@@ -32,7 +36,40 @@ interface Props {
 }
 
 export default function TeachersIndex({ teachers, filters }: Props) {
+    const { tenant } = usePage<PageProps>().props;
     const [search, setSearch] = useState(filters.search || '');
+    const [printingId, setPrintingId] = useState<string | null>(null);
+
+    const handlePrintCard = async (teacher: Teacher) => {
+        setPrintingId(teacher.id);
+        try {
+            const response = await qrCodeApi.teacher(teacher.id);
+            const qr = response.data.data;
+            if (!qr) {
+                toast.error('Data QR guru tidak ditemukan');
+                return;
+            }
+
+            const opened = await printAttendanceCardsWithTemplate('teacher', [
+                {
+                    ...qr,
+                    employment_status_label: qr.employment_status_label ?? teacher.employment_status_label ?? null,
+                },
+            ], {
+                title: `Kartu Guru - ${qr.name}`,
+                schoolName: tenant?.name,
+                schoolLogo: tenant?.logo,
+            });
+
+            if (!opened) {
+                toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+            }
+        } catch {
+            toast.error('Gagal memuat kartu guru');
+        } finally {
+            setPrintingId(null);
+        }
+    };
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -151,6 +188,13 @@ export default function TeachersIndex({ teachers, filters }: Props) {
                                                                     <Pencil className="mr-2 h-4 w-4" />
                                                                     Edit
                                                                 </Link>
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                disabled={printingId === teacher.id}
+                                                                onClick={() => handlePrintCard(teacher)}
+                                                            >
+                                                                <Printer className="mr-2 h-4 w-4" />
+                                                                Cetak Kartu
                                                             </DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>

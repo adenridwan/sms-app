@@ -200,6 +200,102 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Baris wali (student_guardians) yang tertaut ke akun ini —
+     * anak-anak yang diampu bila user berperan orang tua (R8).
+     */
+    public function guardianStudents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(
+            \App\Infrastructure\Persistence\Eloquent\Student\StudentGuardian::class,
+            'user_id'
+        );
+    }
+
+    /**
+     * ID kelas yang diampu user ini pada tahun ajaran aktif (rumus R3,
+     * ROLE-ACCESS-PLAN.md): kelas perwalian ∪ kelas di jadwal aktif ∪
+     * penugasan manual (teacher_classrooms).
+     *
+     * Semua relasi guru-kelas pada skema ini merujuk users.id.
+     *
+     * @return list<string>
+     */
+    public function teachingClassroomIds(): array
+    {
+        // Sengaja TANPA memo/cache statis: sebelumnya di-cache per user ID,
+        // tapi `static` bertahan sepanjang umur proses PHP, bukan per
+        // request — begitu penempatan kelas guru berubah (mis. lewat
+        // sinkronisasi guru pengampu, Fase G3), pemanggilan berikutnya pada
+        // proses PHP yang sama (worker Octane/queue, atau beberapa request
+        // simulasi dalam satu test) tetap mengembalikan hasil basi.
+        $activeYearId = \App\Infrastructure\Persistence\Eloquent\Academic\AcademicYear::query()
+            ->where('is_active', true)
+            ->when($this->tenant_id, fn ($q) => $q->where('tenant_id', $this->tenant_id))
+            ->value('id');
+
+        if (! $activeYearId) {
+            return [];
+        }
+
+        $homeroom = \App\Infrastructure\Persistence\Eloquent\Academic\Classroom::query()
+            ->where('homeroom_teacher_id', $this->id)
+            ->where('academic_year_id', $activeYearId)
+            ->pluck('id');
+
+        $scheduled = \Illuminate\Support\Facades\DB::table('schedules')
+            ->where('teacher_id', $this->id)
+            ->where('academic_year_id', $activeYearId)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->pluck('classroom_id');
+
+        $assigned = \Illuminate\Support\Facades\DB::table('teacher_classrooms')
+            ->where('teacher_id', $this->id)
+            ->where('academic_year_id', $activeYearId)
+            ->pluck('classroom_id');
+
+        return $homeroom
+            ->merge($scheduled)
+            ->merge($assigned)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Tandai akun ini wajib mengganti password saat login berikutnya.
+     * Dipakai untuk password awal auto-generate (mis. dari tanggal lahir
+     * guru) dan setiap kali admin melakukan reset password (admin hanya
+     * mereset, pengguna sendiri yang menentukan password baru).
+     */
+    public function markPasswordMustChange(): void
+    {
+        $this->forceFill([
+            'preferences' => array_merge($this->preferences ?? [], ['must_change_password' => true]),
+        ])->save();
+    }
+
+    /**
+     * Hapus penanda wajib ganti password setelah pengguna berhasil
+     * mengganti password miliknya sendiri.
+     */
+    public function clearPasswordMustChange(): void
+    {
+        $preferences = $this->preferences ?? [];
+        unset($preferences['must_change_password']);
+
+        $this->forceFill(['preferences' => $preferences])->save();
+    }
+
+    /**
+     * Apakah akun ini wajib mengganti password sebelum mengakses sistem.
+     */
+    public function mustChangePassword(): bool
+    {
+        return (bool) ($this->preferences['must_change_password'] ?? false);
+    }
+
+    /**
      * Check if user is super admin.
      */
     public function isSuperAdmin(): bool

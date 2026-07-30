@@ -18,15 +18,18 @@ class Tenant extends Model
      */
     protected $fillable = [
         'name',
-        'code',
+        'slug',
         'domain',
         'logo',
+        'favicon',
+        'npsn',
+        'level',
+        'status',
         'address',
         'phone',
         'email',
-        'website',
         'settings',
-        'is_active',
+        'features',
     ];
 
     /**
@@ -36,7 +39,7 @@ class Tenant extends Model
      */
     protected $casts = [
         'settings' => 'array',
-        'is_active' => 'boolean',
+        'features' => 'array',
     ];
 
     /**

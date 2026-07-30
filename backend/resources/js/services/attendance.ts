@@ -24,7 +24,21 @@ import type {
     LeavePermissionFormData,
     HolidayFormData,
     LookupResult,
+    CardLayout,
+    CardTemplateResponse,
 } from '@/types/attendance';
+
+// Card Template API (Fase 5 — editor kartu ID drag-and-drop)
+export const cardTemplateApi = {
+    get: (type: 'student' | 'teacher') =>
+        api.get<ApiResponse<CardTemplateResponse>>(`/attendance/card-templates/${type}`),
+
+    update: (type: 'student' | 'teacher', layout_json: CardLayout) =>
+        api.put<ApiResponse<CardTemplateResponse>>(`/attendance/card-templates/${type}`, { layout_json }),
+
+    reset: (type: 'student' | 'teacher') =>
+        api.delete<ApiResponse<CardTemplateResponse>>(`/attendance/card-templates/${type}`),
+};
 
 // Scanner API
 export const scannerApi = {
@@ -63,6 +77,9 @@ export const studentAttendanceApi = {
 
     topLate: (params?: { limit?: number; classroom_id?: string }) =>
         api.get<ApiResponse<TopLateStudent[]>>('/attendance/students/top-late', { params }),
+
+    notifyDaily: (data: { classroom_id: string; date: string }) =>
+        api.post<ApiResponse<{ recipients: number }>>('/attendance/students/notify-daily', data),
 };
 
 // Teacher Attendance API
@@ -172,6 +189,19 @@ export const qrCodeApi = {
 
     downloadTeacher: (id: string, size?: number) =>
         api.get<ApiResponse<QrCodeData>>(`/attendance/qr/teachers/${id}/download`, { params: { size } }),
+
+    // Export QR/RFID untuk pembuatan kartu (Excel / ZIP gambar / PDF)
+    export: (params: {
+        type: 'student' | 'teacher';
+        scope?: 'class' | 'all';
+        classroom_id?: string;
+        format: 'excel' | 'zip' | 'pdf';
+        image?: 'svg' | 'png' | 'both';
+        generate_rfid?: boolean;
+    }) => api.get('/attendance/qr/export', { params, responseType: 'blob' }),
+
+    generateRfid: (params: { type: 'student' | 'teacher'; scope?: 'class' | 'all'; classroom_id?: string }) =>
+        api.post<ApiResponse<{ total: number; with_rfid: number }>>('/attendance/qr/generate-rfid', params),
 };
 
 // Report API
@@ -181,6 +211,9 @@ export const attendanceReportApi = {
 
     downloadPdf: (params: { month: number; year: number; classroom_id?: string; type?: 'student' | 'teacher' }) =>
         api.get('/attendance/reports/pdf', { params, responseType: 'blob' }),
+
+    downloadExcel: (params: { month: number; year: number; classroom_id?: string; type?: 'student' | 'teacher' }) =>
+        api.get('/attendance/reports/excel', { params, responseType: 'blob' }),
 
     weeklyTrend: (params?: { classroom_id?: string; type?: 'student' | 'teacher' }) =>
         api.get<ApiResponse<WeeklyTrend>>('/attendance/reports/weekly-trend', { params }),
@@ -226,6 +259,9 @@ export const attendanceSettingsApi = {
 
     testTelegram: (chat_id: string) =>
         api.post<ApiResponse>('/attendance/settings/test-telegram', { chat_id }),
+
+    testEmail: (email: string) =>
+        api.post<ApiResponse>('/attendance/settings/test-email', { email }),
 
     telegramBotInfo: () =>
         api.get<ApiResponse<{ id: number; first_name: string; username: string }>>('/attendance/settings/telegram-bot-info'),
@@ -309,6 +345,7 @@ export const publicAttendanceApi = {
 };
 
 export default {
+    cardTemplate: cardTemplateApi,
     scanner: scannerApi,
     studentAttendance: studentAttendanceApi,
     teacherAttendance: teacherAttendanceApi,

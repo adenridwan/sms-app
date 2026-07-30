@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class AcademicYear extends Model
@@ -36,6 +37,17 @@ class AcademicYear extends Model
     public function semesters(): HasMany
     {
         return $this->hasMany(Semester::class, 'academic_year_id');
+    }
+
+    /**
+     * The currently active semester within this academic year. Referenced
+     * as `$academicYear?->activeSemester?->id` by attendance write paths
+     * (StudentAttendanceController::storeBulk, AttendanceScanService,
+     * LeaveApprovalService) to stamp new attendance rows with semester_id.
+     */
+    public function activeSemester(): HasOne
+    {
+        return $this->hasOne(Semester::class, 'academic_year_id')->where('is_active', true);
     }
 
     public function classRooms(): HasMany

@@ -33,6 +33,7 @@ class RoleSeeder extends Seeder
                 'subjects.view', 'subjects.manage',
                 'classrooms.view', 'classrooms.manage',
                 'majors.view', 'majors.manage',
+                'grade-levels.view', 'grade-levels.manage',
                 'schedules.view', 'schedules.manage',
                 // Students
                 'students.view', 'students.create', 'students.update', 'students.delete', 'students.manage',
@@ -76,7 +77,7 @@ class RoleSeeder extends Seeder
             'permissions' => [
                 'dashboard.view', 'dashboard.analytics',
                 // Academic
-                'academic.view', 'academic-years.view', 'curricula.view', 'subjects.view', 'classrooms.view', 'majors.view', 'schedules.view',
+                'academic.view', 'academic-years.view', 'curricula.view', 'subjects.view', 'classrooms.view', 'majors.view', 'grade-levels.view', 'schedules.view',
                 // Students & Teachers
                 'students.view', 'teachers.view', 'staff.view',
                 // Attendance
@@ -104,6 +105,7 @@ class RoleSeeder extends Seeder
                 'academic-years.view', 'curricula.view', 'curricula.manage',
                 'subjects.view', 'subjects.manage', 'classrooms.view', 'classrooms.manage',
                 'majors.view', 'majors.manage',
+                'grade-levels.view', 'grade-levels.manage',
                 'schedules.view', 'schedules.manage',
                 // Students & Teachers
                 'students.view', 'students.update', 'teachers.view', 'teachers.update',
@@ -124,7 +126,7 @@ class RoleSeeder extends Seeder
             'permissions' => [
                 'dashboard.view',
                 // Academic
-                'academic.view', 'subjects.view', 'classrooms.view', 'schedules.view',
+                'academic.view', 'subjects.view', 'classrooms.view', 'grade-levels.view', 'schedules.view',
                 // Students
                 'students.view',
                 // Own data
@@ -148,7 +150,7 @@ class RoleSeeder extends Seeder
             'permissions' => [
                 'dashboard.view',
                 // Academic
-                'academic.view', 'subjects.view', 'classrooms.view', 'schedules.view',
+                'academic.view', 'subjects.view', 'classrooms.view', 'grade-levels.view', 'schedules.view',
                 // Students
                 'students.view', 'students.update',
                 // Attendance
@@ -175,6 +177,8 @@ class RoleSeeder extends Seeder
                 'staff.view', 'staff.create', 'staff.update',
                 // Attendance
                 'attendance.view', 'attendance.check-in', 'attendance.check-out',
+                // Attendance settings (TU boleh atur jam absen & notifikasi)
+                'settings.attendance',
                 // Reports
                 'reports.view', 'reports.generate',
                 // Notifications

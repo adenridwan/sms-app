@@ -40,6 +40,16 @@ class AttendanceSettingController extends ApiController
                 'wa_configured' => $notificationSettings->isWhatsAppConfigured(),
                 'telegram_enabled' => $notificationSettings->telegram_enabled,
                 'telegram_configured' => $notificationSettings->isTelegramConfigured(),
+                // Email (SMTP per-tenant) — password TIDAK dikembalikan
+                'email_enabled' => $notificationSettings->email_enabled,
+                'email_configured' => $notificationSettings->isEmailConfigured(),
+                'smtp_host' => $notificationSettings->smtp_host,
+                'smtp_port' => $notificationSettings->smtp_port,
+                'smtp_username' => $notificationSettings->smtp_username,
+                'smtp_encryption' => $notificationSettings->smtp_encryption,
+                'email_from_address' => $notificationSettings->email_from_address,
+                'email_from_name' => $notificationSettings->email_from_name,
+                'notify_email' => $notificationSettings->notify_email,
                 'notify_check_in' => $notificationSettings->notify_check_in,
                 'notify_check_out' => $notificationSettings->notify_check_out,
                 'notify_late' => $notificationSettings->notify_late,
@@ -78,6 +88,18 @@ class AttendanceSettingController extends ApiController
             'telegram_enabled' => ['sometimes', 'boolean'],
             'telegram_bot_token' => ['nullable', 'string', 'max:255'],
             'telegram_default_chat_id' => ['nullable', 'string', 'max:100'],
+
+            // Email (SMTP per-tenant)
+            'email_enabled' => ['sometimes', 'boolean'],
+            'smtp_host' => ['nullable', 'string', 'max:255'],
+            'smtp_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'smtp_username' => ['nullable', 'string', 'max:255'],
+            'smtp_password' => ['nullable', 'string', 'max:255'],
+            'smtp_encryption' => ['nullable', 'in:tls,ssl'],
+            'email_from_address' => ['nullable', 'email', 'max:255'],
+            'email_from_name' => ['nullable', 'string', 'max:255'],
+            'notify_email' => ['sometimes', 'boolean'],
+
             'notify_check_in' => ['sometimes', 'boolean'],
             'notify_check_out' => ['sometimes', 'boolean'],
             'notify_late' => ['sometimes', 'boolean'],
@@ -105,11 +127,19 @@ class AttendanceSettingController extends ApiController
         $notificationFields = [
             'wa_enabled', 'wa_provider', 'wa_api_key', 'wa_sender_number',
             'telegram_enabled', 'telegram_bot_token', 'telegram_default_chat_id',
+            'email_enabled', 'smtp_host', 'smtp_port', 'smtp_username',
+            'smtp_password', 'smtp_encryption', 'email_from_address',
+            'email_from_name', 'notify_email',
             'notify_check_in', 'notify_check_out', 'notify_late',
             'notify_absent', 'notify_leave_approved', 'templates',
         ];
 
         $notificationData = array_intersect_key($data, array_flip($notificationFields));
+        // Password SMTP kosong (null/'') = jangan timpa; UI tak pernah mengirim
+        // ulang password tersimpan, jadi string kosong berarti "tidak diubah".
+        if (array_key_exists('smtp_password', $notificationData) && empty($notificationData['smtp_password'])) {
+            unset($notificationData['smtp_password']);
+        }
         if (!empty($notificationData)) {
             $notificationSettings = NotificationSetting::getForTenant($tenantId);
             $notificationSettings->update($notificationData);
@@ -178,6 +208,38 @@ class AttendanceSettingController extends ApiController
         }
 
         return $this->error('Gagal mengirim pesan uji coba', 500);
+    }
+
+    /**
+     * Test Email notification
+     */
+    public function testEmail(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        $tenantId = $request->user()->tenant_id;
+        $settings = NotificationSetting::getForTenant($tenantId);
+
+        if (!$settings->isEmailConfigured()) {
+            return $this->error('Email belum dikonfigurasi', 422);
+        }
+
+        $emailService = app(\App\Domain\Notification\Services\EmailService::class);
+        $emailService->initializeForTenant($tenantId);
+
+        $success = $emailService->send(
+            $data['email'],
+            'Uji Coba Notifikasi - ' . config('app.name'),
+            'Ini adalah pesan uji coba dari sistem absensi sekolah.'
+        );
+
+        if ($success) {
+            return $this->success(null, 'Email uji coba berhasil dikirim');
+        }
+
+        return $this->error('Gagal mengirim email uji coba', 500);
     }
 
     /**

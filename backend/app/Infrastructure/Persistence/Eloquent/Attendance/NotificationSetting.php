@@ -22,17 +22,28 @@ class NotificationSetting extends Model
         'telegram_enabled',
         'telegram_bot_token',
         'telegram_default_chat_id',
+        // Email (SMTP per-tenant)
+        'email_enabled',
+        'smtp_host',
+        'smtp_port',
+        'smtp_username',
+        'smtp_password',
+        'smtp_encryption',
+        'email_from_address',
+        'email_from_name',
         'templates',
         'notify_check_in',
         'notify_check_out',
         'notify_late',
         'notify_absent',
         'notify_leave_approved',
+        'notify_email',
     ];
 
     protected $hidden = [
         'wa_api_key',
         'telegram_bot_token',
+        'smtp_password',
     ];
 
     protected function casts(): array
@@ -40,12 +51,17 @@ class NotificationSetting extends Model
         return [
             'wa_enabled' => 'boolean',
             'telegram_enabled' => 'boolean',
+            'email_enabled' => 'boolean',
+            // Password SMTP disimpan terenkripsi otomatis (Laravel Crypt).
+            'smtp_password' => 'encrypted',
+            'smtp_port' => 'integer',
             'templates' => 'array',
             'notify_check_in' => 'boolean',
             'notify_check_out' => 'boolean',
             'notify_late' => 'boolean',
             'notify_absent' => 'boolean',
             'notify_leave_approved' => 'boolean',
+            'notify_email' => 'boolean',
         ];
     }
 
@@ -89,6 +105,17 @@ class NotificationSetting extends Model
     public function isTelegramConfigured(): bool
     {
         return $this->telegram_enabled && !empty($this->telegram_bot_token);
+    }
+
+    /**
+     * Check if Email (SMTP) is configured
+     */
+    public function isEmailConfigured(): bool
+    {
+        return $this->email_enabled
+            && !empty($this->smtp_host)
+            && !empty($this->smtp_port)
+            && !empty($this->email_from_address);
     }
 
     /**

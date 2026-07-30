@@ -44,6 +44,43 @@ class QrCodeGeneratorService
     }
 
     /**
+     * Generate a unique RFID code for a student (kartu RFID writable).
+     * Unik lintas students+teachers dalam tenant (lihat UniqueRfidCode).
+     */
+    public function generateStudentRfid(Student $student): string
+    {
+        $code = $this->uniqueRfidCode($student->tenant_id);
+        $student->update(['rfid_code' => $code]);
+
+        return $code;
+    }
+
+    /**
+     * Generate a unique RFID code for a teacher.
+     */
+    public function generateTeacherRfid(Teacher $teacher): string
+    {
+        $code = $this->uniqueRfidCode($teacher->tenant_id);
+        $teacher->update(['rfid_code' => $code]);
+
+        return $code;
+    }
+
+    /**
+     * Kode RFID unik lintas tabel students & teachers pada satu tenant.
+     */
+    private function uniqueRfidCode(string $tenantId): string
+    {
+        do {
+            $code = 'RF-' . strtoupper(Str::random(10));
+            $clash = Student::where('tenant_id', $tenantId)->where('rfid_code', $code)->exists()
+                || Teacher::where('tenant_id', $tenantId)->where('rfid_code', $code)->exists();
+        } while ($clash);
+
+        return $code;
+    }
+
+    /**
      * Generate QR code image for a student
      */
     public function generateStudentQrCode(Student $student, int $size = 300): string
@@ -83,16 +120,42 @@ class QrCodeGeneratorService
     }
 
     /**
-     * Generate QR code as base64 PNG
+     * Generate QR code as raw PNG bytes (via GD, tanpa imagick) memakai
+     * chillerlan/php-qrcode. Dipakai untuk export ZIP/kartu yang butuh raster.
+     *
+     * $size = perkiraan lebar px; QR ~25-33 modul, jadi scale = size/30.
+     */
+    public function generateQrPng(string $code, int $size = 512): string
+    {
+        $scale = max(3, (int) round($size / 30));
+
+        $options = new \chillerlan\QRCode\QROptions([
+            'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
+            'outputBase64' => false,
+            'scale' => $scale,
+            'quietzoneSize' => 1,
+        ]);
+
+        return (new \chillerlan\QRCode\QRCode($options))->render($code);
+    }
+
+    /**
+     * Generate QR code as a base64 SVG data URI.
+     *
+     * Deliberately SVG, not PNG: the PNG backend requires the PHP `imagick`
+     * extension, which isn't guaranteed to be installed (confirmed absent
+     * on this Windows dev box — this was the root cause of "Cetak Kartu"
+     * failing, see ATTENDANCE-PLAN.md). SVG needs no native image library
+     * and renders identically in a plain <img src="..."> tag.
      */
     public function generateQrImage(string $code, int $size = 300): string
     {
-        $qrCode = QrCode::format('png')
+        $qrCode = QrCode::format('svg')
             ->size($size)
             ->margin(1)
             ->generate($code);
 
-        return 'data:image/png;base64,' . base64_encode($qrCode);
+        return 'data:image/svg+xml;base64,' . base64_encode($qrCode);
     }
 
     /**
@@ -117,6 +180,7 @@ class QrCodeGeneratorService
                 'student_id' => $student->id,
                 'nis' => $student->nis,
                 'name' => $student->user?->full_name,
+                'photo_url' => $student->user?->avatar ? asset('storage/' . $student->user->avatar) : null,
                 'unique_code' => $student->unique_code,
                 'qr_code' => $this->generateQrImage($student->unique_code, $size),
             ];

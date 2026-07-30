@@ -18,11 +18,20 @@ class TeacherResource extends JsonResource
 
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
+            'unique_code' => $this->unique_code,
+            'rfid_code' => $this->rfid_code,
             'nip' => $this->nip,
             'nuptk' => $this->nuptk,
-            'user' => new UserResource($this->whenLoaded('user')),
-            'full_name' => $this->user?->full_name,
+
+            // Akun & Pribadi
+            'username' => $this->user?->username,
             'email' => $this->user?->email,
+            'first_name' => $profile?->first_name,
+            'last_name' => $profile?->last_name,
+            'full_name' => $this->user?->full_name,
+            'phone' => $this->no_hp ?? $profile?->phone,
+            'avatar_url' => $this->user?->avatar ? asset('storage/' . $this->user->avatar) : null,
             'gender' => $profile?->gender,
             'gender_label' => match ($profile?->gender) {
                 'male' => 'Laki-laki',
@@ -33,39 +42,57 @@ class TeacherResource extends JsonResource
             'birth_date' => $profile?->birth_date?->format('Y-m-d'),
             'religion' => $profile?->religion,
             'address' => $profile?->address,
-            'phone' => $this->no_hp ?? $profile?->phone,
+            'id_number' => $profile?->id_number,
+
+            // Kepegawaian
             'education_level' => $this->education_level,
             'education_major' => $this->education_major,
             'university' => $this->university,
+            'teaching_experience_years' => $this->teaching_experience_years,
             'employment_status' => $this->employment_status,
-            'employment_status_label' => $this->getEmploymentStatusLabel(),
+            'employment_status_label' => $this->employmentStatusLabel(),
+            'certification_status' => $this->certification_status,
+            'certification_status_label' => $this->certificationStatusLabel(),
+            'certification_number' => $this->certification_number,
             'join_date' => $this->join_date?->format('Y-m-d'),
             'status' => $this->status,
-            'status_label' => $this->getStatusLabel(),
-            'photo_url' => $this->user?->avatar ? asset('storage/' . $this->user->avatar) : null,
+            'status_label' => $this->statusLabel(),
+
+            // Akun: aktif/tidak & apakah masih wajib ganti password awal
+            'account_is_active' => $this->user?->isActive() ?? false,
+            'must_change_password' => $this->user?->mustChangePassword() ?? false,
+
+            // Dokumen (Fase G2) — hanya ada bila relasi 'media' di-eager-load
+            // (index() tidak memuatnya supaya tidak N+1 pada daftar guru).
+            'documents' => $this->whenLoaded('media', fn () => $this->documentsSummary()),
+
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
     }
 
-    /**
-     * Get employment status label.
-     */
-    private function getEmploymentStatusLabel(): string
+    private function employmentStatusLabel(): string
     {
         return match ($this->employment_status) {
             'permanent' => 'Tetap',
             'contract' => 'Kontrak',
             'honorary' => 'Honorer',
             'part_time' => 'Paruh Waktu',
-            default => ucfirst((string) $this->employment_status),
+            default => '-',
         };
     }
 
-    /**
-     * Get status label.
-     */
-    private function getStatusLabel(): string
+    private function certificationStatusLabel(): string
+    {
+        return match ($this->certification_status) {
+            'certified' => 'Sudah Sertifikasi',
+            'not_certified' => 'Belum Sertifikasi',
+            'in_progress' => 'Proses Sertifikasi',
+            default => '-',
+        };
+    }
+
+    private function statusLabel(): string
     {
         return match ($this->status) {
             'active' => 'Aktif',
@@ -73,7 +100,7 @@ class TeacherResource extends JsonResource
             'on_leave' => 'Cuti',
             'retired' => 'Pensiun',
             'terminated' => 'Berhenti',
-            default => ucfirst((string) $this->status),
+            default => '-',
         };
     }
 }

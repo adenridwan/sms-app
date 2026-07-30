@@ -62,7 +62,6 @@ class UpdateStudentRequest extends FormRequest
             'entry_class' => ['nullable', 'string', 'max:50'],
             'entry_semester' => ['nullable', 'integer', 'in:1,2'],
             'status' => ['sometimes', 'in:active,graduated,transferred,dropped'],
-            'photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
         ];
     }
 
@@ -81,8 +80,6 @@ class UpdateStudentRequest extends FormRequest
             'gender.in' => 'Jenis kelamin tidak valid.',
             'birth_date.before' => 'Tanggal lahir harus sebelum hari ini.',
             'status.in' => 'Status tidak valid.',
-            'photo.image' => 'File harus berupa gambar.',
-            'photo.max' => 'Ukuran foto maksimal 2MB.',
         ];
     }
 }

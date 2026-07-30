@@ -1,5 +1,7 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
+import { printAttendanceCardsWithTemplate } from '@/lib/attendanceCardPrint';
+import type { PageProps } from '@/types';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,8 +22,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Download, RefreshCw, Printer, QrCode, Users, GraduationCap } from 'lucide-react';
+import { Download, RefreshCw, Printer, QrCode, Users, GraduationCap, FileDown, FileSpreadsheet, FileArchive, FileText } from 'lucide-react';
 import { qrCodeApi } from '@/services/attendance';
 import type { QrCodeData } from '@/types/attendance';
 import type { ClassRoom } from '@/types';
@@ -31,6 +34,7 @@ interface Props {
 }
 
 export default function QrCodeIndex({ classrooms }: Props) {
+    const { tenant } = usePage<PageProps>().props;
     const [activeTab, setActiveTab] = useState('students');
     const [classroomId, setClassroomId] = useState('');
     const [studentQrCodes, setStudentQrCodes] = useState<QrCodeData[]>([]);
@@ -39,6 +43,69 @@ export default function QrCodeIndex({ classrooms }: Props) {
     const [regenerating, setRegenerating] = useState<string | null>(null);
     const [selectedQr, setSelectedQr] = useState<QrCodeData | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
+
+    // Export QR/RFID
+    const [exportOpen, setExportOpen] = useState(false);
+    const [exportFormat, setExportFormat] = useState<'excel' | 'zip' | 'pdf'>('excel');
+    const [exportImage, setExportImage] = useState<'svg' | 'png' | 'both'>('both');
+    const [exportScope, setExportScope] = useState<'class' | 'all'>('class');
+    const [generateRfid, setGenerateRfid] = useState(true);
+    const [exporting, setExporting] = useState(false);
+
+    const triggerBlobDownload = (blob: Blob, fallbackName: string, disposition?: string) => {
+        let filename = fallbackName;
+        const match = disposition?.match(/filename="?([^"]+)"?/);
+        if (match) filename = match[1];
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    };
+
+    const handleExport = async () => {
+        if (activeTab === 'students' && exportScope === 'class' && !classroomId) {
+            toast.error('Pilih kelas terlebih dahulu');
+            return;
+        }
+        setExporting(true);
+        try {
+            const params = {
+                type: activeTab === 'teachers' ? ('teacher' as const) : ('student' as const),
+                format: exportFormat,
+                image: exportImage,
+                generate_rfid: generateRfid,
+                ...(activeTab === 'students'
+                    ? { scope: exportScope, classroom_id: exportScope === 'class' ? classroomId : undefined }
+                    : {}),
+            };
+            const res = await qrCodeApi.export(params);
+            const ext = exportFormat === 'excel' ? 'xlsx' : exportFormat;
+            triggerBlobDownload(
+                res.data as unknown as Blob,
+                `qr-${params.type}.${ext}`,
+                (res.headers as Record<string, string>)['content-disposition'],
+            );
+            toast.success('Export berhasil diunduh');
+            setExportOpen(false);
+            // Refresh tampilan agar kode RFID/QR baru ikut terlihat
+            if (activeTab === 'students' && classroomId) fetchStudentQrCodes();
+            if (activeTab === 'teachers') fetchTeacherQrCodes();
+        } catch (error: any) {
+            // Response error bertipe blob — coba baca pesannya
+            let msg = 'Gagal export';
+            try {
+                const text = await (error.response?.data as Blob)?.text?.();
+                if (text) msg = JSON.parse(text).message || msg;
+            } catch { /* abaikan */ }
+            toast.error(msg);
+        } finally {
+            setExporting(false);
+        }
+    };
 
     const fetchStudentQrCodes = async () => {
         if (!classroomId) return;
@@ -113,56 +180,21 @@ export default function QrCodeIndex({ classrooms }: Props) {
         document.body.removeChild(link);
     };
 
-    const handlePrintAll = () => {
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
-            return;
-        }
-
+    const handlePrintAll = async () => {
         const qrCodes = activeTab === 'students' ? studentQrCodes : teacherQrCodes;
         const title = activeTab === 'students'
-            ? `QR Code Siswa - ${classrooms.find(c => c.id === classroomId)?.name || 'Kelas'}`
-            : 'QR Code Guru';
+            ? `Kartu Siswa - ${classrooms.find(c => c.id === classroomId)?.name || 'Kelas'}`
+            : 'Kartu Guru';
 
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>${title}</title>
-                <style>
-                    body { font-family: Arial, sans-serif; }
-                    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 20px; }
-                    .card { border: 1px solid #ddd; padding: 15px; text-align: center; page-break-inside: avoid; }
-                    .card img { width: 150px; height: 150px; }
-                    .name { font-weight: bold; margin-top: 10px; }
-                    .id { color: #666; font-size: 14px; }
-                    @media print {
-                        .grid { grid-template-columns: repeat(3, 1fr); }
-                        .card { break-inside: avoid; }
-                    }
-                </style>
-            </head>
-            <body>
-                <h1 style="text-align: center;">${title}</h1>
-                <div class="grid">
-                    ${qrCodes.map(qr => `
-                        <div class="card">
-                            <img src="${qr.qr_code}" alt="QR Code" />
-                            <div class="name">${qr.name}</div>
-                            <div class="id">${qr.nis || qr.nip || ''}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            </body>
-            </html>
-        `);
+        const opened = await printAttendanceCardsWithTemplate(activeTab === 'students' ? 'student' : 'teacher', qrCodes, {
+            title,
+            schoolName: tenant?.name,
+            schoolLogo: tenant?.logo,
+        });
 
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-            printWindow.print();
-        }, 500);
+        if (!opened) {
+            toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+        }
     };
 
     const QrCard = ({ qr, type }: { qr: QrCodeData; type: 'student' | 'teacher' }) => (
@@ -239,13 +271,19 @@ export default function QrCodeIndex({ classrooms }: Props) {
                             </TabsTrigger>
                         </TabsList>
 
-                        {((activeTab === 'students' && studentQrCodes.length > 0) ||
-                          (activeTab === 'teachers' && teacherQrCodes.length > 0)) && (
-                            <Button onClick={handlePrintAll}>
-                                <Printer className="mr-2 h-4 w-4" />
-                                Cetak Semua
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setExportOpen(true)}>
+                                <FileDown className="mr-2 h-4 w-4" />
+                                Export
                             </Button>
-                        )}
+                            {((activeTab === 'students' && studentQrCodes.length > 0) ||
+                              (activeTab === 'teachers' && teacherQrCodes.length > 0)) && (
+                                <Button onClick={handlePrintAll}>
+                                    <Printer className="mr-2 h-4 w-4" />
+                                    Cetak Semua
+                                </Button>
+                            )}
+                        </div>
                     </div>
 
                     {/* Students Tab */}
@@ -385,6 +423,104 @@ export default function QrCodeIndex({ classrooms }: Props) {
                         <Button onClick={() => selectedQr && handleDownload(selectedQr)}>
                             <Download className="mr-2 h-4 w-4" />
                             Download
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Export QR/RFID Dialog */}
+            <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Export QR / RFID</DialogTitle>
+                        <DialogDescription>
+                            Export {activeTab === 'teachers' ? 'guru' : 'siswa'} untuk pembuatan kartu di luar aplikasi.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        {/* Format */}
+                        <div className="space-y-2">
+                            <Label>Format</Label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {([
+                                    { v: 'excel', label: 'Excel', icon: FileSpreadsheet },
+                                    { v: 'zip', label: 'ZIP Gambar', icon: FileArchive },
+                                    { v: 'pdf', label: 'PDF Kartu', icon: FileText },
+                                ] as const).map((f) => (
+                                    <Button
+                                        key={f.v}
+                                        type="button"
+                                        variant={exportFormat === f.v ? 'default' : 'outline'}
+                                        className="flex-col h-auto py-3"
+                                        onClick={() => setExportFormat(f.v)}
+                                    >
+                                        <f.icon className="mb-1 h-5 w-5" />
+                                        <span className="text-xs">{f.label}</span>
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Scope (siswa saja) */}
+                        {activeTab === 'students' && (
+                            <div className="space-y-2">
+                                <Label>Cakupan</Label>
+                                <Select value={exportScope} onValueChange={(v) => setExportScope(v as 'class' | 'all')}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="class">Per kelas (yang dipilih)</SelectItem>
+                                        <SelectItem value="all">Semua siswa</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {exportScope === 'class' && !classroomId && (
+                                    <p className="text-xs text-destructive">Pilih kelas dulu di filter atas.</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Format gambar (ZIP saja) */}
+                        {exportFormat === 'zip' && (
+                            <div className="space-y-2">
+                                <Label>Format Gambar</Label>
+                                <Select value={exportImage} onValueChange={(v) => setExportImage(v as 'svg' | 'png' | 'both')}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="both">SVG + PNG</SelectItem>
+                                        <SelectItem value="svg">SVG saja</SelectItem>
+                                        <SelectItem value="png">PNG saja</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
+                        {/* Generate RFID */}
+                        <div className="flex items-start gap-2">
+                            <Checkbox
+                                id="gen-rfid"
+                                checked={generateRfid}
+                                onCheckedChange={(c) => setGenerateRfid(!!c)}
+                            />
+                            <div className="grid gap-1 leading-none">
+                                <Label htmlFor="gen-rfid">Generate kode RFID otomatis</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Isi kode RFID untuk yang belum punya (untuk kartu writable).
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exporting}>
+                            Batal
+                        </Button>
+                        <Button onClick={handleExport} disabled={exporting}>
+                            <FileDown className={`mr-2 h-4 w-4 ${exporting ? 'animate-spin' : ''}`} />
+                            {exporting ? 'Memproses...' : 'Export'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

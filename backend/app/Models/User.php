@@ -27,6 +27,12 @@ class User extends \App\Infrastructure\Persistence\Eloquent\Auth\User
         'last_name',
         'phone',
         'is_active',
+        'gender',
+        'birth_place',
+        'birth_date',
+        'religion',
+        'address',
+        'id_number',
     ];
 
     /**
@@ -77,6 +83,54 @@ class User extends \App\Infrastructure\Persistence\Eloquent\Auth\User
     public function setPhoneAttribute($value): void
     {
         $this->pendingProfileData['phone'] = $value;
+    }
+
+    /**
+     * Capture gender for profile syncing.
+     */
+    public function setGenderAttribute($value): void
+    {
+        $this->pendingProfileData['gender'] = $value;
+    }
+
+    /**
+     * Capture birth place for profile syncing.
+     */
+    public function setBirthPlaceAttribute($value): void
+    {
+        $this->pendingProfileData['birth_place'] = $value;
+    }
+
+    /**
+     * Capture birth date for profile syncing.
+     */
+    public function setBirthDateAttribute($value): void
+    {
+        $this->pendingProfileData['birth_date'] = $value;
+    }
+
+    /**
+     * Capture religion for profile syncing.
+     */
+    public function setReligionAttribute($value): void
+    {
+        $this->pendingProfileData['religion'] = $value;
+    }
+
+    /**
+     * Capture address for profile syncing.
+     */
+    public function setAddressAttribute($value): void
+    {
+        $this->pendingProfileData['address'] = $value;
+    }
+
+    /**
+     * Capture ID number (NIK) for profile syncing.
+     */
+    public function setIdNumberAttribute($value): void
+    {
+        $this->pendingProfileData['id_number'] = $value;
     }
 
     /**
