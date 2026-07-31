@@ -14,12 +14,36 @@ Prasyarat: Flutter 3.24+, backend berjalan (lihat `../backend`, dev di `:8080`).
 ```bash
 flutter pub get
 
-# Emulator Android (default base URL http://10.0.2.2:8080/api/v1):
+# Emulator Android standar (base URL default http://10.0.2.2:8080/api/v1):
 flutter run
 
 # Perangkat fisik / host lain — override base URL ke IP LAN backend:
 flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8080/api/v1
 ```
+
+### Emulator + backend Docker Desktop (Windows) — penting
+
+Pada Docker Desktop (Windows), koneksi emulator ke `10.0.2.2:8080` bisa
+**menggantung**. Solusi andal: tunnel `adb reverse` + arahkan app ke `127.0.0.1`.
+
+```bash
+# 1) Jalankan emulator (SDK env harus ada bila via CLI):
+#    "$ANDROID_SDK_ROOT/emulator/emulator" -avd <nama_avd>
+# 2) Tunnel port device -> host:
+adb reverse tcp:8080 tcp:8080
+# 3) Jalankan app menunjuk 127.0.0.1 (lewat tunnel):
+flutter run -d <emulator-id> --dart-define=API_BASE_URL=http://127.0.0.1:8080/api/v1
+```
+
+> Diverifikasi berjalan pada AVD Android 11 (API 30): login Sanctum, `/auth/me`,
+> dan `GET /scan/bootstrap` sukses; Scanner Home & Input Ref ID tampil normal.
+
+### Catatan toolchain Android
+
+Proyek dipatok ke **AGP 8.1 / Gradle 8.3 / Kotlin 1.9.10 / JDK 17** (lihat
+`android/settings.gradle`, `android/gradle/wrapper/…`, `android/gradle.properties`).
+Butuh **build-tools 34.0.0** & platform **android-34** terpasang. Beberapa plugin
+lama diberi objek `flutter` pengganti di `android/build.gradle` (submodul).
 
 Akun uji (dari seeder backend): mis. `admin@demo.sms.local` / `password`.
 

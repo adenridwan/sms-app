@@ -7,7 +7,10 @@ plugins {
 
 android {
     namespace = "id.sch.sms.sms_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // Eksplisit (bukan flutter.compileSdkVersion) karena beberapa plugin
+    // (mobile_scanner, geolocator) butuh compileSdk 34 dan properti bawaan
+    // tidak ter-resolve pada setup Gradle ini.
+    compileSdk = 34
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

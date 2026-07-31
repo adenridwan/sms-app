@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Attendance;
 
 use App\Domain\Attendance\Rules\UniqueRfidCode;
+use App\Domain\Attendance\Services\RfidCodeGenerator;
 use App\Http\Controllers\Api\ApiController;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
@@ -11,6 +12,10 @@ use Illuminate\Http\Request;
 
 class RfidController extends ApiController
 {
+    public function __construct(
+        private RfidCodeGenerator $generator,
+    ) {}
+
     /**
      * Assign/change/clear the RFID card code for a student.
      */
@@ -57,5 +62,30 @@ class RfidController extends ApiController
             'teacher_id' => $teacher->id,
             'rfid_code' => $teacher->fresh()->rfid_code,
         ], 'Kode RFID guru berhasil diperbarui');
+    }
+
+    /**
+     * Terbitkan kode RFID baru untuk guru (dipakai bila sekolah menerbitkan
+     * sendiri kartunya, bukan memakai UID bawaan kartu).
+     *
+     * Langsung disimpan supaya keunikannya dijamin pada saat yang sama
+     * dengan pembuatannya — kode yang hanya "diusulkan" bisa keburu diambil
+     * admin lain sebelum ditekan Simpan.
+     */
+    public function generateTeacher(Teacher $teacher, Request $request): JsonResponse
+    {
+        if (! $request->user()->can('teachers.update')) {
+            return $this->forbidden('Anda tidak memiliki izin mengubah data guru.');
+        }
+
+        $previousCode = $teacher->rfid_code;
+
+        $teacher->update(['rfid_code' => $this->generator->forTeacher($teacher)]);
+
+        return $this->success([
+            'teacher_id' => $teacher->id,
+            'rfid_code' => $teacher->fresh()->rfid_code,
+            'previous_rfid_code' => $previousCode,
+        ], 'Kode RFID baru berhasil dibuat');
     }
 }

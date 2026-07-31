@@ -15,6 +15,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -76,6 +77,29 @@ const certificationLabels: Record<string, string> = {
     in_progress: 'Proses Sertifikasi',
 };
 
+/**
+ * Jenjang pendidikan. `teachers.education_level` adalah kolom string biasa
+ * (tanpa enum di DB), jadi jenjang di luar daftar ini — mis. PESANTREN —
+ * disimpan apa adanya sebagai keterangan pada kolom yang sama. Tidak ada
+ * kode khusus yang perlu ditampilkan ke pengguna.
+ */
+const educationLevels = ['d3', 'd4', 's1', 's2', 's3'];
+
+const EDUCATION_OTHER = 'other';
+
+/**
+ * Isian wajib menurut StoreTeacherRequest. Dicek di sisi klien lebih dulu
+ * supaya pengguna langsung dapat notifikasi yang seragam dengan halaman
+ * lain (toast + ringkasan di atas form), bukan hanya border merah setelah
+ * pulang-pergi ke server.
+ */
+const requiredFields: Array<{ field: keyof TeacherFormData; label: string; tab: string }> = [
+    { field: 'first_name', label: 'Nama Depan', tab: 'akun' },
+    { field: 'email', label: 'Email', tab: 'akun' },
+    { field: 'gender', label: 'Jenis Kelamin', tab: 'akun' },
+    { field: 'birth_date', label: 'Tanggal Lahir', tab: 'akun' },
+];
+
 function getErrors(error: unknown): { fieldErrors: Record<string, string>; message: string | null } {
     if (axios.isAxiosError(error) && error.response) {
         const { message, errors } = error.response.data ?? {};
@@ -101,15 +125,43 @@ export default function CreateTeacher() {
     // Kredensial ditampilkan sekali setelah berhasil dibuat (tidak disimpan ulang)
     const [credentials, setCredentials] = useState<CreateTeacherResponse | null>(null);
 
+    // Jenjang "Lainnya" hanya status tampilan; nilainya sendiri (mis.
+    // "PESANTREN") tetap disimpan di data.education_level.
+    const [educationOther, setEducationOther] = useState(false);
+
     const update = <K extends keyof TeacherFormData>(field: K, value: TeacherFormData[K]) => {
         setData((d) => ({ ...d, [field]: value }));
     };
 
+    const handleEducationLevelChange = (value: string) => {
+        if (value === EDUCATION_OTHER) {
+            setEducationOther(true);
+            update('education_level', '');
+
+            return;
+        }
+
+        setEducationOther(false);
+        update('education_level', value);
+    };
+
     const submit = async (e: FormEvent) => {
         e.preventDefault();
-        setProcessing(true);
         setErrors({});
         setFormError(null);
+
+        const missing = requiredFields.filter(({ field }) => !String(data[field] ?? '').trim());
+        if (missing.length > 0) {
+            setErrors(
+                Object.fromEntries(missing.map(({ field, label }) => [field, `${label} wajib diisi.`]))
+            );
+            setFormError('Lengkapi isian wajib yang ditandai merah.');
+            setTab(missing[0].tab);
+            toast.error(`Isian wajib belum lengkap: ${missing.map((m) => m.label).join(', ')}`);
+            return;
+        }
+
+        setProcessing(true);
 
         try {
             const response = await teachersApi.create(data);
@@ -118,7 +170,15 @@ export default function CreateTeacher() {
         } catch (error) {
             const { fieldErrors, message } = getErrors(error);
             setErrors(fieldErrors);
-            if (message) setFormError(message);
+
+            if (message) {
+                setFormError(message);
+                toast.error(message);
+            } else {
+                setFormError('Periksa kembali isian yang ditandai merah.');
+                toast.error('Data guru gagal disimpan, periksa isian yang ditandai merah.');
+            }
+
             // Pindah ke tab yang mengandung field bermasalah agar terlihat
             if (
                 ['first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'birth_place', 'religion', 'address', 'id_number'].some(
@@ -273,12 +333,13 @@ export default function CreateTeacher() {
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="birth_date">Tanggal Lahir *</Label>
-                                            <Input
+                                            <DatePicker
                                                 id="birth_date"
-                                                type="date"
                                                 value={data.birth_date}
-                                                onChange={(e) => update('birth_date', e.target.value)}
-                                                className={errors.birth_date ? 'border-destructive' : ''}
+                                                onChange={(value) => update('birth_date', value)}
+                                                placeholder="Pilih tanggal lahir"
+                                                invalid={!!errors.birth_date}
+                                                toYear={new Date().getFullYear()}
                                             />
                                             {errors.birth_date ? (
                                                 <p className="text-sm text-destructive">{errors.birth_date}</p>
@@ -348,11 +409,12 @@ export default function CreateTeacher() {
                                     <div className="grid gap-4 sm:grid-cols-3">
                                         <div className="space-y-2">
                                             <Label htmlFor="join_date">Tanggal Masuk</Label>
-                                            <Input
+                                            <DatePicker
                                                 id="join_date"
-                                                type="date"
                                                 value={data.join_date}
-                                                onChange={(e) => update('join_date', e.target.value)}
+                                                onChange={(value) => update('join_date', value)}
+                                                placeholder="Pilih tanggal masuk"
+                                                fromYear={1970}
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -423,21 +485,50 @@ export default function CreateTeacher() {
                                         <div className="space-y-2">
                                             <Label>Pendidikan</Label>
                                             <Select
-                                                value={data.education_level}
-                                                onValueChange={(v) => update('education_level', v)}
+                                                value={
+                                                    educationOther
+                                                        ? EDUCATION_OTHER
+                                                        : data.education_level.toLowerCase()
+                                                }
+                                                onValueChange={handleEducationLevelChange}
                                             >
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Jenjang" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="d3">D3</SelectItem>
-                                                    <SelectItem value="d4">D4</SelectItem>
-                                                    <SelectItem value="s1">S1</SelectItem>
-                                                    <SelectItem value="s2">S2</SelectItem>
-                                                    <SelectItem value="s3">S3</SelectItem>
+                                                    {educationLevels.map((level) => (
+                                                        <SelectItem key={level} value={level}>
+                                                            {level.toUpperCase()}
+                                                        </SelectItem>
+                                                    ))}
+                                                    <SelectItem value={EDUCATION_OTHER}>Lainnya</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
+
+                                        {educationOther && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="education_level_note">
+                                                    Keterangan Pendidikan
+                                                </Label>
+                                                <Input
+                                                    id="education_level_note"
+                                                    placeholder="Contoh: PESANTREN"
+                                                    value={data.education_level}
+                                                    onChange={(e) =>
+                                                        update('education_level', e.target.value)
+                                                    }
+                                                    className={
+                                                        errors.education_level ? 'border-destructive' : ''
+                                                    }
+                                                />
+                                                {errors.education_level && (
+                                                    <p className="text-sm text-destructive">
+                                                        {errors.education_level}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                         <div className="space-y-2">
                                             <Label htmlFor="education_major">Jurusan</Label>
                                             <Input
@@ -523,7 +614,9 @@ export default function CreateTeacher() {
                             Nanti Saja
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            onClick={() => router.visit(`/teachers/${credentials?.id}/edit`)}
+                            // ?tab=dokumen: halaman Edit membuka tab Foto & Dokumen
+                            // langsung, bukan tab Akun & Pribadi
+                            onClick={() => router.visit(`/teachers/${credentials?.id}/edit?tab=dokumen`)}
                         >
                             <ImagePlus className="mr-2 h-4 w-4" />
                             Unggah Foto &amp; Dokumen

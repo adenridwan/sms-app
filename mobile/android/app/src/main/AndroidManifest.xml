@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Akses jaringan untuk API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Kamera untuk pindai QR. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- Lokasi untuk geofence absensi (opsional, bila diaktifkan sekolah). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="SMS Absensi"
         android:name="${applicationName}"

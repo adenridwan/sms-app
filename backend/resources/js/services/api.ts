@@ -92,13 +92,17 @@ export const studentsApi = {
     bulkDelete: (ids: string[]) =>
         api.post<ApiResponse>('/students/bulk-destroy', { ids }),
 
-    export: (params?: Record<string, unknown>) =>
-        api.get<ApiResponse<{ url: string }>>('/students/export', { params }),
+    // Export/template tersedia dalam xlsx (default) & csv
+    export: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/students/export', { params: { format }, responseType: 'blob' }),
+
+    template: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/students/template', { params: { format }, responseType: 'blob' }),
 
     import: (file: File) => {
         const formData = new FormData();
         formData.append('file', file);
-        return api.post<ApiResponse>('/students/import', formData, {
+        return api.post<ApiResponse<ImportResult>>('/students/import', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
     },
@@ -150,6 +154,21 @@ export const teachersApi = {
     getAssignment: (id: string) =>
         api.get<ApiResponse<TeacherAssignment>>(`/teachers/${id}/assignment`),
 
+    // Export/template tersedia dalam xlsx (default) & csv
+    export: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/teachers/export', { params: { format }, responseType: 'blob' }),
+
+    template: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/teachers/template', { params: { format }, responseType: 'blob' }),
+
+    import: (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post<ApiResponse<ImportResult>>('/teachers/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
     uploadPhoto: (id: string, file: File) => {
         const formData = new FormData();
         formData.append('photo', file);
@@ -165,6 +184,12 @@ export const teachersApi = {
         api.put<ApiResponse<{ teacher_id: string; rfid_code: string | null }>>(
             `/attendance/rfid/teachers/${id}`,
             { rfid_code }
+        ),
+
+    // Kode RFID terbitan sistem — dibuat & disimpan sekaligus di server
+    generateRfid: (id: string) =>
+        api.post<ApiResponse<{ teacher_id: string; rfid_code: string; previous_rfid_code: string | null }>>(
+            `/attendance/rfid/teachers/${id}/generate`
         ),
 
     uploadDocument: (id: string, collection: TeacherDocumentCollection, file: File) => {

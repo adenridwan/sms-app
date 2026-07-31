@@ -104,6 +104,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Student Module
     // ===========================================
     Route::prefix('students')->name('students.')->group(function () {
+        // Rute statis wajib didaftarkan sebelum apiResource, kalau tidak
+        // "export"/"template"/"import" akan tertangkap sebagai {student}.
+        Route::get('export', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'export'])->name('export');
+        Route::get('template', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'template'])->name('template');
+        Route::post('import', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'import'])
+            ->middleware('throttle:uploads')
+            ->name('import');
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Student\StudentController::class)->parameter('', 'student');
         Route::get('{student}/guardians', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'guardians'])->name('guardians');
         Route::get('{student}/enrollments', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'enrollments'])->name('enrollments');
@@ -123,6 +130,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Teacher Module
     // ===========================================
     Route::prefix('teachers')->name('teachers.')->group(function () {
+        // Rute statis wajib didaftarkan sebelum apiResource, kalau tidak
+        // "export"/"template"/"import" akan tertangkap sebagai {teacher}.
+        Route::get('export', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'export'])->name('export');
+        Route::get('template', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'template'])->name('template');
+        Route::post('import', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'import'])
+            ->middleware('throttle:uploads')
+            ->name('import');
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Teacher\TeacherController::class)->parameter('', 'teacher');
         // Penempatan kelas (menu Kelas) & kompetensi mapel (menu Mata Pelajaran)
         // sengaja tidak dikelola dari sini — lihat TEACHER-MODULE-PLAN.md §2.
@@ -195,6 +209,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // RFID
         Route::put('rfid/students/{student}', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'updateStudent'])->name('rfid.students.update');
         Route::put('rfid/teachers/{teacher}', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'updateTeacher'])->name('rfid.teachers.update');
+        // Kode RFID terbitan sistem (kartu writable) — lihat RfidCodeGenerator
+        Route::post('rfid/teachers/{teacher}/generate', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'generateTeacher'])->name('rfid.teachers.generate');
 
         // Card Templates (Fase 5 — editor kartu ID drag-and-drop)
         Route::get('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'show'])->name('card-templates.show');

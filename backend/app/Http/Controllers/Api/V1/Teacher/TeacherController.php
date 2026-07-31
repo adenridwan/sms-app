@@ -2,23 +2,25 @@
 
 namespace App\Http\Controllers\Api\V1\Teacher;
 
+use App\Exports\Teacher\TeachersExport;
+use App\Exports\Teacher\TeachersTemplateExport;
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Requests\Teacher\StoreTeacherRequest;
 use App\Http\Requests\Teacher\UpdateTeacherRequest;
 use App\Http\Resources\TeacherResource;
-use App\Infrastructure\Persistence\Eloquent\Auth\User;
-use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
+use App\Imports\Teacher\TeachersImport;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use App\Services\TeacherAssignmentService;
+use App\Services\TeacherRegistrar;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Excel as ExcelFormat;
+use Maatwebsite\Excel\Facades\Excel;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Data Guru (master): identitas, kepegawaian, dan akun login guru.
@@ -32,6 +34,7 @@ class TeacherController extends ApiController
 {
     public function __construct(
         private TeacherAssignmentService $assignments,
+        private TeacherRegistrar $registrar,
     ) {}
 
     /**
@@ -86,57 +89,10 @@ class TeacherController extends ApiController
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }
 
-        $fullName = trim($data['first_name'] . ' ' . ($data['last_name'] ?? ''));
-        $username = $this->generateUniqueUsername($fullName);
-        $initialPassword = Carbon::parse($data['birth_date'])->format('dmY');
-
-        $teacher = DB::transaction(function () use ($data, $tenantId, $username, $initialPassword) {
-            $user = User::create([
-                'tenant_id' => $tenantId,
-                'username' => $username,
-                'email' => $data['email'],
-                'password' => Hash::make($initialPassword),
-                'status' => 'active',
-                'user_type' => 'teacher',
-            ]);
-            $user->forceFill(['email_verified_at' => now()])->save();
-            $user->assignRole('guru');
-            $user->markPasswordMustChange();
-
-            UserProfile::create([
-                'user_id' => $user->id,
-                'first_name' => $data['first_name'],
-                'last_name' => $data['last_name'] ?? null,
-                'phone' => $data['phone'] ?? null,
-                'gender' => $data['gender'],
-                'birth_place' => $data['birth_place'] ?? null,
-                'birth_date' => $data['birth_date'],
-                'religion' => $data['religion'] ?? null,
-                'address' => $data['address'] ?? null,
-                'id_number' => $data['id_number'] ?? null,
-            ]);
-
-            $teacher = Teacher::create([
-                'tenant_id' => $tenantId,
-                'user_id' => $user->id,
-                'nip' => $data['nip'] ?? null,
-                'nuptk' => $data['nuptk'] ?? null,
-                'no_hp' => $data['phone'] ?? null,
-                'join_date' => $data['join_date'] ?? now()->toDateString(),
-                'employment_status' => $data['employment_status'] ?? 'permanent',
-                'status' => $data['status'] ?? 'active',
-                'certification_status' => $data['certification_status'] ?? 'not_certified',
-                'certification_number' => $data['certification_number'] ?? null,
-                'education_level' => $data['education_level'] ?? null,
-                'education_major' => $data['education_major'] ?? null,
-                'university' => $data['university'] ?? null,
-                'teaching_experience_years' => $data['teaching_experience_years'] ?? 0,
-            ]);
-
-            $teacher->load(['user.profile']);
-
-            return $teacher;
-        });
+        // Pembuatan akun ada di TeacherRegistrar supaya aturannya sama persis
+        // dengan jalur import massal (TeachersImport).
+        ['teacher' => $teacher, 'username' => $username, 'password' => $initialPassword] =
+            $this->registrar->create($data, $tenantId);
 
         return $this->success([
             ...(new TeacherResource($teacher))->resolve(),
@@ -230,6 +186,68 @@ class TeacherController extends ApiController
     }
 
     /**
+     * Export data guru (xlsx/csv) — kolomnya sama dengan template import.
+     */
+    public function export(Request $request): BinaryFileResponse
+    {
+        abort_unless($request->user()->can('teachers.view'), 403);
+
+        [$extension, $writerType] = $this->fileFormat($request);
+
+        return Excel::download(new TeachersExport(), "guru.{$extension}", $writerType);
+    }
+
+    /**
+     * Unduh template import guru (xlsx/csv).
+     */
+    public function template(Request $request): BinaryFileResponse
+    {
+        abort_unless($request->user()->can('teachers.view'), 403);
+
+        [$extension, $writerType] = $this->fileFormat($request);
+
+        return Excel::download(new TeachersTemplateExport(), "template-import-guru.{$extension}", $writerType);
+    }
+
+    /**
+     * Import guru dari file CSV/Excel (upsert berdasarkan NIP).
+     */
+    public function import(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->can('teachers.create'), 403);
+
+        $tenantId = $this->currentTenantId($request);
+        if (! $tenantId) {
+            return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
+        }
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:5120'],
+        ]);
+
+        $import = new TeachersImport($tenantId, $this->registrar);
+        Excel::import($import, $request->file('file'));
+
+        return $this->success([
+            'created' => $import->created,
+            'updated' => $import->updated,
+            'errors' => $import->errors,
+        ], "Import guru selesai: {$import->created} ditambahkan, {$import->updated} diperbarui.");
+    }
+
+    /**
+     * Format berkas untuk export/template: xlsx (default) atau csv.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function fileFormat(Request $request): array
+    {
+        return strtolower((string) $request->get('format')) === 'csv'
+            ? ['csv', ExcelFormat::CSV]
+            : ['xlsx', ExcelFormat::XLSX];
+    }
+
+    /**
      * Upload/ganti foto profil guru (disimpan di users.avatar — satu
      * sumber foto dipakai bersama sidebar & dashboard, bukan kolom
      * terpisah di tabel teachers; lihat TEACHER-MODULE-PLAN.md keputusan #5).
@@ -313,20 +331,4 @@ class TeacherController extends ApiController
         return $this->success($teacher->documentsSummary(), 'Dokumen berhasil dihapus');
     }
 
-    /**
-     * Buat username unik dari nama (slug), tambahkan angka bila bentrok.
-     */
-    private function generateUniqueUsername(string $fullName): string
-    {
-        $base = Str::slug($fullName, '.') ?: 'guru';
-        $username = $base;
-        $suffix = 1;
-
-        while (User::withoutTenant()->where('username', $username)->exists()) {
-            $suffix++;
-            $username = "{$base}{$suffix}";
-        }
-
-        return $username;
-    }
 }

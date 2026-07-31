@@ -2,10 +2,13 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/attendance/presentation/manual_input_screen.dart';
+import '../../features/attendance/presentation/offline_queue_screen.dart';
+import '../../features/attendance/presentation/scan_camera_screen.dart';
+import '../../features/attendance/presentation/scanner_home_screen.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
-import '../../features/dashboard/presentation/dashboard_screen.dart';
 
 /// Menjembatani perubahan state Riverpod ke GoRouter (refresh + redirect).
 class _RouterNotifier extends ChangeNotifier {
@@ -53,7 +56,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/dashboard',
-        builder: (_, __) => const DashboardScreen(),
+        builder: (_, __) => const ScannerHomeScreen(),
+      ),
+      GoRoute(
+        path: '/scan',
+        builder: (_, __) => const ScanCameraScreen(),
+      ),
+      GoRoute(
+        path: '/manual',
+        builder: (_, __) => const ManualInputScreen(),
+      ),
+      GoRoute(
+        path: '/queue',
+        builder: (_, __) => const OfflineQueueScreen(),
       ),
     ],
   );

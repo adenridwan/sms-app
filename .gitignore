@@ -96,6 +96,9 @@ docker/nginx/ssl/*.crt
 *.zip
 *.7z
 
+# Folder bersarang tak sengaja (bukan bagian repo)
+/sms-app/
+
 # Windows reserved-name junk (mis. dari redirect `> nul`)
 nul
 **/nul

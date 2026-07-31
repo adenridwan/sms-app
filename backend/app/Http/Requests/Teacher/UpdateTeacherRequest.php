@@ -27,7 +27,9 @@ class UpdateTeacherRequest extends FormRequest
 
         return [
             // Akun & Pribadi (Tab 1) — password TIDAK diubah di sini, lihat Reset Password
-            'first_name' => ['sometimes', 'string', 'max:100'],
+            // `filled`: string kosong lolos aturan `string` — tanpa ini nama
+            // guru bisa dikosongkan diam-diam lewat form Edit.
+            'first_name' => ['sometimes', 'filled', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
             'email' => [
                 'sometimes', 'string', 'email', 'max:255',
@@ -55,7 +57,10 @@ class UpdateTeacherRequest extends FormRequest
             'status' => ['nullable', Rule::in(['active', 'inactive', 'on_leave', 'retired', 'terminated'])],
             'certification_status' => ['nullable', Rule::in(['certified', 'not_certified', 'in_progress'])],
             'certification_number' => ['nullable', 'string', 'max:50'],
-            'education_level' => ['nullable', 'string', 'in:d3,d4,s1,s2,s3'],
+            // Bukan `in:` lagi: jenjang di luar daftar dropdown (mis.
+            // PESANTREN) disimpan apa adanya di kolom string yang sama —
+            // lihat opsi "Lainnya" pada form guru.
+            'education_level' => ['nullable', 'string', 'max:50'],
             'education_major' => ['nullable', 'string', 'max:100'],
             'university' => ['nullable', 'string', 'max:150'],
             'teaching_experience_years' => ['nullable', 'integer', 'min:0', 'max:60'],
@@ -70,6 +75,7 @@ class UpdateTeacherRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'first_name.filled' => 'Nama depan wajib diisi.',
             'email.email' => 'Format email tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
             'gender.in' => 'Jenis kelamin tidak valid.',
