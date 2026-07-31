@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +35,7 @@ import {
     VolumeX,
     User,
     Building2,
+    ArrowLeft,
 } from 'lucide-react';
 import { scannerApi } from '@/services/attendance';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
@@ -215,6 +216,11 @@ export default function ScannerIndex() {
                     <Card>
                         <CardContent className="flex items-center justify-between p-4">
                             <div className="flex items-center gap-3">
+                                <Button variant="ghost" size="icon" asChild>
+                                    <Link href="/attendance">
+                                        <ArrowLeft className="h-4 w-4" />
+                                    </Link>
+                                </Button>
                                 <Building2 className="h-8 w-8 text-blue-600" />
                                 <div>
                                     <h1 className="text-xl font-bold">Scanner Absensi</h1>

@@ -43,7 +43,6 @@ class StoreStudentRequest extends FormRequest
             'entry_year' => ['required', 'integer', 'min:2000', 'max:' . (date('Y') + 1)],
             'entry_class' => ['nullable', 'string', 'max:50'],
             'entry_semester' => ['nullable', 'integer', 'in:1,2'],
-            'photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
         ];
     }
 
@@ -66,8 +65,6 @@ class StoreStudentRequest extends FormRequest
             'gender.in' => 'Jenis kelamin tidak valid.',
             'birth_date.before' => 'Tanggal lahir harus sebelum hari ini.',
             'entry_year.required' => 'Tahun masuk wajib diisi.',
-            'photo.image' => 'File harus berupa gambar.',
-            'photo.max' => 'Ukuran foto maksimal 2MB.',
         ];
     }
 }

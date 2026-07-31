@@ -29,6 +29,18 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        // Resolusi tenant aktif untuk request web/Inertia. `tenant()` (TenantService)
+        // hanya terisi bila ada middleware yang menyetelnya; untuk halaman Inertia
+        // biasa hal itu tidak terjadi, jadi kita resolusi langsung dari user yang
+        // login dan sekaligus set ke service agar konsisten di seluruh request.
+        $tenant = tenant();
+        if (! $tenant && $request->user()?->tenant_id) {
+            $tenant = \App\Models\Tenant::find($request->user()->tenant_id);
+            if ($tenant) {
+                app('tenant')->setTenant($tenant);
+            }
+        }
+
         return [
             ...parent::share($request),
 
@@ -43,14 +55,27 @@ class HandleInertiaRequests extends Middleware
                     'full_name' => $request->user()->full_name,
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+                    'must_change_password' => $request->user()->mustChangePassword(),
                 ] : null,
             ],
 
+            // Menu yang boleh tampil untuk user ini (permission + config
+            // visibilitas per-role, Opsi A). Dipakai sidebar MainLayout.tsx.
+            'menu' => [
+                'visible' => fn () => $request->user()
+                    ? app(\App\Domain\Setting\Services\MenuVisibilityService::class)
+                        ->visibleKeysFor($request->user())
+                    : [],
+            ],
+
             // Tenant
-            'tenant' => tenant() ? [
-                'id' => tenant()->id,
-                'name' => tenant()->name,
-                'logo' => tenant()->logo,
+            'tenant' => $tenant ? [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'logo' => $tenant->logo
+                    ? (parse_url(\Illuminate\Support\Facades\Storage::disk('public')->url($tenant->logo), PHP_URL_PATH)
+                        ?: '/storage/'.$tenant->logo)
+                    : null,
             ] : null,
 
             // Tenant list for super admin (used by the tenant switcher)

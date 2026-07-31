@@ -31,6 +31,11 @@ class QrCodeController extends ApiController
                 'nis' => $student->nis,
                 'name' => $student->user?->full_name,
             ],
+            'student_id' => $student->id,
+            'nis' => $student->nis,
+            'name' => $student->user?->full_name,
+            'classroom' => $student->currentEnrollment()?->classroom?->name,
+            'photo_url' => $student->user?->avatar ? asset('storage/' . $student->user->avatar) : null,
             'unique_code' => $student->unique_code,
             'qr_code' => $qrCode,
         ]);
@@ -75,6 +80,14 @@ class QrCodeController extends ApiController
 
         $results = $this->qrService->generateBulkStudentQrCodes($studentIds, $size);
 
+        // Semua hasil berbagi kelas yang sama — cukup satu lookup nama kelas
+        // untuk ditampilkan di kartu cetak.
+        $classroomName = \App\Infrastructure\Persistence\Eloquent\Academic\Classroom::whereKey($data['classroom_id'])->value('name');
+        foreach ($results as &$result) {
+            $result['classroom'] = $classroomName;
+        }
+        unset($result);
+
         return $this->success([
             'classroom_id' => $data['classroom_id'],
             'count' => count($results),
@@ -97,6 +110,11 @@ class QrCodeController extends ApiController
                 'nip' => $teacher->nip,
                 'name' => $teacher->user?->full_name,
             ],
+            'teacher_id' => $teacher->id,
+            'nip' => $teacher->nip,
+            'name' => $teacher->user?->full_name,
+            'employment_status_label' => $this->employmentStatusLabel($teacher->employment_status),
+            'photo_url' => $teacher->user?->avatar ? asset('storage/' . $teacher->user->avatar) : null,
             'unique_code' => $teacher->unique_code,
             'qr_code' => $qrCode,
         ]);
@@ -143,6 +161,8 @@ class QrCodeController extends ApiController
                 'teacher_id' => $teacher->id,
                 'nip' => $teacher->nip,
                 'name' => $teacher->user?->full_name,
+                'employment_status_label' => $this->employmentStatusLabel($teacher->employment_status),
+                'photo_url' => $teacher->user?->avatar ? asset('storage/' . $teacher->user->avatar) : null,
                 'unique_code' => $teacher->unique_code,
                 'qr_code' => $this->qrService->generateQrImage($teacher->unique_code, $size),
             ];
@@ -210,5 +230,20 @@ class QrCodeController extends ApiController
             'qr_code' => $base64,
             'unique_code' => $teacher->unique_code,
         ]);
+    }
+
+    /**
+     * Label status kepegawaian untuk kartu cetak — meniru peta yang sama
+     * di TeacherResource::employmentStatusLabel() (method private di sana).
+     */
+    private function employmentStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'permanent' => 'Tetap',
+            'contract' => 'Kontrak',
+            'honorary' => 'Honorer',
+            'part_time' => 'Paruh Waktu',
+            default => '-',
+        };
     }
 }

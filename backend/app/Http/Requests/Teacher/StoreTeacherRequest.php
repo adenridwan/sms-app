@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Teacher;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreTeacherRequest extends FormRequest
 {
@@ -21,31 +22,44 @@ class StoreTeacherRequest extends FormRequest
      */
     public function rules(): array
     {
+        // Tenant guru baru: user aktif (tenant sendiri) atau super admin (X-Tenant-ID)
+        $tenantId = $this->user()?->tenant_id ?? $this->header('X-Tenant-ID');
+
         return [
-            // User data
-            'username' => ['nullable', 'string', 'min:3', 'max:50', 'unique:users,username', 'alpha_dash'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['nullable', 'string', 'min:8'],
+            // Akun & Pribadi (Tab 1)
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
-
-            // Teacher data
-            'nip' => ['nullable', 'string', 'max:30', 'unique:teachers,nip'],
-            'nuptk' => ['nullable', 'string', 'max:30', 'unique:teachers,nuptk'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'phone' => ['nullable', 'string', 'max:20'],
             'gender' => ['required', 'in:male,female'],
             'birth_place' => ['nullable', 'string', 'max:100'],
-            'birth_date' => ['nullable', 'date', 'before:today'],
+            // Wajib: sumber password awal (format ddmmyyyy)
+            'birth_date' => ['required', 'date', 'before:today'],
             'religion' => ['nullable', 'string', 'in:islam,kristen,katolik,hindu,buddha,konghucu'],
             'address' => ['nullable', 'string', 'max:500'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'education_level' => ['nullable', 'string', 'in:s1,s2,s3,d3,d4'],
-            'education_major' => ['nullable', 'string', 'max:100'],
+            'id_number' => ['nullable', 'string', 'max:20'],
+
+            // Kepegawaian (Tab 2)
+            'nip' => [
+                'nullable', 'string', 'max:30',
+                Rule::unique('teachers', 'nip')->where(fn ($q) => $q->where('tenant_id', $tenantId)),
+            ],
+            'nuptk' => [
+                'nullable', 'string', 'max:30',
+                Rule::unique('teachers', 'nuptk')->where(fn ($q) => $q->where('tenant_id', $tenantId)),
+            ],
             'join_date' => ['nullable', 'date'],
-            'position' => ['nullable', 'string', 'max:100'],
-            'specialization' => ['nullable', 'string', 'max:200'],
-            'photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
-            'subject_ids' => ['nullable', 'array'],
-            'subject_ids.*' => ['uuid', 'exists:subjects,id'],
+            'employment_status' => ['nullable', Rule::in(['permanent', 'contract', 'honorary', 'part_time'])],
+            'status' => ['nullable', Rule::in(['active', 'inactive', 'on_leave', 'retired', 'terminated'])],
+            'certification_status' => ['nullable', Rule::in(['certified', 'not_certified', 'in_progress'])],
+            'certification_number' => ['nullable', 'string', 'max:50'],
+            // Bukan `in:` lagi: jenjang di luar daftar dropdown (mis.
+            // PESANTREN) disimpan apa adanya di kolom string yang sama —
+            // lihat opsi "Lainnya" pada form guru.
+            'education_level' => ['nullable', 'string', 'max:50'],
+            'education_major' => ['nullable', 'string', 'max:100'],
+            'university' => ['nullable', 'string', 'max:150'],
+            'teaching_experience_years' => ['nullable', 'integer', 'min:0', 'max:60'],
         ];
     }
 
@@ -57,17 +71,16 @@ class StoreTeacherRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'first_name.required' => 'Nama depan wajib diisi.',
             'email.required' => 'Email wajib diisi.',
             'email.email' => 'Format email tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
-            'first_name.required' => 'Nama depan wajib diisi.',
-            'nip.unique' => 'NIP sudah terdaftar.',
-            'nuptk.unique' => 'NUPTK sudah terdaftar.',
             'gender.required' => 'Jenis kelamin wajib diisi.',
             'gender.in' => 'Jenis kelamin tidak valid.',
+            'birth_date.required' => 'Tanggal lahir wajib diisi (dipakai sebagai password awal).',
             'birth_date.before' => 'Tanggal lahir harus sebelum hari ini.',
-            'photo.image' => 'File harus berupa gambar.',
-            'photo.max' => 'Ukuran foto maksimal 2MB.',
+            'nip.unique' => 'NIP sudah digunakan guru lain.',
+            'nuptk.unique' => 'NUPTK sudah digunakan guru lain.',
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Attendance;
 
+use App\Domain\Attendance\Enums\AttendanceStatus;
 use App\Domain\Attendance\Services\AttendanceStatusResolver;
 use App\Http\Controllers\Api\ApiController;
 use App\Infrastructure\Persistence\Eloquent\Attendance\StudentAttendance;
@@ -38,11 +39,12 @@ class PublicAttendanceController extends ApiController
         $attendance = StudentAttendance::getForStudentOnDate($student->id, $date);
 
         if ($attendance) {
-            $status = $attendance->status;
-            $statusLabel = \App\Domain\Attendance\Enums\AttendanceStatus::tryFrom($status)?->label() ?? $status;
+            $statusEnum = AttendanceStatus::tryFrom($attendance->status);
+            $status = $statusEnum?->slug() ?? $attendance->status;
+            $statusLabel = $statusEnum?->label() ?? $attendance->status;
         } else {
             $resolvedStatus = $this->statusResolver->resolveStudentStatus($student->id, $date);
-            $status = $resolvedStatus->value;
+            $status = $resolvedStatus->slug();
             $statusLabel = $resolvedStatus->label();
         }
 
@@ -90,22 +92,29 @@ class PublicAttendanceController extends ApiController
             ->orderBy('attendance_date', 'asc')
             ->get();
 
-        $history = $attendances->map(fn($att) => [
-            'date' => $att->attendance_date->format('d/m/Y'),
-            'day' => $att->attendance_date->translatedFormat('l'),
-            'status' => $att->status,
-            'status_label' => \App\Domain\Attendance\Enums\AttendanceStatus::tryFrom($att->status)?->label() ?? $att->status,
-            'check_in_time' => $att->check_in_time?->format('H:i'),
-            'check_out_time' => $att->check_out_time?->format('H:i'),
-        ]);
+        $history = $attendances->map(function ($att) {
+            $statusEnum = AttendanceStatus::tryFrom($att->status);
+
+            return [
+                'date' => $att->attendance_date->format('d/m/Y'),
+                'day' => $att->attendance_date->translatedFormat('l'),
+                'status' => $statusEnum?->slug() ?? $att->status,
+                'status_label' => $statusEnum?->label() ?? $att->status,
+                'check_in_time' => $att->check_in_time?->format('H:i'),
+                'check_out_time' => $att->check_out_time?->format('H:i'),
+            ];
+        });
 
         // Calculate summary
+        $rawCounts = $attendances->countBy('status');
+        $statusSummary = AttendanceStatus::summaryFromRaw($rawCounts);
+
         $summary = [
             'total' => $attendances->count(),
-            'hadir' => $attendances->where('status', 'hadir')->count(),
-            'sakit' => $attendances->where('status', 'sakit')->count(),
-            'izin' => $attendances->where('status', 'izin')->count(),
-            'alfa' => $attendances->whereIn('status', ['alfa', 'tanpa_keterangan'])->count(),
+            'hadir' => $statusSummary['hadir'],
+            'sakit' => $statusSummary['sakit'],
+            'izin' => $statusSummary['izin'],
+            'alfa' => $statusSummary['alfa'],
         ];
 
         return $this->success([

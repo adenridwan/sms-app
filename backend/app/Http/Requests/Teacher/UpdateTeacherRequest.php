@@ -26,45 +26,44 @@ class UpdateTeacherRequest extends FormRequest
         $userId = $teacher->user_id;
 
         return [
-            // User data
+            // Akun & Pribadi (Tab 1) — password TIDAK diubah di sini, lihat Reset Password
+            // `filled`: string kosong lolos aturan `string` — tanpa ini nama
+            // guru bisa dikosongkan diam-diam lewat form Edit.
+            'first_name' => ['sometimes', 'filled', 'string', 'max:100'],
+            'last_name' => ['nullable', 'string', 'max:100'],
             'email' => [
-                'sometimes',
-                'string',
-                'email',
-                'max:255',
+                'sometimes', 'string', 'email', 'max:255',
                 Rule::unique('users', 'email')->ignore($userId),
             ],
-            'first_name' => ['sometimes', 'string', 'max:100'],
-            'last_name' => ['nullable', 'string', 'max:100'],
-
-            // Teacher data
-            'nip' => [
-                'nullable',
-                'string',
-                'max:30',
-                Rule::unique('teachers', 'nip')->ignore($teacher->id),
-            ],
-            'nuptk' => [
-                'nullable',
-                'string',
-                'max:30',
-                Rule::unique('teachers', 'nuptk')->ignore($teacher->id),
-            ],
+            'phone' => ['nullable', 'string', 'max:20'],
             'gender' => ['sometimes', 'in:male,female'],
             'birth_place' => ['nullable', 'string', 'max:100'],
             'birth_date' => ['nullable', 'date', 'before:today'],
             'religion' => ['nullable', 'string', 'in:islam,kristen,katolik,hindu,buddha,konghucu'],
             'address' => ['nullable', 'string', 'max:500'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'education_level' => ['nullable', 'string', 'in:s1,s2,s3,d3,d4'],
-            'education_major' => ['nullable', 'string', 'max:100'],
-            'employment_status' => ['sometimes', 'in:active,inactive,retired,resigned'],
+            'id_number' => ['nullable', 'string', 'max:20'],
+
+            // Kepegawaian (Tab 2)
+            'nip' => [
+                'nullable', 'string', 'max:30',
+                Rule::unique('teachers', 'nip')->where(fn ($q) => $q->where('tenant_id', $teacher->tenant_id))->ignore($teacher->id),
+            ],
+            'nuptk' => [
+                'nullable', 'string', 'max:30',
+                Rule::unique('teachers', 'nuptk')->where(fn ($q) => $q->where('tenant_id', $teacher->tenant_id))->ignore($teacher->id),
+            ],
             'join_date' => ['nullable', 'date'],
-            'position' => ['nullable', 'string', 'max:100'],
-            'specialization' => ['nullable', 'string', 'max:200'],
-            'photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
-            'subject_ids' => ['nullable', 'array'],
-            'subject_ids.*' => ['uuid', 'exists:subjects,id'],
+            'employment_status' => ['nullable', Rule::in(['permanent', 'contract', 'honorary', 'part_time'])],
+            'status' => ['nullable', Rule::in(['active', 'inactive', 'on_leave', 'retired', 'terminated'])],
+            'certification_status' => ['nullable', Rule::in(['certified', 'not_certified', 'in_progress'])],
+            'certification_number' => ['nullable', 'string', 'max:50'],
+            // Bukan `in:` lagi: jenjang di luar daftar dropdown (mis.
+            // PESANTREN) disimpan apa adanya di kolom string yang sama —
+            // lihat opsi "Lainnya" pada form guru.
+            'education_level' => ['nullable', 'string', 'max:50'],
+            'education_major' => ['nullable', 'string', 'max:100'],
+            'university' => ['nullable', 'string', 'max:150'],
+            'teaching_experience_years' => ['nullable', 'integer', 'min:0', 'max:60'],
         ];
     }
 
@@ -76,15 +75,13 @@ class UpdateTeacherRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'first_name.filled' => 'Nama depan wajib diisi.',
             'email.email' => 'Format email tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
-            'nip.unique' => 'NIP sudah terdaftar.',
-            'nuptk.unique' => 'NUPTK sudah terdaftar.',
             'gender.in' => 'Jenis kelamin tidak valid.',
             'birth_date.before' => 'Tanggal lahir harus sebelum hari ini.',
-            'employment_status.in' => 'Status kepegawaian tidak valid.',
-            'photo.image' => 'File harus berupa gambar.',
-            'photo.max' => 'Ukuran foto maksimal 2MB.',
+            'nip.unique' => 'NIP sudah digunakan guru lain.',
+            'nuptk.unique' => 'NUPTK sudah digunakan guru lain.',
         ];
     }
 }

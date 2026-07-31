@@ -1,10 +1,12 @@
 <?php
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -31,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'tenant' => \App\Http\Middleware\EnsureTenantMiddleware::class,
+            'password.current' => \App\Http\Middleware\EnsurePasswordIsCurrent::class,
         ]);
 
         // Middleware priority
@@ -41,6 +44,23 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // Route model binding yang gagal (mis. baris sudah terhapus) melempar
+        // NotFoundHttpException dengan pesan bawaan Laravel yang membocorkan
+        // FQCN model ("No query results for model [App\...\Classroom] <uuid>")
+        // sampai ke toast pengguna. Balas dengan pesan yang ramah untuk API.
+        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+            if (! $request->expectsJson() && ! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getPrevious() instanceof ModelNotFoundException
+                    ? 'Data tidak ditemukan atau sudah dihapus.'
+                    : 'Alamat yang diminta tidak ditemukan.',
+            ], 404);
+        });
+
         // Render elegant Inertia error pages for web requests
         $exceptions->respond(function (Response $response, Throwable $exception, Request $request) {
             $status = $response->getStatusCode();

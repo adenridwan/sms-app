@@ -21,12 +21,14 @@ class GradeLevel extends Model
         'code',
         'order',
         'description',
+        'is_active',
     ];
 
     protected function casts(): array
     {
         return [
             'order' => 'integer',
+            'is_active' => 'boolean',
         ];
     }
 

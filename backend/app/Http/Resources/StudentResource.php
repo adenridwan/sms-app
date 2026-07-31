@@ -20,6 +20,8 @@ class StudentResource extends JsonResource
             'id' => $this->id,
             'nis' => $this->nis,
             'nisn' => $this->nisn,
+            'unique_code' => $this->unique_code,
+            'rfid_code' => $this->rfid_code,
             'nik' => $profile?->id_number,
             'user' => new UserResource($this->whenLoaded('user')),
             'full_name' => $this->user?->full_name,
@@ -46,7 +48,14 @@ class StudentResource extends JsonResource
                 'id' => $this->currentClass->id,
                 'name' => $this->currentClass->name,
             ] : null),
-            'parents' => ParentResource::collection($this->whenLoaded('parents')),
+            // Closure + ->resolve(): tanpa ->resolve(), AnonymousResourceCollection
+            // ikut ke JSON akhir sebagai objek utuh (dibungkus {"data": [...]}),
+            // padahal students/Show.tsx membaca student.parents sebagai array biasa.
+            // Bentuk closure (bukan whenLoaded('parents') langsung) tetap wajib supaya
+            // saat relasi belum di-load, hasilnya MissingValue murni (dibuang oleh
+            // filter() bawaan JsonResource) — bukan AnonymousResourceCollection yang
+            // resolve()-nya justru meledak karena membungkus MissingValue, bukan Collection.
+            'parents' => $this->whenLoaded('parents', fn () => ParentResource::collection($this->parents)->resolve()),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

@@ -89,6 +89,18 @@ class AttendanceSetting extends Model
     }
 
     /**
+     * Apakah waktu scan pulang berada dalam rentang jam pulang wajar
+     * (check_out_start s/d check_out_end). Di luar rentang → perlu verifikasi.
+     */
+    public function isWithinCheckOutWindow(Carbon $time): bool
+    {
+        $start = $time->copy()->setTimeFromTimeString($this->check_out_start);
+        $end = $time->copy()->setTimeFromTimeString($this->check_out_end);
+
+        return $time->betweenIncluded($start, $end);
+    }
+
+    /**
      * Calculate lateness in minutes
      */
     public function calculateLateness(Carbon $checkInTime): int
@@ -117,5 +129,38 @@ class AttendanceSetting extends Model
     public function isTodayWorkingDay(): bool
     {
         return $this->isWorkingDay(now()->dayOfWeek);
+    }
+
+    /**
+     * Great-circle distance (Haversine) in meters from the school's
+     * configured coordinates to the given point.
+     */
+    public function distanceFromSchool(float $lat, float $lng): float
+    {
+        $earthRadiusMeters = 6371000;
+
+        $latFrom = deg2rad((float) $this->school_latitude);
+        $lngFrom = deg2rad((float) $this->school_longitude);
+        $latTo = deg2rad($lat);
+        $lngTo = deg2rad($lng);
+
+        $latDelta = $latTo - $latFrom;
+        $lngDelta = $lngTo - $lngFrom;
+
+        $a = sin($latDelta / 2) ** 2 + cos($latFrom) * cos($latTo) * sin($lngDelta / 2) ** 2;
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadiusMeters * $c;
+    }
+
+    /**
+     * Whether the school's coordinates have been configured, i.e. a
+     * geofence check is actually possible.
+     */
+    public function hasSchoolLocation(): bool
+    {
+        return $this->school_latitude !== null
+            && $this->school_longitude !== null
+            && $this->location_radius !== null;
     }
 }

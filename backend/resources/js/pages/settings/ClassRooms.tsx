@@ -99,6 +99,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return fallback;
 }
 
+function getErrorStatus(error: unknown): number | null {
+    if (error && typeof error === 'object' && 'response' in error) {
+        return (error as { response?: { status?: number } }).response?.status ?? null;
+    }
+    return null;
+}
+
 export default function SettingsClassRooms() {
     const [classrooms, setClassrooms] = useState<Classroom[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
@@ -119,6 +126,10 @@ export default function SettingsClassRooms() {
 
     // Delete dialog
     const [deletingClassroom, setDeletingClassroom] = useState<Classroom | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    // Penjaga anti klik ganda: state `deleting` baru terlihat setelah render
+    // berikutnya, sedangkan dua klik cepat bisa masuk sebelum itu.
+    const deletingRef = useRef(false);
 
     // Import dialog
     const [importOpen, setImportOpen] = useState(false);
@@ -235,15 +246,26 @@ export default function SettingsClassRooms() {
     };
 
     const handleDelete = async () => {
-        if (!deletingClassroom) return;
+        if (!deletingClassroom || deletingRef.current) return;
+        deletingRef.current = true;
+        setDeleting(true);
         try {
             await classroomsApi.delete(deletingClassroom.id);
             toast.success('Kelas berhasil dihapus');
+        } catch (error) {
+            // 404 = barisnya memang sudah tidak ada (klik konfirmasi dobel,
+            // atau dihapus dari tab/perangkat lain). Bagi pengguna hasilnya
+            // sama saja: kelas terhapus — jangan tampilkan itu sebagai error.
+            if (getErrorStatus(error) === 404) {
+                toast.success('Kelas berhasil dihapus');
+            } else {
+                toast.error(getErrorMessage(error, 'Gagal menghapus kelas'));
+            }
+        } finally {
+            deletingRef.current = false;
+            setDeleting(false);
             setDeletingClassroom(null);
             fetchClassrooms();
-        } catch (error) {
-            toast.error(getErrorMessage(error, 'Gagal menghapus kelas'));
-            setDeletingClassroom(null);
         }
     };
 
@@ -656,7 +678,12 @@ export default function SettingsClassRooms() {
             </Dialog>
 
             {/* Delete Dialog */}
-            <AlertDialog open={!!deletingClassroom} onOpenChange={() => setDeletingClassroom(null)}>
+            <AlertDialog
+                open={!!deletingClassroom}
+                onOpenChange={(open) => {
+                    if (!open && !deletingRef.current) setDeletingClassroom(null);
+                }}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Hapus Kelas</AlertDialogTitle>
@@ -667,11 +694,21 @@ export default function SettingsClassRooms() {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDeletingClassroom(null)}>
+                        <AlertDialogCancel disabled={deleting} onClick={() => setDeletingClassroom(null)}>
                             Batal
                         </AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-                            Hapus
+                        {/* preventDefault: biarkan dialog tetap terbuka sampai
+                            request selesai, supaya tombolnya tidak sempat
+                            diklik dua kali selama animasi penutupan. */}
+                        <AlertDialogAction
+                            disabled={deleting}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                handleDelete();
+                            }}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            {deleting ? 'Menghapus...' : 'Hapus'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

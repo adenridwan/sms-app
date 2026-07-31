@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1\Attendance;
 
+use App\Domain\Attendance\Enums\AttendanceStatus;
+use App\Exports\Attendance\StudentAttendanceMonthlyExport;
+use App\Exports\Attendance\TeacherAttendanceMonthlyExport;
 use App\Http\Controllers\Api\ApiController;
 use App\Infrastructure\Persistence\Eloquent\Attendance\StudentAttendance;
 use App\Infrastructure\Persistence\Eloquent\Attendance\EmployeeAttendance;
@@ -12,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Maatwebsite\Excel\Facades\Excel;
 
 class AttendanceReportController extends ApiController
 {
@@ -70,6 +74,37 @@ class AttendanceReportController extends ApiController
         $filename = "laporan-absensi-{$type}-{$month}-{$year}.pdf";
 
         return $pdf->download($filename);
+    }
+
+    /**
+     * Download monthly report as an Excel spreadsheet.
+     */
+    public function downloadExcel(Request $request)
+    {
+        $data = $request->validate([
+            'month' => ['required', 'integer', 'between:1,12'],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'classroom_id' => ['nullable', 'uuid', 'exists:classrooms,id'],
+            'type' => ['in:student,teacher'],
+        ]);
+
+        $month = $data['month'];
+        $year = $data['year'];
+        $type = $data['type'] ?? 'student';
+
+        $workingDays = $this->getWorkingDaysInMonth($month, $year);
+
+        if ($type === 'student') {
+            $reportData = $this->generateStudentReportData($month, $year, $workingDays, $data['classroom_id'] ?? null);
+            $export = new StudentAttendanceMonthlyExport($reportData['students']);
+        } else {
+            $reportData = $this->generateTeacherReportData($month, $year, $workingDays);
+            $export = new TeacherAttendanceMonthlyExport($reportData['teachers']);
+        }
+
+        $filename = "laporan-absensi-{$type}-{$month}-{$year}.xlsx";
+
+        return Excel::download($export, $filename);
     }
 
     /**
@@ -151,8 +186,11 @@ class AttendanceReportController extends ApiController
         $startDate = Carbon::create($year, $month, 1)->toDateString();
         $endDate = Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
 
-        // Get students
-        $query = StudentEnrollment::with(['student.user'])
+        // Get students (user.profile eager-loaded: full_name reads
+        // first_name/last_name off the profile — omitting it throws under
+        // strict/no-lazy-loading mode, which is exactly how this bug
+        // surfaced while adding tests for the PDF/Excel export).
+        $query = StudentEnrollment::with(['student.user.profile'])
             ->where('status', 'active');
 
         if ($classroomId) {
@@ -172,29 +210,26 @@ class AttendanceReportController extends ApiController
             $student = $enrollment->student;
             $studentAttendances = $attendances->get($student->id) ?? collect();
 
-            $stats = [
-                'hadir' => 0,
-                'sakit' => 0,
-                'izin' => 0,
-                'alfa' => 0,
-                'tanpa_keterangan' => 0,
-                'total_late_minutes' => 0,
-            ];
+            $rawCounts = [];
+            $totalLateMinutes = 0;
+            $noRecordDays = 0;
 
             foreach ($workingDays as $day) {
                 $dayAttendances = $studentAttendances->get($day);
                 if ($dayAttendances && $dayAttendances->count() > 0) {
                     $att = $dayAttendances->first();
-                    $status = $att->status;
-                    if (isset($stats[$status])) {
-                        $stats[$status]++;
-                    }
-                    $stats['total_late_minutes'] += $att->menit_keterlambatan ?? 0;
+                    $rawCounts[$att->status] = ($rawCounts[$att->status] ?? 0) + 1;
+                    $totalLateMinutes += $att->menit_keterlambatan ?? 0;
                 } else {
                     // No record = Alfa
-                    $stats['alfa']++;
+                    $noRecordDays++;
                 }
             }
+
+            $stats = AttendanceStatus::summaryFromRaw($rawCounts);
+            $stats['alfa'] += $noRecordDays;
+            $stats['tanpa_keterangan'] = $stats['alfa'];
+            $stats['total_late_minutes'] = $totalLateMinutes;
 
             $totalDays = count($workingDays);
             $presentDays = $stats['hadir'];
@@ -299,18 +334,20 @@ class AttendanceReportController extends ApiController
             $query = StudentAttendance::forDate($date)
                 ->when($classroomId, fn($q) => $q->where('classroom_id', $classroomId));
 
-            $stats = $query->select('status', DB::raw('COUNT(*) as total'))
+            $rawCounts = $query->select('status', DB::raw('COUNT(*) as total'))
                 ->groupBy('status')
                 ->pluck('total', 'status')
                 ->toArray();
 
+            $summary = AttendanceStatus::summaryFromRaw($rawCounts);
+
             $trend[] = [
                 'date' => $date,
                 'day_name' => Carbon::parse($date)->translatedFormat('l'),
-                'hadir' => $stats['hadir'] ?? 0,
-                'sakit' => $stats['sakit'] ?? 0,
-                'izin' => $stats['izin'] ?? 0,
-                'alfa' => ($stats['alfa'] ?? 0) + ($stats['tanpa_keterangan'] ?? 0),
+                'hadir' => $summary['hadir'],
+                'sakit' => $summary['sakit'],
+                'izin' => $summary['izin'],
+                'alfa' => $summary['alfa'],
             ];
         }
 

@@ -13,11 +13,13 @@ use Inertia\Response;
 class PageController extends Controller
 {
     /**
-     * Display the dashboard.
+     * Display the dashboard with real per-role stats (R5).
      */
-    public function dashboard(): Response
+    public function dashboard(\App\Services\DashboardStatsService $stats): Response
     {
-        return Inertia::render('Dashboard');
+        return Inertia::render('Dashboard', [
+            'stats' => $stats->statsFor(request()->user()),
+        ]);
     }
 
     /**
@@ -27,7 +29,8 @@ class PageController extends Controller
     {
         $filters = request()->only(['search', 'status', 'gender']);
 
-        $students = Student::with(['user.profile', 'currentClass'])
+        $students = Student::visibleTo(request()->user())
+            ->with(['user.profile', 'currentClass'])
             ->when($filters['search'] ?? null, function ($q, $search) {
                 $q->where(function ($query) use ($search) {
                     $query->where('nis', 'ilike', "%{$search}%")
@@ -75,6 +78,83 @@ class PageController extends Controller
     public function createStudent(): Response
     {
         return Inertia::render('students/Create');
+    }
+
+    /**
+     * Display student detail: identitas, data pendidikan, kredensial
+     * presensi (QR/RFID), dan daftar orang tua/wali.
+     */
+    public function showStudent(Student $student): Response
+    {
+        $student->load(['user.profile', 'currentClass', 'parents.user']);
+
+        return Inertia::render('students/Show', [
+            // ->resolve() sengaja dipakai (bukan objek Resource langsung):
+            // Inertia membungkus Responsable/JsonResource dalam {"data":{...}},
+            // yang bikin form React gagal terisi (field selalu undefined) —
+            // lihat catatan yang sama di editTeacher().
+            'student' => (new StudentResource($student))->resolve(),
+        ]);
+    }
+
+    /**
+     * Display edit student form, prefilled server-side (Inertia props).
+     */
+    public function editStudent(Student $student): Response
+    {
+        $student->load(['user.profile']);
+
+        return Inertia::render('students/Edit', [
+            'student' => (new StudentResource($student))->resolve(),
+        ]);
+    }
+
+    /**
+     * Display the "wajib ganti password" page (initial/reset password).
+     */
+    public function changePassword(): Response
+    {
+        return Inertia::render('auth/ChangePasswordRequired');
+    }
+
+    /**
+     * Display create teacher form.
+     */
+    public function createTeacher(): Response
+    {
+        return Inertia::render('teachers/Create');
+    }
+
+    /**
+     * Display edit teacher form, prefilled server-side (Inertia props).
+     */
+    public function editTeacher(Teacher $teacher): Response
+    {
+        $teacher->load(['user.profile', 'media']);
+
+        return Inertia::render('teachers/Edit', [
+            // ->resolve() sengaja dipakai, bukan meneruskan objek Resource
+            // langsung: Inertia memperlakukan Responsable (termasuk
+            // JsonResource) via toResponse(), yang membungkusnya dalam
+            // {"data": {...}} — prop 'teacher' jadi {data:{...}} dan form
+            // React gagal terisi (field selalu undefined). ->resolve()
+            // memberi array polos tanpa pembungkus.
+            'teacher' => (new TeacherResource($teacher))->resolve(),
+        ]);
+    }
+
+    /**
+     * Display teacher detail: identitas, kepegawaian, dokumen, dan
+     * ringkasan penugasan read-only (Fase G2, TEACHER-MODULE-PLAN.md §4).
+     */
+    public function showTeacher(Teacher $teacher, \App\Services\TeacherAssignmentService $assignments): Response
+    {
+        $teacher->load(['user.profile', 'media']);
+
+        return Inertia::render('teachers/Show', [
+            'teacher' => (new TeacherResource($teacher))->resolve(),
+            'assignment' => $assignments->overview($teacher),
+        ]);
     }
 
     /**
@@ -180,6 +260,147 @@ class PageController extends Controller
     }
 
     /**
+     * Daftar kelas aktif (tahun ajaran aktif) untuk dropdown di halaman
+     * absensi siswa/QR code/laporan — tenant sudah dibatasi otomatis lewat
+     * BelongsToTenant pada model Classroom.
+     *
+     * Bila `$scopeToTeacher` true: role admin-tier (Student::ALL_ACCESS_ROLES)
+     * tetap lihat semua kelas; guru/wali_kelas dibatasi ke kelas yang diampu
+     * (teachingClassroomIds(), R3); role lain (tidak berhak) dapat array
+     * kosong — bukan error, halaman terkait memang bukan untuk mereka.
+     */
+    private function activeClassroomsForAttendance(bool $scopeToTeacher = false)
+    {
+        $query = \App\Infrastructure\Persistence\Eloquent\Academic\Classroom::whereHas(
+            'academicYear',
+            fn ($q) => $q->where('is_active', true)
+        )
+            ->where('is_active', true)
+            ->with(['gradeLevel', 'major'])
+            ->orderBy('name');
+
+        if ($scopeToTeacher) {
+            $user = request()->user();
+            $roles = $user->getRoleNames();
+
+            if ($roles->intersect(\App\Infrastructure\Persistence\Eloquent\Student\Student::ALL_ACCESS_ROLES)->isEmpty()) {
+                if ($roles->intersect(['guru', 'wali_kelas'])->isNotEmpty()) {
+                    $query->whereIn('id', $user->teachingClassroomIds());
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+            }
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * Display daily student attendance page.
+     */
+    public function attendanceStudents(): Response
+    {
+        $classrooms = $this->activeClassroomsForAttendance(scopeToTeacher: true);
+
+        return Inertia::render('attendance/students/Index', [
+            'classrooms' => $classrooms,
+            'initialClassroom' => $classrooms->count() === 1 ? $classrooms->first()->id : null,
+        ]);
+    }
+
+    /**
+     * Display daily teacher attendance page.
+     */
+    public function attendanceTeachers(): Response
+    {
+        return Inertia::render('attendance/teachers/Index');
+    }
+
+    /**
+     * Display leave permissions (izin/sakit) list.
+     */
+    public function attendancePermissions(): Response
+    {
+        return Inertia::render('attendance/permissions/Index');
+    }
+
+    /**
+     * Display the create-leave-permission form.
+     */
+    public function attendancePermissionsCreate(): Response
+    {
+        $students = Student::visibleTo(request()->user())
+            ->with('user.profile')
+            ->orderBy('nis')
+            ->get(['id', 'user_id', 'nis']);
+
+        $teachers = Teacher::with('user.profile')
+            ->get()
+            ->map(fn ($teacher) => [
+                'id' => $teacher->id,
+                'full_name' => $teacher->user?->full_name,
+            ])
+            ->values();
+
+        return Inertia::render('attendance/permissions/Create', [
+            'students' => $students,
+            'teachers' => $teachers,
+        ]);
+    }
+
+    /**
+     * Display holiday calendar management.
+     */
+    public function attendanceHolidays(): Response
+    {
+        return Inertia::render('attendance/holidays/Index');
+    }
+
+    /**
+     * Display QR code management page.
+     */
+    public function attendanceQrCodes(): Response
+    {
+        return Inertia::render('attendance/qr-codes/Index', [
+            'classrooms' => $this->activeClassroomsForAttendance(),
+        ]);
+    }
+
+    /**
+     * Display attendance reports page.
+     */
+    public function attendanceReports(): Response
+    {
+        return Inertia::render('attendance/reports/Index', [
+            'classrooms' => $this->activeClassroomsForAttendance(),
+        ]);
+    }
+
+    /**
+     * Display attendance & notification settings page.
+     */
+    public function attendanceSettings(): Response
+    {
+        return Inertia::render('attendance/settings/Index');
+    }
+
+    /**
+     * Display the card ID template editor (Fase 5, drag-and-drop).
+     */
+    public function attendanceCardTemplates(): Response
+    {
+        return Inertia::render('attendance/card-templates/Index');
+    }
+
+    /**
+     * Display the QR/RFID scanner kiosk page.
+     */
+    public function scanner(): Response
+    {
+        return Inertia::render('scanner/Index');
+    }
+
+    /**
      * Display schedules page.
      */
     public function schedules(): Response
@@ -204,18 +425,39 @@ class PageController extends Controller
     }
 
     /**
-     * Display class rooms settings page.
+     * Display menu visibility settings page (Pengaturan Menu).
+     * Data matriks diambil halaman via API (GET /api/v1/settings/menu).
      */
-    public function settingsClassRooms(): Response
+    public function menuSettings(): Response
     {
-        return Inertia::render('settings/ClassRooms');
+        return Inertia::render('settings/MenuSettings');
     }
 
     /**
-     * Display majors settings page.
+     * Display class rooms page (Akademik) — sebelumnya dobel di menu
+     * Pengaturan (`/settings/class-rooms`), sekarang satu-satunya lokasi
+     * (lihat catatan redirect di routes/web.php).
      */
-    public function settingsMajors(): Response
+    public function academicClassRooms(): Response
     {
-        return Inertia::render('settings/Majors');
+        return Inertia::render('academic/ClassRooms');
+    }
+
+    /**
+     * Display majors page (Akademik) — sebelumnya dobel di menu Pengaturan
+     * (`/settings/majors`), sekarang satu-satunya lokasi.
+     */
+    public function academicMajors(): Response
+    {
+        return Inertia::render('academic/Majors');
+    }
+
+    /**
+     * Display grade levels (tingkat kelas) master data page — sebelumnya
+     * hanya API tanpa antarmuka pengelolaan sama sekali.
+     */
+    public function academicGradeLevels(): Response
+    {
+        return Inertia::render('academic/GradeLevels');
     }
 }

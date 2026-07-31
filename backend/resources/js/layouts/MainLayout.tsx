@@ -56,12 +56,18 @@ import {
 } from 'lucide-react';
 
 interface MenuChild {
+    /** Kunci stabil, sinkron dengan App\Support\MenuRegistry (backend) */
+    key: string;
     title: string;
     href: string;
     permission?: string;
+    /** Hanya tampil untuk super admin */
+    superAdminOnly?: boolean;
 }
 
 interface MenuItem {
+    /** Kunci stabil, sinkron dengan App\Support\MenuRegistry (backend) */
+    key: string;
     title: string;
     icon: React.ElementType;
     href?: string;
@@ -71,101 +77,114 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
     {
+        key: 'dashboard',
         title: 'Dashboard',
         icon: LayoutDashboard,
         href: '/dashboard',
         permission: 'dashboard.view',
     },
     {
+        key: 'academic',
         title: 'Akademik',
         icon: BookOpen,
         permission: 'academic.view',
         children: [
-            { title: 'Tahun Ajaran', href: '/academic/years', permission: 'academic-years.view' },
-            { title: 'Kurikulum', href: '/academic/curricula', permission: 'curricula.view' },
-            { title: 'Mata Pelajaran', href: '/academic/subjects', permission: 'subjects.view' },
-            { title: 'Kelas', href: '/academic/classrooms', permission: 'classrooms.view' },
-            { title: 'Jadwal', href: '/academic/schedules', permission: 'schedules.view' },
+            { key: 'academic.years', title: 'Tahun Ajaran', href: '/academic/years', permission: 'academic-years.view' },
+            { key: 'academic.curricula', title: 'Kurikulum', href: '/academic/curricula', permission: 'curricula.view' },
+            { key: 'academic.subjects', title: 'Mata Pelajaran', href: '/academic/subjects', permission: 'subjects.view' },
+            { key: 'academic.grade-levels', title: 'Tingkat Kelas', href: '/academic/grade-levels', permission: 'grade-levels.view' },
+            { key: 'academic.majors', title: 'Jurusan', href: '/academic/majors', permission: 'majors.view' },
+            { key: 'academic.classrooms', title: 'Kelas', href: '/academic/classrooms', permission: 'classrooms.view' },
+            { key: 'academic.schedules', title: 'Jadwal', href: '/academic/schedules', permission: 'schedules.view' },
         ],
     },
     {
+        key: 'students',
         title: 'Siswa',
         icon: Users,
         permission: 'students.view',
         children: [
-            { title: 'Data Siswa', href: '/students' },
-            { title: 'Pendaftaran', href: '/students/enrollment', permission: 'students.enroll' },
-            { title: 'Prestasi', href: '/students/achievements' },
+            { key: 'students.data', title: 'Data Siswa', href: '/students' },
+            { key: 'students.enrollment', title: 'Pendaftaran', href: '/students/enrollment', permission: 'students.enroll' },
+            { key: 'students.achievements', title: 'Prestasi', href: '/students/achievements' },
         ],
     },
     {
+        key: 'staff',
         title: 'Guru & Staff',
         icon: GraduationCap,
         permission: 'teachers.view',
         children: [
-            { title: 'Data Guru', href: '/teachers', permission: 'teachers.view' },
-            { title: 'Data Staff', href: '/staff', permission: 'staff.view' },
-            { title: 'Pengajuan Cuti', href: '/leave-requests' },
+            { key: 'staff.teachers', title: 'Data Guru', href: '/teachers', permission: 'teachers.view' },
+            { key: 'staff.staff', title: 'Data Staff', href: '/staff', permission: 'staff.view' },
+            { key: 'staff.leave', title: 'Pengajuan Cuti', href: '/leave-requests' },
         ],
     },
     {
+        key: 'attendance',
         title: 'Absensi',
         icon: Calendar,
         permission: 'attendance.view',
         children: [
-            { title: 'Absensi Siswa', href: '/attendance/students' },
-            { title: 'Absensi Pegawai', href: '/attendance/employees' },
-            { title: 'Rekap Absensi', href: '/attendance/summary' },
+            { key: 'attendance.students', title: 'Absensi Siswa', href: '/attendance/students' },
+            { key: 'attendance.teachers', title: 'Absensi Pegawai', href: '/attendance/teachers' },
+            { key: 'attendance.reports', title: 'Rekap Absensi', href: '/attendance/reports' },
         ],
     },
     {
+        key: 'grades',
         title: 'Nilai & Ujian',
         icon: ClipboardList,
         permission: 'grades.view',
         children: [
-            { title: 'Ujian', href: '/exams', permission: 'exams.view' },
-            { title: 'Input Nilai', href: '/grades/input', permission: 'grades.input' },
-            { title: 'Rekap Nilai', href: '/grades' },
+            { key: 'grades.exams', title: 'Ujian', href: '/exams', permission: 'exams.view' },
+            { key: 'grades.input', title: 'Input Nilai', href: '/grades/input', permission: 'grades.input' },
+            { key: 'grades.recap', title: 'Rekap Nilai', href: '/grades' },
         ],
     },
     {
+        key: 'finance',
         title: 'Keuangan',
         icon: DollarSign,
         permission: 'finance.view',
         children: [
-            { title: 'Tagihan', href: '/finance/fees' },
-            { title: 'Pembayaran', href: '/finance/payments' },
-            { title: 'Laporan', href: '/finance/reports', permission: 'finance.report' },
+            { key: 'finance.fees', title: 'Tagihan', href: '/finance/fees' },
+            { key: 'finance.payments', title: 'Pembayaran', href: '/finance/payments' },
+            { key: 'finance.reports', title: 'Laporan', href: '/finance/reports', permission: 'finance.report' },
         ],
     },
     {
+        key: 'library',
         title: 'Perpustakaan',
         icon: Library,
         permission: 'library.view',
         children: [
-            { title: 'Katalog Buku', href: '/library/books' },
-            { title: 'Peminjaman', href: '/library/loans' },
-            { title: 'Anggota', href: '/library/members' },
+            { key: 'library.books', title: 'Katalog Buku', href: '/library/books' },
+            { key: 'library.loans', title: 'Peminjaman', href: '/library/loans' },
+            { key: 'library.members', title: 'Anggota', href: '/library/members' },
         ],
     },
     {
+        key: 'reports',
         title: 'Laporan',
         icon: FileText,
         permission: 'reports.view',
         children: [
-            { title: 'Rapor', href: '/reports/report-cards' },
-            { title: 'Generate Laporan', href: '/reports/generate' },
+            { key: 'reports.report-cards', title: 'Rapor', href: '/reports/report-cards' },
+            { key: 'reports.generate', title: 'Generate Laporan', href: '/reports/generate' },
         ],
     },
     {
+        key: 'settings',
         title: 'Pengaturan',
         icon: Settings,
-        permission: 'settings.view',
+        // Tanpa permission di level group — visibilitas ditentukan anak-anaknya.
+        // Group otomatis tersembunyi bila tak ada anak yang lolos.
         children: [
-            { title: 'Umum', href: '/settings', permission: 'settings.view' },
-            { title: 'Kelas', href: '/settings/class-rooms', permission: 'classrooms.view' },
-            { title: 'Jurusan', href: '/settings/majors', permission: 'majors.view' },
-            { title: 'Pengguna', href: '/settings/users', permission: 'users.view' },
+            { key: 'settings.general', title: 'Umum', href: '/settings', permission: 'settings.view' },
+            { key: 'settings.attendance', title: 'Pengaturan Absensi', href: '/attendance/settings', permission: 'settings.attendance' },
+            { key: 'settings.menu', title: 'Pengaturan Menu', href: '/settings/menu', permission: 'settings.manage' },
+            { key: 'settings.users', title: 'Pengguna', href: '/settings/users', superAdminOnly: true },
         ],
     },
 ];
@@ -264,9 +283,13 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children, title }: MainLayoutProps) {
-    const { auth, tenant, tenants, app } = usePage<PageProps>().props;
+    const { auth, tenant, tenants, app, menu } = usePage<PageProps>().props;
     const { url } = usePage();
     const currentPath = url.split('?')[0];
+
+    // Set menu_key yang boleh tampil (resolusi permission + config per-role dari
+    // server). Digabung dengan hasPermission sebagai lapis pertahanan tambahan.
+    const menuVisibleSet = new Set(menu?.visible ?? []);
 
     // Tenant switcher for super admin: the selected tenant is persisted in
     // localStorage and sent as the X-Tenant-ID header on every API request.
@@ -303,6 +326,14 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
         if (!permission) return true;
         if (auth.user?.user_type === 'super_admin') return true;
         return auth.user?.permissions?.includes(permission) ?? false;
+    };
+
+    // Visibilitas menu dari config server (Opsi A: hanya bisa menyembunyikan).
+    // Super admin selalu lihat semua. Item tanpa key → jatuh ke hasPermission.
+    const isMenuVisible = (key?: string) => {
+        if (auth.user?.user_type === 'super_admin') return true;
+        if (!key) return true;
+        return menuVisibleSet.has(key);
     };
 
     const isPathActive = (href: string) =>
@@ -344,11 +375,14 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                 <SidebarContent className="scrollbar-thin">
                     <SidebarMenu className="px-2 py-2">
                         {menuItems.map((item) => {
-                            if (!hasPermission(item.permission)) return null;
+                            if (!hasPermission(item.permission) || !isMenuVisible(item.key)) return null;
 
                             if (item.children) {
-                                const visibleChildren = item.children.filter((child) =>
-                                    hasPermission(child.permission)
+                                const visibleChildren = item.children.filter(
+                                    (child) =>
+                                        hasPermission(child.permission) &&
+                                        (!child.superAdminOnly || isSuperAdmin) &&
+                                        isMenuVisible(child.key)
                                 );
                                 if (visibleChildren.length === 0) return null;
 

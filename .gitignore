@@ -24,12 +24,20 @@ backend/storage/framework/cache/*
 backend/storage/framework/sessions/*
 backend/storage/framework/views/*
 backend/storage/logs/*
+backend/storage/app/public/*
 backend/bootstrap/cache/*
 !backend/storage/framework/cache/.gitkeep
 !backend/storage/framework/sessions/.gitkeep
 !backend/storage/framework/views/.gitkeep
 !backend/storage/logs/.gitkeep
+!backend/storage/app/public/.gitkeep
 !backend/bootstrap/cache/.gitkeep
+
+# Redis dump
+backend/dump.rdb
+
+# Claude Code local tool config (not part of the app)
+.claude/
 
 # Build
 backend/public/hot
@@ -82,3 +90,15 @@ docker/nginx/ssl/*.crt
 *.exe
 *.o
 *.so
+
+# Archives (jangan simpan arsip besar di git)
+*.rar
+*.zip
+*.7z
+
+# Folder bersarang tak sengaja (bukan bagian repo)
+/sms-app/
+
+# Windows reserved-name junk (mis. dari redirect `> nul`)
+nul
+**/nul

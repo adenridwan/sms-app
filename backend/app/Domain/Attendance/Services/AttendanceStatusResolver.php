@@ -129,23 +129,17 @@ class AttendanceStatusResolver
             ->whereDate('attendance_date', $date)
             ->get();
 
-        $stats = [
-            'hadir' => 0,
-            'sakit' => 0,
-            'izin' => 0,
-            'alfa' => 0,
-            'tanpa_keterangan' => 0,
-            'belum_scan' => 0,
-            'total_late_minutes' => 0,
-        ];
+        $rawCounts = [];
+        $totalLateMinutes = 0;
 
         foreach ($attendances as $attendance) {
-            $status = $attendance->status;
-            if (isset($stats[$status])) {
-                $stats[$status]++;
-            }
-            $stats['total_late_minutes'] += $attendance->menit_keterlambatan ?? 0;
+            $rawCounts[$attendance->status] = ($rawCounts[$attendance->status] ?? 0) + 1;
+            $totalLateMinutes += $attendance->menit_keterlambatan ?? 0;
         }
+
+        $stats = AttendanceStatus::summaryFromRaw($rawCounts);
+        $stats['belum_scan'] = 0;
+        $stats['total_late_minutes'] = $totalLateMinutes;
 
         return $stats;
     }

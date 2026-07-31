@@ -22,7 +22,9 @@ class SemesterResource extends JsonResource
                 'name' => $this->academicYear->name,
             ]),
             'name' => $this->name,
-            'semester_number' => $this->semester_number,
+            // Kolom DB-nya `number`; `semester_number` adalah nama di kontrak API.
+            // Sebelumnya membaca $this->semester_number yang tidak pernah ada.
+            'semester_number' => $this->number,
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
             'is_active' => $this->is_active,

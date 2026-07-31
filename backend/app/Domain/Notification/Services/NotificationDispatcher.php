@@ -2,6 +2,7 @@
 
 namespace App\Domain\Notification\Services;
 
+use App\Domain\Attendance\Enums\AttendanceStatus;
 use App\Infrastructure\Persistence\Eloquent\Attendance\NotificationSetting;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
@@ -11,13 +12,16 @@ class NotificationDispatcher
 {
     private WhatsAppService $whatsAppService;
     private TelegramService $telegramService;
+    private EmailService $emailService;
 
     public function __construct(
         WhatsAppService $whatsAppService,
-        TelegramService $telegramService
+        TelegramService $telegramService,
+        EmailService $emailService
     ) {
         $this->whatsAppService = $whatsAppService;
         $this->telegramService = $telegramService;
+        $this->emailService = $emailService;
     }
 
     /**
@@ -27,6 +31,7 @@ class NotificationDispatcher
     {
         $this->whatsAppService->initializeForTenant($tenantId);
         $this->telegramService->initializeForTenant($tenantId);
+        $this->emailService->initializeForTenant($tenantId);
 
         return $this;
     }
@@ -68,6 +73,11 @@ class NotificationDispatcher
             $this->sendWhatsApp($guardian->phone, $template, $replacements);
         }
 
+        // Email ke wali (jika ada & diaktifkan)
+        if ($guardian && $guardian->email && $settings->notify_email) {
+            $this->sendEmail($guardian->email, 'Notifikasi Kehadiran Siswa', $template, $replacements);
+        }
+
         // Also send to Telegram if configured
         $this->sendToTelegramDefault($template, $replacements);
     }
@@ -96,6 +106,10 @@ class NotificationDispatcher
         $guardian = $student->primaryGuardian();
         if ($guardian && $guardian->phone) {
             $this->sendWhatsApp($guardian->phone, $template, $replacements);
+        }
+
+        if ($guardian && $guardian->email && $settings->notify_email) {
+            $this->sendEmail($guardian->email, 'Notifikasi Kepulangan Siswa', $template, $replacements);
         }
 
         $this->sendToTelegramDefault($template, $replacements);
@@ -133,6 +147,10 @@ class NotificationDispatcher
             $this->sendWhatsApp($teacher->no_hp, $template, $replacements);
         }
 
+        if ($teacher->user?->email && $settings->notify_email) {
+            $this->sendEmail($teacher->user->email, 'Notifikasi Kehadiran', $template, $replacements);
+        }
+
         $this->sendToTelegramDefault($template, $replacements);
     }
 
@@ -159,6 +177,10 @@ class NotificationDispatcher
 
         if ($teacher->no_hp) {
             $this->sendWhatsApp($teacher->no_hp, $template, $replacements);
+        }
+
+        if ($teacher->user?->email && $settings->notify_email) {
+            $this->sendEmail($teacher->user->email, 'Notifikasi Kepulangan', $template, $replacements);
         }
 
         $this->sendToTelegramDefault($template, $replacements);
@@ -234,6 +256,117 @@ class NotificationDispatcher
     }
 
     /**
+     * Kirim satu pesan rekap harian ke wali murid (mode batch, Fase 3
+     * ATTENDANCE-PLAN.md §5) — WhatsApp saja, TANPA Telegram per siswa
+     * (rekap kelas ke Telegram dikirim sekali lewat
+     * dispatchClassSummaryToTelegram, bukan 30x per siswa).
+     *
+     * Pemanggil wajib sudah memanggil forTenant(). Mengembalikan hasil per
+     * siswa supaya job batch bisa merekap: 'sent'|'no_phone'|'skipped'|'failed'.
+     */
+    public function dispatchStudentRecap(
+        Student $student,
+        AttendanceStatus $status,
+        ?string $checkInTime,
+        int $lateMinutes,
+        string $date
+    ): string {
+        $settings = NotificationSetting::getForTenant($student->tenant_id);
+
+        // Sakit/izin sudah dinotifikasi saat approval izin; BelumScan berarti
+        // hari belum selesai — dua-duanya bukan urusan rekap.
+        if ($status->isExcused() || $status === AttendanceStatus::BelumScan) {
+            return 'skipped';
+        }
+
+        if ($status->isAbsent()) {
+            if (!$settings->notify_absent) {
+                return 'skipped';
+            }
+            $templateKey = 'absent';
+        } elseif ($lateMinutes > 0) {
+            if (!$settings->notify_late) {
+                return 'skipped';
+            }
+            $templateKey = 'check_in_late';
+        } else {
+            if (!$settings->notify_check_in) {
+                return 'skipped';
+            }
+            $templateKey = 'check_in';
+        }
+
+        $guardian = $student->primaryGuardian();
+        if (!$guardian || !$guardian->phone) {
+            return 'no_phone';
+        }
+
+        if (!$this->whatsAppService->isAvailable()) {
+            return 'failed';
+        }
+
+        $replacements = [
+            'nama' => $student->user?->full_name ?? 'Siswa',
+            'jenis' => 'Siswa',
+            'waktu' => $checkInTime ?? '-',
+            'menit' => (string) $lateMinutes,
+            'tanggal' => \Carbon\Carbon::parse($date)->format('d/m/Y'),
+        ];
+
+        try {
+            $sent = $this->whatsAppService->sendAttendanceNotification(
+                $guardian->phone,
+                $settings->getTemplate($templateKey),
+                $replacements
+            );
+
+            return $sent ? 'sent' : 'failed';
+        } catch (\Exception $e) {
+            Log::warning('NotificationDispatcher: recap WhatsApp send failed', [
+                'student_id' => $student->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 'failed';
+        }
+    }
+
+    /**
+     * Kirim satu pesan rekap kelas ke chat Telegram default tenant.
+     * Pemanggil wajib sudah memanggil forTenant().
+     */
+    public function dispatchClassSummaryToTelegram(
+        string $className,
+        string $date,
+        array $summary,
+        array $absentNames
+    ): void {
+        if (!$this->telegramService->isAvailable()) {
+            return;
+        }
+
+        $lines = [
+            "Rekap Absensi {$className} — " . \Carbon\Carbon::parse($date)->format('d/m/Y'),
+            'Hadir: ' . ($summary['hadir'] ?? 0),
+            'Sakit: ' . ($summary['sakit'] ?? 0),
+            'Izin: ' . ($summary['izin'] ?? 0),
+            'Alfa: ' . ($summary['alfa'] ?? 0),
+        ];
+
+        if (!empty($absentNames)) {
+            $lines[] = 'Siswa alfa: ' . implode(', ', $absentNames);
+        }
+
+        try {
+            $this->telegramService->sendToDefault(implode("\n", $lines));
+        } catch (\Exception $e) {
+            Log::warning('NotificationDispatcher: class summary Telegram send failed', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Send WhatsApp message (best-effort)
      */
     private function sendWhatsApp(string $phone, string $template, array $replacements): void
@@ -246,6 +379,24 @@ class NotificationDispatcher
             $this->whatsAppService->sendAttendanceNotification($phone, $template, $replacements);
         } catch (\Exception $e) {
             Log::warning('NotificationDispatcher: WhatsApp send failed', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send email (best-effort). Pemanggil sudah memanggil forTenant().
+     */
+    private function sendEmail(string $to, string $subject, string $template, array $replacements): void
+    {
+        if (! $this->emailService->isAvailable()) {
+            return;
+        }
+
+        try {
+            $this->emailService->sendAttendanceNotification($to, $subject, $template, $replacements);
+        } catch (\Exception $e) {
+            Log::warning('NotificationDispatcher: Email send failed', [
                 'error' => $e->getMessage(),
             ]);
         }
