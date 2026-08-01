@@ -425,6 +425,15 @@ class PageController extends Controller
     }
 
     /**
+     * Display menu visibility settings page (Pengaturan Menu).
+     * Data matriks diambil halaman via API (GET /api/v1/settings/menu).
+     */
+    public function menuSettings(): Response
+    {
+        return Inertia::render('settings/MenuSettings');
+    }
+
+    /**
      * Display class rooms page (Akademik) — sebelumnya dobel di menu
      * Pengaturan (`/settings/class-rooms`), sekarang satu-satunya lokasi
      * (lihat catatan redirect di routes/web.php).

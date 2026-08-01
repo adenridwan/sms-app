@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Web\PageController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -46,19 +47,23 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     Route::get('/dashboard', [PageController::class, 'dashboard'])->name('dashboard');
 
     // Students Module
+    // {student} dibatasi ke format UUID: tanpa ini, segmen non-UUID (mis.
+    // link sidebar /students/enrollment yang belum punya halaman sendiri)
+    // ikut tertangkap wildcard ini dan menyebabkan 500 SQLSTATE[22P02] di
+    // Postgres (bukan 404) karena query langsung mencoba cast string ke uuid.
     Route::prefix('students')->name('students.')->group(function () {
         Route::get('/', [PageController::class, 'students'])->name('index');
         Route::get('/create', [PageController::class, 'createStudent'])->name('create');
-        Route::get('/{student}', [PageController::class, 'showStudent'])->name('show');
-        Route::get('/{student}/edit', [PageController::class, 'editStudent'])->name('edit');
+        Route::get('/{student}', [PageController::class, 'showStudent'])->whereUuid('student')->name('show');
+        Route::get('/{student}/edit', [PageController::class, 'editStudent'])->whereUuid('student')->name('edit');
     });
 
     // Teachers Module
     Route::prefix('teachers')->name('teachers.')->group(function () {
         Route::get('/', [PageController::class, 'teachers'])->name('index');
         Route::get('/create', [PageController::class, 'createTeacher'])->name('create');
-        Route::get('/{teacher}', [PageController::class, 'showTeacher'])->name('show');
-        Route::get('/{teacher}/edit', [PageController::class, 'editTeacher'])->name('edit');
+        Route::get('/{teacher}', [PageController::class, 'showTeacher'])->whereUuid('teacher')->name('show');
+        Route::get('/{teacher}/edit', [PageController::class, 'editTeacher'])->whereUuid('teacher')->name('edit');
     });
 
     // Academic Module
@@ -100,6 +105,9 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     // Settings Module
     Route::prefix('settings')->name('settings.')->group(function () {
         Route::get('/', [PageController::class, 'settings'])->name('index');
+        Route::get('/menu', [PageController::class, 'menuSettings'])
+            ->middleware('permission:settings.manage')
+            ->name('menu');
         Route::get('/users', [PageController::class, 'users'])
             ->middleware('role:super_admin')
             ->name('users');
@@ -117,6 +125,8 @@ Route::middleware(['auth', 'password.current'])->group(function () {
 });
 
 // Fallback: elegant 404 page for unknown routes
-Route::fallback(function () {
-    return Inertia::render('Error', ['status' => 404]);
+Route::fallback(function (Request $request) {
+    return Inertia::render('Error', ['status' => 404])
+        ->toResponse($request)
+        ->setStatusCode(404);
 });

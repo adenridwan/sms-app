@@ -1,7 +1,8 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { qrCodeApi } from '@/services/attendance';
+import { teachersApi, type ImportResult } from '@/services/api';
 import { printAttendanceCardsWithTemplate } from '@/lib/attendanceCardPrint';
 import type { PageProps } from '@/types';
 import MainLayout from '@/layouts/MainLayout';
@@ -23,8 +24,48 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, MoreHorizontal, Eye, Pencil, Printer } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Plus,
+    Search,
+    MoreHorizontal,
+    Eye,
+    Pencil,
+    Printer,
+    Download,
+    Upload,
+    FileSpreadsheet,
+    Loader2,
+} from 'lucide-react';
 import type { Teacher, PaginatedResponse } from '@/types';
+
+function downloadBlob(data: Blob, filename: string) {
+    const url = URL.createObjectURL(data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    if (error && typeof error === 'object' && 'response' in error) {
+        const response = (error as { response?: { data?: { message?: string } } }).response;
+        if (response?.data?.message) return response.data.message;
+    }
+    return fallback;
+}
 
 interface Props {
     teachers: PaginatedResponse<Teacher>;
@@ -36,9 +77,80 @@ interface Props {
 }
 
 export default function TeachersIndex({ teachers, filters }: Props) {
-    const { tenant } = usePage<PageProps>().props;
+    const { tenant, auth } = usePage<PageProps>().props;
     const [search, setSearch] = useState(filters.search || '');
     const [printingId, setPrintingId] = useState<string | null>(null);
+
+    // Import/export hanya untuk yang memang berizin — guru hanya punya
+    // teachers.view-own, siswa & orang tua tidak punya keduanya, jadi
+    // tombolnya tidak ditampilkan alih-alih berujung 403.
+    const isSuperAdmin = auth?.user?.user_type === 'super_admin';
+    const permissions = auth?.user?.permissions ?? [];
+    const canExport = isSuperAdmin || permissions.includes('teachers.view');
+    const canImport = isSuperAdmin || permissions.includes('teachers.create');
+
+    // Export & import (pola mengikuti menu Kelas)
+    const [exporting, setExporting] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [importing, setImporting] = useState(false);
+    const [importResult, setImportResult] = useState<ImportResult | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleExport = async (format: 'xlsx' | 'csv') => {
+        setExporting(true);
+        try {
+            const response = await teachersApi.export(format);
+            downloadBlob(response.data, `guru.${format}`);
+            toast.success('Data guru berhasil diexport');
+        } catch {
+            toast.error('Gagal export data guru');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleDownloadTemplate = async (format: 'xlsx' | 'csv') => {
+        try {
+            const response = await teachersApi.template(format);
+            downloadBlob(response.data, `template-import-guru.${format}`);
+            toast.success('Template berhasil didownload');
+        } catch {
+            toast.error('Gagal download template');
+        }
+    };
+
+    const handleImport = async () => {
+        if (!importFile) {
+            toast.error('Pilih file terlebih dahulu');
+            return;
+        }
+
+        setImporting(true);
+        setImportResult(null);
+        try {
+            const response = await teachersApi.import(importFile);
+            const result = response.data.data;
+            setImportResult(result);
+            toast.success(
+                `Import selesai: ${result.created} guru ditambahkan, ${result.updated} diperbarui`
+            );
+            // Daftar guru dirender server-side (Inertia), jadi disegarkan
+            // lewat router, bukan state lokal.
+            router.reload({ only: ['teachers'] });
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Gagal import data guru'));
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    const closeImportDialog = () => {
+        setImportOpen(false);
+        setImportFile(null);
+        setImportResult(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
 
     const handlePrintCard = async (teacher: Teacher) => {
         setPrintingId(teacher.id);
@@ -103,12 +215,38 @@ export default function TeachersIndex({ teachers, filters }: Props) {
                             Kelola data guru sekolah
                         </p>
                     </div>
-                    <Button asChild>
-                        <Link href="/teachers/create">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Tambah Guru
-                        </Link>
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        {canExport && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" disabled={exporting}>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Export
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleExport('xlsx')}>
+                                        Excel (.xlsx)
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                        CSV (.csv)
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                        {canImport && (
+                            <Button variant="outline" onClick={() => setImportOpen(true)}>
+                                <Upload className="mr-2 h-4 w-4" />
+                                Import
+                            </Button>
+                        )}
+                        <Button asChild>
+                            <Link href="/teachers/create">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Tambah Guru
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
 
                 <Card>
@@ -237,6 +375,92 @@ export default function TeachersIndex({ teachers, filters }: Props) {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Import Dialog */}
+            <Dialog open={importOpen} onOpenChange={(open) => (open ? setImportOpen(true) : closeImportDialog())}>
+                <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Import Guru</DialogTitle>
+                        <DialogDescription>
+                            Upload file CSV atau Excel sesuai template. Guru dengan NIP yang sudah
+                            terdaftar akan diperbarui, bukan digandakan.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <Alert>
+                            <FileSpreadsheet className="h-4 w-4" />
+                            <AlertTitle>Template Import</AlertTitle>
+                            <AlertDescription>
+                                <p className="mb-2">
+                                    Kolom wajib: nama_depan, email, no_hp, nip, jenis_kelamin,
+                                    tanggal_lahir.
+                                </p>
+                                <p className="mb-2 text-xs text-muted-foreground">
+                                    Jenis kelamin diisi L atau P. Tanggal memakai format
+                                    YYYY-MM-DD atau DD/MM/YYYY. Tanggal lahir dipakai sebagai
+                                    password awal guru.
+                                </p>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleDownloadTemplate('xlsx')}
+                                    >
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Excel
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleDownloadTemplate('csv')}
+                                    >
+                                        <Download className="mr-2 h-4 w-4" />
+                                        CSV
+                                    </Button>
+                                </div>
+                            </AlertDescription>
+                        </Alert>
+                        <div className="space-y-2">
+                            <Label htmlFor="teacher-import-file">File Import</Label>
+                            <Input
+                                id="teacher-import-file"
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".xlsx,.xls,.csv"
+                                onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                            />
+                        </div>
+                        {importResult && (
+                            <Alert variant={importResult.errors.length > 0 ? 'destructive' : 'default'}>
+                                <AlertTitle>Hasil Import</AlertTitle>
+                                <AlertDescription>
+                                    <p>
+                                        {importResult.created} guru ditambahkan,{' '}
+                                        {importResult.updated} guru diperbarui
+                                    </p>
+                                    {importResult.errors.length > 0 && (
+                                        <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-4 text-xs">
+                                            {importResult.errors.map((message, index) => (
+                                                <li key={index}>{message}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={closeImportDialog} disabled={importing}>
+                            Tutup
+                        </Button>
+                        <Button onClick={handleImport} disabled={importing || !importFile}>
+                            {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <Upload className="mr-2 h-4 w-4" />
+                            Import
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </MainLayout>
     );
 }

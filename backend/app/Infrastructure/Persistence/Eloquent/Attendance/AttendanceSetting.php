@@ -89,6 +89,18 @@ class AttendanceSetting extends Model
     }
 
     /**
+     * Apakah waktu scan pulang berada dalam rentang jam pulang wajar
+     * (check_out_start s/d check_out_end). Di luar rentang → perlu verifikasi.
+     */
+    public function isWithinCheckOutWindow(Carbon $time): bool
+    {
+        $start = $time->copy()->setTimeFromTimeString($this->check_out_start);
+        $end = $time->copy()->setTimeFromTimeString($this->check_out_end);
+
+        return $time->betweenIncluded($start, $end);
+    }
+
+    /**
      * Calculate lateness in minutes
      */
     public function calculateLateness(Carbon $checkInTime): int

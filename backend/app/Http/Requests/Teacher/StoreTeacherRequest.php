@@ -53,7 +53,10 @@ class StoreTeacherRequest extends FormRequest
             'status' => ['nullable', Rule::in(['active', 'inactive', 'on_leave', 'retired', 'terminated'])],
             'certification_status' => ['nullable', Rule::in(['certified', 'not_certified', 'in_progress'])],
             'certification_number' => ['nullable', 'string', 'max:50'],
-            'education_level' => ['nullable', 'string', 'in:d3,d4,s1,s2,s3'],
+            // Bukan `in:` lagi: jenjang di luar daftar dropdown (mis.
+            // PESANTREN) disimpan apa adanya di kolom string yang sama —
+            // lihat opsi "Lainnya" pada form guru.
+            'education_level' => ['nullable', 'string', 'max:50'],
             'education_major' => ['nullable', 'string', 'max:100'],
             'university' => ['nullable', 'string', 'max:150'],
             'teaching_experience_years' => ['nullable', 'integer', 'min:0', 'max:60'],

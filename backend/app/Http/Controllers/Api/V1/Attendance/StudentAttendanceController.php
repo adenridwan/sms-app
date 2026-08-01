@@ -93,6 +93,7 @@ class StudentAttendanceController extends ApiController
                 'status_color' => $status->color(),
                 'check_in_time' => $attendance?->check_in_time?->format('H:i'),
                 'check_out_time' => $attendance?->check_out_time?->format('H:i'),
+                'perlu_verifikasi' => (bool) ($attendance?->perlu_verifikasi ?? false),
                 'menit_keterlambatan' => $attendance?->menit_keterlambatan ?? 0,
                 'notes' => $attendance?->notes,
             ];

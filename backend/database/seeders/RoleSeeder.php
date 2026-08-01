@@ -177,6 +177,8 @@ class RoleSeeder extends Seeder
                 'staff.view', 'staff.create', 'staff.update',
                 // Attendance
                 'attendance.view', 'attendance.check-in', 'attendance.check-out',
+                // Attendance settings (TU boleh atur jam absen & notifikasi)
+                'settings.attendance',
                 // Reports
                 'reports.view', 'reports.generate',
                 // Notifications

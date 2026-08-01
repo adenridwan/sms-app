@@ -60,6 +60,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Semesters
         Route::apiResource('semesters', \App\Http\Controllers\Api\V1\Academic\SemesterController::class);
+        Route::post('semesters/{semester}/activate', [\App\Http\Controllers\Api\V1\Academic\SemesterController::class, 'activate'])->name('semesters.activate');
 
         // Curricula
         Route::apiResource('curricula', \App\Http\Controllers\Api\V1\Academic\CurriculumController::class);
@@ -103,6 +104,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Student Module
     // ===========================================
     Route::prefix('students')->name('students.')->group(function () {
+        // Rute statis wajib didaftarkan sebelum apiResource, kalau tidak
+        // "export"/"template"/"import" akan tertangkap sebagai {student}.
+        Route::get('export', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'export'])->name('export');
+        Route::get('template', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'template'])->name('template');
+        Route::post('import', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'import'])
+            ->middleware('throttle:uploads')
+            ->name('import');
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Student\StudentController::class)->parameter('', 'student');
         Route::get('{student}/guardians', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'guardians'])->name('guardians');
         Route::get('{student}/enrollments', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'enrollments'])->name('enrollments');
@@ -122,6 +130,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Teacher Module
     // ===========================================
     Route::prefix('teachers')->name('teachers.')->group(function () {
+        // Rute statis wajib didaftarkan sebelum apiResource, kalau tidak
+        // "export"/"template"/"import" akan tertangkap sebagai {teacher}.
+        Route::get('export', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'export'])->name('export');
+        Route::get('template', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'template'])->name('template');
+        Route::post('import', [\App\Http\Controllers\Api\V1\Teacher\TeacherController::class, 'import'])
+            ->middleware('throttle:uploads')
+            ->name('import');
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Teacher\TeacherController::class)->parameter('', 'teacher');
         // Penempatan kelas (menu Kelas) & kompetensi mapel (menu Mata Pelajaran)
         // sengaja tidak dikelola dari sini — lihat TEACHER-MODULE-PLAN.md §2.
@@ -187,9 +202,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('qr/teachers/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkTeachers'])->name('qr.teachers.bulk');
         Route::get('qr/teachers/{teacher}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadTeacher'])->name('qr.teacher.download');
 
+        // Export QR/RFID untuk pembuatan kartu (Excel / ZIP gambar / PDF)
+        Route::get('qr/export', [\App\Http\Controllers\Api\V1\Attendance\QrExportController::class, 'export'])->name('qr.export');
+        Route::post('qr/generate-rfid', [\App\Http\Controllers\Api\V1\Attendance\QrExportController::class, 'generateRfid'])->name('qr.generate-rfid');
+
         // RFID
         Route::put('rfid/students/{student}', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'updateStudent'])->name('rfid.students.update');
         Route::put('rfid/teachers/{teacher}', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'updateTeacher'])->name('rfid.teachers.update');
+        // Kode RFID terbitan sistem (kartu writable) — lihat RfidCodeGenerator
+        Route::post('rfid/teachers/{teacher}/generate', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'generateTeacher'])->name('rfid.teachers.generate');
 
         // Card Templates (Fase 5 — editor kartu ID drag-and-drop)
         Route::get('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'show'])->name('card-templates.show');
@@ -202,12 +223,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('reports/excel', [\App\Http\Controllers\Api\V1\Attendance\AttendanceReportController::class, 'downloadExcel'])->name('reports.excel');
         Route::get('reports/weekly-trend', [\App\Http\Controllers\Api\V1\Attendance\AttendanceReportController::class, 'weeklyTrend'])->name('reports.weekly-trend');
 
-        // Settings
-        Route::get('settings', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'show'])->name('settings.show');
-        Route::put('settings', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'update'])->name('settings.update');
-        Route::post('settings/test-whatsapp', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'testWhatsApp'])->name('settings.test-whatsapp');
-        Route::post('settings/test-telegram', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'testTelegram'])->name('settings.test-telegram');
-        Route::get('settings/telegram-bot-info', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'telegramBotInfo'])->name('settings.telegram-bot-info');
+        // Settings — hanya admin/TU/super admin (permission settings.attendance).
+        // Sebelumnya hanya di-guard auth:sanctum sehingga guru/siswa bisa ubah
+        // jam absen & kredensial WA/Telegram lewat URL langsung (GAP-1).
+        Route::middleware('permission:settings.attendance')->group(function () {
+            Route::get('settings', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'show'])->name('settings.show');
+            Route::put('settings', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'update'])->name('settings.update');
+            Route::post('settings/test-whatsapp', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'testWhatsApp'])->name('settings.test-whatsapp');
+            Route::post('settings/test-telegram', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'testTelegram'])->name('settings.test-telegram');
+            Route::post('settings/test-email', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'testEmail'])->name('settings.test-email');
+            Route::get('settings/telegram-bot-info', [\App\Http\Controllers\Api\V1\Attendance\AttendanceSettingController::class, 'telegramBotInfo'])->name('settings.telegram-bot-info');
+        });
     });
 
     // ===========================================
@@ -326,9 +352,24 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Setting Module
     // ===========================================
     Route::prefix('settings')->name('settings.')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\V1\Setting\SettingController::class, 'index'])->name('index');
-        Route::get('{group}', [\App\Http\Controllers\Api\V1\Setting\SettingController::class, 'show'])->name('show');
-        Route::put('{group}', [\App\Http\Controllers\Api\V1\Setting\SettingController::class, 'update'])->name('update');
+        // Catatan: SettingController generik (index/show/update {group}) dulu
+        // dirujuk di sini tapi FILE-nya tidak pernah ada — menyebabkan
+        // `php artisan route:list` crash & endpoint /settings 500. Rute mati itu
+        // dihapus; yang tersisa hanya Pengaturan Menu di bawah.
+
+        // Pengaturan Menu (visibilitas per-role) — admin only.
+        Route::middleware('permission:settings.manage')->group(function () {
+            Route::get('menu', [\App\Http\Controllers\Api\V1\Setting\MenuSettingController::class, 'show'])->name('menu.show');
+            Route::put('menu', [\App\Http\Controllers\Api\V1\Setting\MenuSettingController::class, 'update'])->name('menu.update');
+        });
+
+        // Profil Sekolah (nama, NPSN, jenjang, kontak, logo). Update memakai POST
+        // karena membawa berkas (multipart), samakan pola dengan upload avatar.
+        Route::middleware('permission:settings.school')->group(function () {
+            Route::get('school', [\App\Http\Controllers\Api\V1\Setting\SchoolProfileController::class, 'show'])->name('school.show');
+            Route::post('school', [\App\Http\Controllers\Api\V1\Setting\SchoolProfileController::class, 'update'])->name('school.update');
+        });
+
     });
 
     // ===========================================
@@ -343,6 +384,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('users/{user}/activate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'activate'])->name('users.activate');
             Route::post('users/{user}/deactivate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'deactivate'])->name('users.deactivate');
             Route::post('users/{user}/reset-password', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'resetPassword'])->name('users.reset-password');
+
+            // Manajemen sekolah (tenant) tingkat sistem.
+            Route::get('schools', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'index'])->name('schools.index');
+            Route::post('schools', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'store'])->name('schools.store');
+            Route::post('schools/{id}/activate', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'activate'])->name('schools.activate');
+            Route::post('schools/{id}/deactivate', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'deactivate'])->name('schools.deactivate');
+            Route::delete('schools/{id}', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'destroy'])->name('schools.destroy');
         });
 
         // Roles & Permissions

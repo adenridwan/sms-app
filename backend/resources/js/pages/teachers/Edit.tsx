@@ -17,6 +17,17 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DatePicker } from '@/components/ui/date-picker';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import {
@@ -34,6 +45,7 @@ import {
     Download,
     FolderOpen,
     ScanLine,
+    Sparkles,
 } from 'lucide-react';
 import { teachersApi } from '@/services/api';
 import type { Teacher, TeacherFormData, TeacherDocumentCollection, TeacherDocuments } from '@/types';
@@ -86,6 +98,23 @@ const certificationLabels: Record<string, string> = {
     not_certified: 'Belum Sertifikasi',
     in_progress: 'Proses Sertifikasi',
 };
+
+/**
+ * Jenjang pendidikan. `teachers.education_level` adalah kolom string biasa
+ * (tanpa enum di DB), jadi jenjang di luar daftar ini — mis. PESANTREN —
+ * disimpan apa adanya sebagai keterangan pada kolom yang sama. Perbandingan
+ * huruf kecil sekaligus menampung data lama yang tersimpan "S1" (kapital).
+ */
+const educationLevels = ['d3', 'd4', 's1', 's2', 's3'];
+
+const EDUCATION_OTHER = 'other';
+
+/** Nilai tersimpan yang tidak cocok dengan daftar di atas = jenjang "Lainnya". */
+function isCustomEducation(value: string): boolean {
+    const normalized = value.trim().toLowerCase();
+
+    return normalized !== '' && !educationLevels.includes(normalized);
+}
 
 function DocumentCollectionCard({
     label,
@@ -206,6 +235,17 @@ function getSingleErrorMessage(error: unknown, fallback: string): string {
     return fallback;
 }
 
+/**
+ * Isian yang tidak boleh dikosongkan saat mengubah data guru. Dicek di sisi
+ * klien lebih dulu supaya notifikasinya seragam dengan halaman lain (toast +
+ * ringkasan di atas form), bukan hanya border merah.
+ */
+const requiredFields: Array<{ field: keyof TeacherFormData; label: string; tab: string }> = [
+    { field: 'first_name', label: 'Nama Depan', tab: 'akun' },
+    { field: 'email', label: 'Email', tab: 'akun' },
+    { field: 'gender', label: 'Jenis Kelamin', tab: 'akun' },
+];
+
 function getErrors(error: unknown): { fieldErrors: Record<string, string>; message: string | null } {
     if (axios.isAxiosError(error) && error.response) {
         const { message, errors } = error.response.data ?? {};
@@ -219,6 +259,21 @@ function getErrors(error: unknown): { fieldErrors: Record<string, string>; messa
         return { fieldErrors: {}, message: message ?? 'Gagal menyimpan data guru' };
     }
     return { fieldErrors: {}, message: 'Tidak dapat terhubung ke server' };
+}
+
+const TAB_VALUES = ['akun', 'kepegawaian', 'dokumen'];
+
+/**
+ * Tab awal dibaca dari query `?tab=` supaya tautan dari luar bisa membuka
+ * tab tertentu — dipakai tombol "Unggah Foto & Dokumen" pada popup
+ * kredensial setelah guru baru dibuat (halaman Tambah Guru).
+ */
+function initialTab(): string {
+    if (typeof window === 'undefined') return 'akun';
+
+    const requested = new URLSearchParams(window.location.search).get('tab');
+
+    return requested && TAB_VALUES.includes(requested) ? requested : 'akun';
 }
 
 function toFormData(teacher: Teacher): TeacherFormData {
@@ -256,7 +311,7 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [processing, setProcessing] = useState(false);
-    const [tab, setTab] = useState('akun');
+    const [tab, setTab] = useState(initialTab);
 
     // Tab 3: foto & dokumen — diunggah langsung saat dipilih, terpisah dari
     // form utama (bukan bagian payload PUT tab 1/2)
@@ -266,8 +321,26 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
     const [documents, setDocuments] = useState<TeacherDocuments>(teacher.documents ?? emptyDocuments);
     const [uploadingCollection, setUploadingCollection] = useState<TeacherDocumentCollection | null>(null);
 
+    // Jenjang "Lainnya" hanya status tampilan; nilainya sendiri (mis.
+    // "PESANTREN") tetap disimpan di data.education_level.
+    const [educationOther, setEducationOther] = useState(() =>
+        isCustomEducation(teacher.education_level ?? '')
+    );
+
     const update = <K extends keyof TeacherFormData>(field: K, value: TeacherFormData[K]) => {
         setData((d) => ({ ...d, [field]: value }));
+    };
+
+    const handleEducationLevelChange = (value: string) => {
+        if (value === EDUCATION_OTHER) {
+            setEducationOther(true);
+            update('education_level', '');
+
+            return;
+        }
+
+        setEducationOther(false);
+        update('education_level', value);
     };
 
     const handlePhotoSelect = async (file: File) => {
@@ -300,18 +373,63 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
     const [rfidCode, setRfidCode] = useState(teacher.rfid_code ?? '');
     const [rfidSaving, setRfidSaving] = useState(false);
     const [rfidError, setRfidError] = useState<string | null>(null);
+    // Mode baca kartu: reader RFID USB umumnya berperilaku seperti keyboard —
+    // mengetikkan UID kartu lalu menekan Enter. Jadi cukup fokuskan kursor ke
+    // input, lalu simpan begitu Enter diterima.
+    const [readingCard, setReadingCard] = useState(false);
+    const [rfidGenerating, setRfidGenerating] = useState(false);
+    const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+    const rfidInputRef = useRef<HTMLInputElement>(null);
 
-    const handleSaveRfid = async () => {
+    const handleSaveRfid = async (codeOverride?: string) => {
+        const code = (codeOverride ?? rfidCode).trim();
+
         setRfidSaving(true);
         setRfidError(null);
         try {
-            const response = await teachersApi.updateRfid(teacher.id, rfidCode.trim() || null);
+            const response = await teachersApi.updateRfid(teacher.id, code || null);
             setRfidCode(response.data.data?.rfid_code ?? '');
             toast.success('Kode RFID berhasil disimpan');
         } catch (error) {
             setRfidError(getSingleErrorMessage(error, 'Gagal menyimpan kode RFID'));
         } finally {
             setRfidSaving(false);
+        }
+    };
+
+    const startReadingCard = () => {
+        setRfidError(null);
+        setRfidCode('');
+        setReadingCard(true);
+        // Fokus setelah render supaya input sudah dalam keadaan kosong
+        window.setTimeout(() => rfidInputRef.current?.focus(), 0);
+    };
+
+    const handleRfidKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key !== 'Enter') return;
+
+        // Reader mengirim Enter sebagai penutup; jangan sampai form utama
+        // ikut ter-submit.
+        event.preventDefault();
+        setReadingCard(false);
+        // Ambil dari elemen, bukan state: karakter terakhir dari reader bisa
+        // saja belum sempat ter-render saat Enter tiba.
+        handleSaveRfid(event.currentTarget.value);
+    };
+
+    const handleGenerateRfid = async () => {
+        setConfirmRegenerate(false);
+        setRfidGenerating(true);
+        setRfidError(null);
+        setReadingCard(false);
+        try {
+            const response = await teachersApi.generateRfid(teacher.id);
+            setRfidCode(response.data.data.rfid_code);
+            toast.success('Kode RFID baru dibuat dan disimpan');
+        } catch (error) {
+            setRfidError(getSingleErrorMessage(error, 'Gagal membuat kode RFID'));
+        } finally {
+            setRfidGenerating(false);
         }
     };
 
@@ -340,9 +458,21 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
 
     const submit = async (e: FormEvent) => {
         e.preventDefault();
-        setProcessing(true);
         setErrors({});
         setFormError(null);
+
+        const missing = requiredFields.filter(({ field }) => !String(data[field] ?? '').trim());
+        if (missing.length > 0) {
+            setErrors(
+                Object.fromEntries(missing.map(({ field, label }) => [field, `${label} wajib diisi.`]))
+            );
+            setFormError('Lengkapi isian wajib yang ditandai merah.');
+            setTab(missing[0].tab);
+            toast.error(`Isian wajib belum lengkap: ${missing.map((m) => m.label).join(', ')}`);
+            return;
+        }
+
+        setProcessing(true);
 
         try {
             await teachersApi.update(teacher.id, data);
@@ -351,7 +481,15 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
         } catch (error) {
             const { fieldErrors, message } = getErrors(error);
             setErrors(fieldErrors);
-            if (message) setFormError(message);
+
+            if (message) {
+                setFormError(message);
+                toast.error(message);
+            } else {
+                setFormError('Periksa kembali isian yang ditandai merah.');
+                toast.error('Data guru gagal disimpan, periksa isian yang ditandai merah.');
+            }
+
             if (
                 ['first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'birth_place', 'religion', 'address', 'id_number'].some(
                     (f) => fieldErrors[f]
@@ -506,11 +644,13 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="birth_date">Tanggal Lahir</Label>
-                                            <Input
+                                            <DatePicker
                                                 id="birth_date"
-                                                type="date"
                                                 value={data.birth_date}
-                                                onChange={(e) => update('birth_date', e.target.value)}
+                                                onChange={(value) => update('birth_date', value)}
+                                                placeholder="Pilih tanggal lahir"
+                                                invalid={!!errors.birth_date}
+                                                toYear={new Date().getFullYear()}
                                             />
                                         </div>
                                     </div>
@@ -573,11 +713,12 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
                                     <div className="grid gap-4 sm:grid-cols-3">
                                         <div className="space-y-2">
                                             <Label htmlFor="join_date">Tanggal Masuk</Label>
-                                            <Input
+                                            <DatePicker
                                                 id="join_date"
-                                                type="date"
                                                 value={data.join_date}
-                                                onChange={(e) => update('join_date', e.target.value)}
+                                                onChange={(value) => update('join_date', value)}
+                                                placeholder="Pilih tanggal masuk"
+                                                fromYear={1970}
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -648,21 +789,50 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
                                         <div className="space-y-2">
                                             <Label>Pendidikan</Label>
                                             <Select
-                                                value={data.education_level}
-                                                onValueChange={(v) => update('education_level', v)}
+                                                value={
+                                                    educationOther
+                                                        ? EDUCATION_OTHER
+                                                        : data.education_level.toLowerCase()
+                                                }
+                                                onValueChange={handleEducationLevelChange}
                                             >
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Jenjang" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="d3">D3</SelectItem>
-                                                    <SelectItem value="d4">D4</SelectItem>
-                                                    <SelectItem value="s1">S1</SelectItem>
-                                                    <SelectItem value="s2">S2</SelectItem>
-                                                    <SelectItem value="s3">S3</SelectItem>
+                                                    {educationLevels.map((level) => (
+                                                        <SelectItem key={level} value={level}>
+                                                            {level.toUpperCase()}
+                                                        </SelectItem>
+                                                    ))}
+                                                    <SelectItem value={EDUCATION_OTHER}>Lainnya</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
+
+                                        {educationOther && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="education_level_note">
+                                                    Keterangan Pendidikan
+                                                </Label>
+                                                <Input
+                                                    id="education_level_note"
+                                                    placeholder="Contoh: PESANTREN"
+                                                    value={data.education_level}
+                                                    onChange={(e) =>
+                                                        update('education_level', e.target.value)
+                                                    }
+                                                    className={
+                                                        errors.education_level ? 'border-destructive' : ''
+                                                    }
+                                                />
+                                                {errors.education_level && (
+                                                    <p className="text-sm text-destructive">
+                                                        {errors.education_level}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                         <div className="space-y-2">
                                             <Label htmlFor="education_major">Jurusan</Label>
                                             <Input
@@ -756,19 +926,75 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
                                             Kode Kartu RFID
                                         </Label>
                                         <p className="mb-2 text-xs text-muted-foreground">
-                                            Nomor dari kartu RFID fisik guru. Harus unik lintas guru &amp; siswa.
+                                            Isi dari UID kartu fisik (pakai tombol Baca Kartu) atau
+                                            terbitkan kode baru bila sekolah membuat kartunya sendiri.
+                                            Harus unik lintas guru &amp; siswa.
                                         </p>
                                         <div className="flex max-w-md gap-2">
                                             <Input
+                                                ref={rfidInputRef}
                                                 value={rfidCode}
                                                 onChange={(e) => setRfidCode(e.target.value)}
-                                                placeholder="Contoh: 04A2B9C1"
-                                                className={rfidError ? 'border-destructive' : ''}
+                                                onKeyDown={handleRfidKeyDown}
+                                                placeholder={
+                                                    readingCard
+                                                        ? 'Tempelkan kartu ke reader...'
+                                                        : 'Contoh: 04A2B9C1'
+                                                }
+                                                className={
+                                                    rfidError
+                                                        ? 'border-destructive'
+                                                        : readingCard
+                                                          ? 'border-primary ring-2 ring-ring ring-offset-2'
+                                                          : ''
+                                                }
                                             />
-                                            <Button type="button" size="sm" onClick={handleSaveRfid} disabled={rfidSaving}>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                onClick={() => handleSaveRfid()}
+                                                disabled={rfidSaving || rfidGenerating}
+                                            >
                                                 {rfidSaving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
                                                 Simpan
                                             </Button>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <Button
+                                                type="button"
+                                                variant={readingCard ? 'secondary' : 'outline'}
+                                                size="sm"
+                                                onClick={() =>
+                                                    readingCard ? setReadingCard(false) : startReadingCard()
+                                                }
+                                                disabled={rfidSaving || rfidGenerating}
+                                            >
+                                                <ScanLine className="mr-2 h-3.5 w-3.5" />
+                                                {readingCard ? 'Batal Baca' : 'Baca Kartu'}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    rfidCode.trim()
+                                                        ? setConfirmRegenerate(true)
+                                                        : handleGenerateRfid()
+                                                }
+                                                disabled={rfidSaving || rfidGenerating}
+                                            >
+                                                {rfidGenerating ? (
+                                                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                    <Sparkles className="mr-2 h-3.5 w-3.5" />
+                                                )}
+                                                Generate Kode
+                                            </Button>
+                                            {readingCard && (
+                                                <span className="text-xs text-muted-foreground">
+                                                    Kursor siap — kode tersimpan otomatis setelah kartu terbaca.
+                                                </span>
+                                            )}
                                         </div>
                                         {rfidError && <p className="mt-1 text-sm text-destructive">{rfidError}</p>}
                                     </div>
@@ -812,6 +1038,31 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
                     </div>
                 </form>
             </div>
+
+            {/* Konfirmasi terbitkan ulang kode RFID */}
+            <AlertDialog open={confirmRegenerate} onOpenChange={setConfirmRegenerate}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Terbitkan Kode RFID Baru?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Kode saat ini <span className="font-medium">{rfidCode}</span> akan
+                            digantikan dan tidak berlaku lagi. Kartu lama guru ini tidak akan
+                            terbaca di mesin absensi setelah kode baru disimpan.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(event) => {
+                                event.preventDefault();
+                                handleGenerateRfid();
+                            }}
+                        >
+                            Terbitkan Kode Baru
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </MainLayout>
     );
 }

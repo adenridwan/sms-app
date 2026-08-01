@@ -162,6 +162,16 @@ export interface NotificationSettings {
     wa_configured: boolean;
     telegram_enabled: boolean;
     telegram_configured: boolean;
+    // Email (SMTP per-tenant)
+    email_enabled: boolean;
+    email_configured: boolean;
+    smtp_host: string | null;
+    smtp_port: number | null;
+    smtp_username: string | null;
+    smtp_encryption: 'tls' | 'ssl' | null;
+    email_from_address: string | null;
+    email_from_name: string | null;
+    notify_email: boolean;
     notify_check_in: boolean;
     notify_check_out: boolean;
     notify_late: boolean;

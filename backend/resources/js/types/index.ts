@@ -53,6 +53,10 @@ export interface PageProps {
     tenant: Tenant | null;
     /** Daftar tenant untuk super admin (tenant switcher); null untuk user biasa */
     tenants?: Tenant[] | null;
+    /** Menu yang boleh tampil untuk user (permission + config visibilitas per-role) */
+    menu?: {
+        visible: string[];
+    };
     flash: {
         success?: string;
         error?: string;

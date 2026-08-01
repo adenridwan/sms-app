@@ -12,13 +12,16 @@ class NotificationDispatcher
 {
     private WhatsAppService $whatsAppService;
     private TelegramService $telegramService;
+    private EmailService $emailService;
 
     public function __construct(
         WhatsAppService $whatsAppService,
-        TelegramService $telegramService
+        TelegramService $telegramService,
+        EmailService $emailService
     ) {
         $this->whatsAppService = $whatsAppService;
         $this->telegramService = $telegramService;
+        $this->emailService = $emailService;
     }
 
     /**
@@ -28,6 +31,7 @@ class NotificationDispatcher
     {
         $this->whatsAppService->initializeForTenant($tenantId);
         $this->telegramService->initializeForTenant($tenantId);
+        $this->emailService->initializeForTenant($tenantId);
 
         return $this;
     }
@@ -69,6 +73,11 @@ class NotificationDispatcher
             $this->sendWhatsApp($guardian->phone, $template, $replacements);
         }
 
+        // Email ke wali (jika ada & diaktifkan)
+        if ($guardian && $guardian->email && $settings->notify_email) {
+            $this->sendEmail($guardian->email, 'Notifikasi Kehadiran Siswa', $template, $replacements);
+        }
+
         // Also send to Telegram if configured
         $this->sendToTelegramDefault($template, $replacements);
     }
@@ -97,6 +106,10 @@ class NotificationDispatcher
         $guardian = $student->primaryGuardian();
         if ($guardian && $guardian->phone) {
             $this->sendWhatsApp($guardian->phone, $template, $replacements);
+        }
+
+        if ($guardian && $guardian->email && $settings->notify_email) {
+            $this->sendEmail($guardian->email, 'Notifikasi Kepulangan Siswa', $template, $replacements);
         }
 
         $this->sendToTelegramDefault($template, $replacements);
@@ -134,6 +147,10 @@ class NotificationDispatcher
             $this->sendWhatsApp($teacher->no_hp, $template, $replacements);
         }
 
+        if ($teacher->user?->email && $settings->notify_email) {
+            $this->sendEmail($teacher->user->email, 'Notifikasi Kehadiran', $template, $replacements);
+        }
+
         $this->sendToTelegramDefault($template, $replacements);
     }
 
@@ -160,6 +177,10 @@ class NotificationDispatcher
 
         if ($teacher->no_hp) {
             $this->sendWhatsApp($teacher->no_hp, $template, $replacements);
+        }
+
+        if ($teacher->user?->email && $settings->notify_email) {
+            $this->sendEmail($teacher->user->email, 'Notifikasi Kepulangan', $template, $replacements);
         }
 
         $this->sendToTelegramDefault($template, $replacements);
@@ -358,6 +379,24 @@ class NotificationDispatcher
             $this->whatsAppService->sendAttendanceNotification($phone, $template, $replacements);
         } catch (\Exception $e) {
             Log::warning('NotificationDispatcher: WhatsApp send failed', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send email (best-effort). Pemanggil sudah memanggil forTenant().
+     */
+    private function sendEmail(string $to, string $subject, string $template, array $replacements): void
+    {
+        if (! $this->emailService->isAvailable()) {
+            return;
+        }
+
+        try {
+            $this->emailService->sendAttendanceNotification($to, $subject, $template, $replacements);
+        } catch (\Exception $e) {
+            Log::warning('NotificationDispatcher: Email send failed', [
                 'error' => $e->getMessage(),
             ]);
         }

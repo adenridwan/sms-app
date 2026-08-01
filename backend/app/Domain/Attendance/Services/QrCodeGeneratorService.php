@@ -44,6 +44,43 @@ class QrCodeGeneratorService
     }
 
     /**
+     * Generate a unique RFID code for a student (kartu RFID writable).
+     * Unik lintas students+teachers dalam tenant (lihat UniqueRfidCode).
+     */
+    public function generateStudentRfid(Student $student): string
+    {
+        $code = $this->uniqueRfidCode($student->tenant_id);
+        $student->update(['rfid_code' => $code]);
+
+        return $code;
+    }
+
+    /**
+     * Generate a unique RFID code for a teacher.
+     */
+    public function generateTeacherRfid(Teacher $teacher): string
+    {
+        $code = $this->uniqueRfidCode($teacher->tenant_id);
+        $teacher->update(['rfid_code' => $code]);
+
+        return $code;
+    }
+
+    /**
+     * Kode RFID unik lintas tabel students & teachers pada satu tenant.
+     */
+    private function uniqueRfidCode(string $tenantId): string
+    {
+        do {
+            $code = 'RF-' . strtoupper(Str::random(10));
+            $clash = Student::where('tenant_id', $tenantId)->where('rfid_code', $code)->exists()
+                || Teacher::where('tenant_id', $tenantId)->where('rfid_code', $code)->exists();
+        } while ($clash);
+
+        return $code;
+    }
+
+    /**
      * Generate QR code image for a student
      */
     public function generateStudentQrCode(Student $student, int $size = 300): string
@@ -80,6 +117,26 @@ class QrCodeGeneratorService
             ->size($size)
             ->margin(1)
             ->generate($code);
+    }
+
+    /**
+     * Generate QR code as raw PNG bytes (via GD, tanpa imagick) memakai
+     * chillerlan/php-qrcode. Dipakai untuk export ZIP/kartu yang butuh raster.
+     *
+     * $size = perkiraan lebar px; QR ~25-33 modul, jadi scale = size/30.
+     */
+    public function generateQrPng(string $code, int $size = 512): string
+    {
+        $scale = max(3, (int) round($size / 30));
+
+        $options = new \chillerlan\QRCode\QROptions([
+            'outputInterface' => \chillerlan\QRCode\Output\QRGdImagePNG::class,
+            'outputBase64' => false,
+            'scale' => $scale,
+            'quietzoneSize' => 1,
+        ]);
+
+        return (new \chillerlan\QRCode\QRCode($options))->render($code);
     }
 
     /**

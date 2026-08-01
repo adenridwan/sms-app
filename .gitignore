@@ -90,3 +90,15 @@ docker/nginx/ssl/*.crt
 *.exe
 *.o
 *.so
+
+# Archives (jangan simpan arsip besar di git)
+*.rar
+*.zip
+*.7z
+
+# Folder bersarang tak sengaja (bukan bagian repo)
+/sms-app/
+
+# Windows reserved-name junk (mis. dari redirect `> nul`)
+nul
+**/nul

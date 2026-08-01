@@ -110,6 +110,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return fallback;
 }
 
+function getErrorStatus(error: unknown): number | null {
+    if (error && typeof error === 'object' && 'response' in error) {
+        return (error as { response?: { status?: number } }).response?.status ?? null;
+    }
+    return null;
+}
+
 export default function AcademicClassRooms() {
     const [classrooms, setClassrooms] = useState<Classroom[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
@@ -139,6 +146,10 @@ export default function AcademicClassRooms() {
 
     // Delete dialog
     const [deletingClassroom, setDeletingClassroom] = useState<Classroom | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    // Penjaga anti klik ganda: state `deleting` baru terlihat setelah render
+    // berikutnya, sedangkan dua klik cepat bisa masuk sebelum itu.
+    const deletingRef = useRef(false);
 
     // Import dialog
     const [importOpen, setImportOpen] = useState(false);
@@ -277,15 +288,26 @@ export default function AcademicClassRooms() {
     };
 
     const handleDelete = async () => {
-        if (!deletingClassroom) return;
+        if (!deletingClassroom || deletingRef.current) return;
+        deletingRef.current = true;
+        setDeleting(true);
         try {
             await classroomsApi.delete(deletingClassroom.id);
             toast.success('Kelas berhasil dihapus');
+        } catch (error) {
+            // 404 = barisnya memang sudah tidak ada (klik konfirmasi dobel,
+            // atau dihapus dari tab/perangkat lain). Bagi pengguna hasilnya
+            // sama saja: kelas terhapus — jangan tampilkan itu sebagai error.
+            if (getErrorStatus(error) === 404) {
+                toast.success('Kelas berhasil dihapus');
+            } else {
+                toast.error(getErrorMessage(error, 'Gagal menghapus kelas'));
+            }
+        } finally {
+            deletingRef.current = false;
+            setDeleting(false);
             setDeletingClassroom(null);
             fetchClassrooms();
-        } catch (error) {
-            toast.error(getErrorMessage(error, 'Gagal menghapus kelas'));
-            setDeletingClassroom(null);
         }
     };
 
@@ -324,7 +346,13 @@ export default function AcademicClassRooms() {
             const response = await classroomsApi.import(importFile);
             const result = response.data.data;
             setImportResult(result);
-            toast.success(`Import selesai: ${result.created} ditambahkan, ${result.updated} diperbarui`);
+
+            let message = `Import selesai: ${result.created} kelas ditambahkan, ${result.updated} diperbarui`;
+            if ((result.grade_levels_created ?? 0) > 0) {
+                message += `. ${result.grade_levels_created} tingkat kelas baru dibuat otomatis`;
+            }
+            toast.success(message);
+
             fetchClassrooms();
         } catch (error) {
             toast.error(getErrorMessage(error, 'Gagal import data kelas'));
@@ -447,7 +475,6 @@ export default function AcademicClassRooms() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-[120px]">Kode</TableHead>
                                             <TableHead>Nama</TableHead>
                                             <TableHead>Tingkat</TableHead>
                                             <TableHead>Jurusan</TableHead>
@@ -461,8 +488,10 @@ export default function AcademicClassRooms() {
                                     <TableBody>
                                         {classrooms.map((classroom) => (
                                             <TableRow key={classroom.id}>
-                                                <TableCell className="font-medium">{classroom.code}</TableCell>
-                                                <TableCell>{classroom.name}</TableCell>
+                                                {/* Kode sengaja tidak ditampilkan di tabel (tetap wajib
+                                                    di form & jadi kunci upsert import) — nama kelas yang
+                                                    jadi identitas baris di sini. */}
+                                                <TableCell className="font-medium">{classroom.name}</TableCell>
                                                 <TableCell>{classroom.grade_level?.name ?? '-'}</TableCell>
                                                 <TableCell>{classroom.major?.name ?? '-'}</TableCell>
                                                 <TableCell>{classroom.homeroom_teacher?.name ?? '-'}</TableCell>
@@ -706,7 +735,7 @@ export default function AcademicClassRooms() {
                         <DialogTitle>Import Kelas</DialogTitle>
                         <DialogDescription>
                             Upload file Excel (.xlsx, .xls) atau CSV sesuai template. Data akan
-                            diimport ke tahun ajaran aktif.
+                            diimport ke tahun ajaran aktif. Tingkat kelas yang belum ada akan dibuat otomatis.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
@@ -715,8 +744,11 @@ export default function AcademicClassRooms() {
                             <AlertTitle>Template Import</AlertTitle>
                             <AlertDescription>
                                 <p className="mb-2">
-                                    Gunakan template default agar format kolom sesuai
-                                    (kode, nama, tingkat, jurusan, ruangan, kapasitas, aktif).
+                                    Kolom: kode, nama, tingkat, jurusan, ruangan, kapasitas, aktif.
+                                </p>
+                                <p className="mb-2 text-xs text-muted-foreground">
+                                    Tingkat: gunakan 1-6 (SD/MI), VII-IX (SMP), atau X-XII (SMA/SMK).
+                                    Tingkat baru akan dibuat otomatis jika belum ada.
                                 </p>
                                 <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
                                     <Download className="mr-2 h-4 w-4" />
@@ -739,7 +771,12 @@ export default function AcademicClassRooms() {
                                 <Alert>
                                     <AlertTitle>Hasil Import</AlertTitle>
                                     <AlertDescription>
-                                        {importResult.created} data ditambahkan, {importResult.updated} data diperbarui
+                                        <p>{importResult.created} kelas ditambahkan, {importResult.updated} kelas diperbarui</p>
+                                        {(importResult.grade_levels_created ?? 0) > 0 && (
+                                            <p className="mt-1 text-green-600">
+                                                {importResult.grade_levels_created} tingkat kelas baru dibuat otomatis
+                                            </p>
+                                        )}
                                     </AlertDescription>
                                 </Alert>
                                 {importResult.errors.length > 0 && (
@@ -838,7 +875,12 @@ export default function AcademicClassRooms() {
             </Dialog>
 
             {/* Delete Dialog */}
-            <AlertDialog open={!!deletingClassroom} onOpenChange={() => setDeletingClassroom(null)}>
+            <AlertDialog
+                open={!!deletingClassroom}
+                onOpenChange={(open) => {
+                    if (!open && !deletingRef.current) setDeletingClassroom(null);
+                }}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Hapus Kelas</AlertDialogTitle>
@@ -849,11 +891,21 @@ export default function AcademicClassRooms() {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDeletingClassroom(null)}>
+                        <AlertDialogCancel disabled={deleting} onClick={() => setDeletingClassroom(null)}>
                             Batal
                         </AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-                            Hapus
+                        {/* preventDefault: biarkan dialog tetap terbuka sampai
+                            request selesai, supaya tombolnya tidak sempat
+                            diklik dua kali selama animasi penutupan. */}
+                        <AlertDialogAction
+                            disabled={deleting}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                handleDelete();
+                            }}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            {deleting ? 'Menghapus...' : 'Hapus'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -92,13 +92,17 @@ export const studentsApi = {
     bulkDelete: (ids: string[]) =>
         api.post<ApiResponse>('/students/bulk-destroy', { ids }),
 
-    export: (params?: Record<string, unknown>) =>
-        api.get<ApiResponse<{ url: string }>>('/students/export', { params }),
+    // Export/template tersedia dalam xlsx (default) & csv
+    export: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/students/export', { params: { format }, responseType: 'blob' }),
+
+    template: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/students/template', { params: { format }, responseType: 'blob' }),
 
     import: (file: File) => {
         const formData = new FormData();
         formData.append('file', file);
-        return api.post<ApiResponse>('/students/import', formData, {
+        return api.post<ApiResponse<ImportResult>>('/students/import', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
     },
@@ -150,6 +154,21 @@ export const teachersApi = {
     getAssignment: (id: string) =>
         api.get<ApiResponse<TeacherAssignment>>(`/teachers/${id}/assignment`),
 
+    // Export/template tersedia dalam xlsx (default) & csv
+    export: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/teachers/export', { params: { format }, responseType: 'blob' }),
+
+    template: (format: 'xlsx' | 'csv' = 'xlsx') =>
+        api.get('/teachers/template', { params: { format }, responseType: 'blob' }),
+
+    import: (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post<ApiResponse<ImportResult>>('/teachers/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
     uploadPhoto: (id: string, file: File) => {
         const formData = new FormData();
         formData.append('photo', file);
@@ -165,6 +184,12 @@ export const teachersApi = {
         api.put<ApiResponse<{ teacher_id: string; rfid_code: string | null }>>(
             `/attendance/rfid/teachers/${id}`,
             { rfid_code }
+        ),
+
+    // Kode RFID terbitan sistem — dibuat & disimpan sekaligus di server
+    generateRfid: (id: string) =>
+        api.post<ApiResponse<{ teacher_id: string; rfid_code: string; previous_rfid_code: string | null }>>(
+            `/attendance/rfid/teachers/${id}/generate`
         ),
 
     uploadDocument: (id: string, collection: TeacherDocumentCollection, file: File) => {
@@ -220,6 +245,16 @@ export const subjectsApi = {
 };
 
 // Academic Years
+// `create_semesters` (opsional) minta backend sekalian membuat Semester Ganjil
+// & Genap dari rentang tanggal tahun ajaran — lihat AcademicYearController.
+export interface AcademicYearPayload {
+    name: string;
+    start_date: string;
+    end_date: string;
+    is_active?: boolean;
+    create_semesters?: boolean;
+}
+
 export const academicYearsApi = {
     list: (params?: Record<string, unknown>) =>
         api.get<ApiResponse<PaginatedResponse<AcademicYear>>>('/academic/years', { params }),
@@ -227,38 +262,48 @@ export const academicYearsApi = {
     get: (id: string) =>
         api.get<ApiResponse<AcademicYear>>(`/academic/years/${id}`),
 
-    create: (data: Partial<AcademicYear>) =>
+    create: (data: AcademicYearPayload) =>
         api.post<ApiResponse<AcademicYear>>('/academic/years', data),
 
-    update: (id: string, data: Partial<AcademicYear>) =>
+    update: (id: string, data: Partial<AcademicYearPayload>) =>
         api.put<ApiResponse<AcademicYear>>(`/academic/years/${id}`, data),
 
     delete: (id: string) =>
         api.delete<ApiResponse>(`/academic/years/${id}`),
 
-    setActive: (id: string) =>
-        api.post<ApiResponse<AcademicYear>>(`/academic/years/${id}/set-active`),
+    // Route-nya bernama /activate (dulu di sini ditulis /set-active → 404).
+    activate: (id: string) =>
+        api.post<ApiResponse<AcademicYear>>(`/academic/years/${id}/activate`),
 };
 
 // Semesters
+export interface SemesterPayload {
+    academic_year_id: string;
+    name: string;
+    semester_number: 1 | 2;
+    start_date: string;
+    end_date: string;
+    is_active?: boolean;
+}
+
 export const semestersApi = {
     list: (params?: Record<string, unknown>) =>
-        api.get<PaginatedResponse<Semester>>('/academic/semesters', { params }),
+        api.get<ApiResponse<PaginatedResponse<Semester>>>('/academic/semesters', { params }),
 
     get: (id: string) =>
         api.get<ApiResponse<Semester>>(`/academic/semesters/${id}`),
 
-    create: (data: Partial<Semester>) =>
+    create: (data: SemesterPayload) =>
         api.post<ApiResponse<Semester>>('/academic/semesters', data),
 
-    update: (id: string, data: Partial<Semester>) =>
+    update: (id: string, data: Partial<SemesterPayload>) =>
         api.put<ApiResponse<Semester>>(`/academic/semesters/${id}`, data),
 
     delete: (id: string) =>
         api.delete<ApiResponse>(`/academic/semesters/${id}`),
 
-    setActive: (id: string) =>
-        api.post<ApiResponse<Semester>>(`/academic/semesters/${id}/set-active`),
+    activate: (id: string) =>
+        api.post<ApiResponse<Semester>>(`/academic/semesters/${id}/activate`),
 };
 
 // Import result shape (majors & classrooms import)
@@ -266,6 +311,7 @@ export interface ImportResult {
     created: number;
     updated: number;
     errors: string[];
+    grade_levels_created?: number; // Only for classrooms import
 }
 
 // Majors (Jurusan)

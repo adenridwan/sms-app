@@ -16,7 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Save, RefreshCw, Clock, MapPin, Bell, MessageSquare, Send } from 'lucide-react';
+import { Save, RefreshCw, Clock, MapPin, Bell, MessageSquare, Send, Mail } from 'lucide-react';
 import { attendanceSettingsApi } from '@/services/attendance';
 import type { AttendanceSettings, NotificationSettings } from '@/types/attendance';
 
@@ -27,6 +27,7 @@ interface FormState {
         wa_sender_number: string;
         telegram_bot_token: string;
         telegram_default_chat_id: string;
+        smtp_password: string;
     };
 }
 
@@ -54,6 +55,16 @@ const defaultNotification = {
     telegram_configured: false,
     telegram_bot_token: '',
     telegram_default_chat_id: '',
+    email_enabled: false,
+    email_configured: false,
+    smtp_host: '',
+    smtp_port: 587,
+    smtp_username: '',
+    smtp_password: '',
+    smtp_encryption: 'tls' as const,
+    email_from_address: '',
+    email_from_name: '',
+    notify_email: true,
     notify_check_in: true,
     notify_check_out: true,
     notify_late: true,
@@ -77,8 +88,10 @@ export default function SettingsIndex() {
     const [saving, setSaving] = useState(false);
     const [testingWa, setTestingWa] = useState(false);
     const [testingTelegram, setTestingTelegram] = useState(false);
+    const [testingEmail, setTestingEmail] = useState(false);
     const [testPhone, setTestPhone] = useState('');
     const [testChatId, setTestChatId] = useState('');
+    const [testEmailAddr, setTestEmailAddr] = useState('');
     const [form, setForm] = useState<FormState>({
         attendance: defaultAttendance,
         notification: defaultNotification,
@@ -151,6 +164,23 @@ export default function SettingsIndex() {
             toast.error(error.response?.data?.message || 'Gagal mengirim pesan Telegram');
         } finally {
             setTestingTelegram(false);
+        }
+    };
+
+    const handleTestEmail = async () => {
+        if (!testEmailAddr.trim()) {
+            toast.error('Masukkan alamat email untuk testing');
+            return;
+        }
+
+        setTestingEmail(true);
+        try {
+            await attendanceSettingsApi.testEmail(testEmailAddr);
+            toast.success('Email berhasil dikirim');
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Gagal mengirim email');
+        } finally {
+            setTestingEmail(false);
         }
     };
 
@@ -529,6 +559,134 @@ export default function SettingsIndex() {
                                                     disabled={testingTelegram}
                                                 >
                                                     <Send className={`mr-2 h-4 w-4 ${testingTelegram ? 'animate-spin' : ''}`} />
+                                                    Test
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* Email (SMTP per-tenant) */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Mail className="h-5 w-5" />
+                                    Email
+                                </CardTitle>
+                                <CardDescription>
+                                    Konfigurasi notifikasi Email (SMTP sekolah)
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label>Aktifkan Email</Label>
+                                        <p className="text-sm text-muted-foreground">
+                                            Kirim notifikasi via Email
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={form.notification.email_enabled}
+                                        onCheckedChange={(checked) => updateNotification('email_enabled', checked)}
+                                    />
+                                </div>
+
+                                {form.notification.email_enabled && (
+                                    <>
+                                        <Separator />
+
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <Label>SMTP Host</Label>
+                                                <Input
+                                                    value={form.notification.smtp_host ?? ''}
+                                                    onChange={(e) => updateNotification('smtp_host', e.target.value)}
+                                                    placeholder="smtp.gmail.com"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>SMTP Port</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={form.notification.smtp_port ?? 587}
+                                                    onChange={(e) => updateNotification('smtp_port', parseInt(e.target.value) || null)}
+                                                    placeholder="587"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <Label>Username SMTP</Label>
+                                                <Input
+                                                    value={form.notification.smtp_username ?? ''}
+                                                    onChange={(e) => updateNotification('smtp_username', e.target.value)}
+                                                    placeholder="akun@sekolah.sch.id"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Password SMTP</Label>
+                                                <Input
+                                                    type="password"
+                                                    value={form.notification.smtp_password}
+                                                    onChange={(e) => updateNotification('smtp_password', e.target.value)}
+                                                    placeholder={form.notification.email_configured ? '•••••• (biarkan kosong jika tidak diubah)' : 'Password / App Password'}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid gap-4 md:grid-cols-3">
+                                            <div className="space-y-2">
+                                                <Label>Enkripsi</Label>
+                                                <Select
+                                                    value={form.notification.smtp_encryption ?? 'tls'}
+                                                    onValueChange={(value) => updateNotification('smtp_encryption', value)}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="tls">TLS</SelectItem>
+                                                        <SelectItem value="ssl">SSL</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Email Pengirim</Label>
+                                                <Input
+                                                    value={form.notification.email_from_address ?? ''}
+                                                    onChange={(e) => updateNotification('email_from_address', e.target.value)}
+                                                    placeholder="noreply@sekolah.sch.id"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Nama Pengirim</Label>
+                                                <Input
+                                                    value={form.notification.email_from_name ?? ''}
+                                                    onChange={(e) => updateNotification('email_from_name', e.target.value)}
+                                                    placeholder="Absensi Sekolah"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-4">
+                                            <div className="flex-1 space-y-2">
+                                                <Label>Test Email</Label>
+                                                <Input
+                                                    value={testEmailAddr}
+                                                    onChange={(e) => setTestEmailAddr(e.target.value)}
+                                                    placeholder="tujuan@email.com"
+                                                />
+                                            </div>
+                                            <div className="flex items-end">
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={handleTestEmail}
+                                                    disabled={testingEmail}
+                                                >
+                                                    <Send className={`mr-2 h-4 w-4 ${testingEmail ? 'animate-spin' : ''}`} />
                                                     Test
                                                 </Button>
                                             </div>

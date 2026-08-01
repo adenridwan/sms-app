@@ -198,8 +198,14 @@ class AttendanceScanService
 
         $oldData = $attendance->toArray();
 
+        // GAP-2: scan pulang di luar jam pulang tetap diterima, tapi ditandai
+        // perlu_verifikasi agar admin bisa mengecek (mis. pulang jam 23:00).
+        $settings = AttendanceSetting::getForTenant($student->tenant_id);
+        $needsVerification = ! $settings->isWithinCheckOutWindow($now);
+
         $attendance->update([
             'check_out_time' => $now->toTimeString(),
+            'perlu_verifikasi' => $needsVerification,
         ]);
 
         // Log the action
@@ -230,7 +236,11 @@ class AttendanceScanService
             ],
             'time' => $now->format('H:i:s'),
             'check_in_time' => $attendance->check_in_time?->format('H:i:s'),
-        ], 'Absen pulang berhasil');
+            'needs_verification' => $needsVerification,
+        ], $needsVerification
+            ? 'Absen pulang tercatat di luar jam pulang — perlu verifikasi'
+            : 'Absen pulang berhasil'
+        );
     }
 
     /**
@@ -349,10 +359,15 @@ class AttendanceScanService
 
         $oldData = $attendance->toArray();
 
+        // GAP-2: scan pulang di luar jam pulang tetap diterima, tapi ditandai.
+        $settings = AttendanceSetting::getForTenant($teacher->tenant_id);
+        $needsVerification = ! $settings->isWithinCheckOutWindow($now);
+
         $attendance->update([
             'check_out_time' => $now->toTimeString(),
             'check_out_latitude' => $location['latitude'] ?? null,
             'check_out_longitude' => $location['longitude'] ?? null,
+            'perlu_verifikasi' => $needsVerification,
         ]);
 
         AttendanceAuditLog::log(
@@ -381,7 +396,11 @@ class AttendanceScanService
             ],
             'time' => $now->format('H:i:s'),
             'check_in_time' => $attendance->check_in_time?->format('H:i:s'),
-        ], 'Absen pulang berhasil');
+            'needs_verification' => $needsVerification,
+        ], $needsVerification
+            ? 'Absen pulang tercatat di luar jam pulang — perlu verifikasi'
+            : 'Absen pulang berhasil'
+        );
     }
 
     /**

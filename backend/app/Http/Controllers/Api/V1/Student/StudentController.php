@@ -2,20 +2,27 @@
 
 namespace App\Http\Controllers\Api\V1\Student;
 
+use App\Exports\Student\StudentsExport;
+use App\Exports\Student\StudentsTemplateExport;
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Requests\Student\StoreStudentRequest;
 use App\Http\Requests\Student\UpdateStudentRequest;
 use App\Http\Resources\StudentCollection;
 use App\Http\Resources\StudentResource;
+use App\Imports\Student\StudentsImport;
 use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Models\User;
+use App\Services\StudentRegistrar;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Maatwebsite\Excel\Excel as ExcelFormat;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StudentController extends ApiController
 {
@@ -195,6 +202,68 @@ class StudentController extends ApiController
     }
 
     /**
+     * Export data siswa (xlsx/csv) — kolomnya sama dengan template import.
+     */
+    public function export(Request $request): BinaryFileResponse
+    {
+        abort_unless($request->user()->can('students.export'), 403);
+
+        [$extension, $writerType] = $this->fileFormat($request);
+
+        return Excel::download(new StudentsExport(), "siswa.{$extension}", $writerType);
+    }
+
+    /**
+     * Unduh template import siswa (xlsx/csv).
+     */
+    public function template(Request $request): BinaryFileResponse
+    {
+        abort_unless($request->user()->can('students.import'), 403);
+
+        [$extension, $writerType] = $this->fileFormat($request);
+
+        return Excel::download(new StudentsTemplateExport(), "template-import-siswa.{$extension}", $writerType);
+    }
+
+    /**
+     * Import siswa dari file CSV/Excel (upsert berdasarkan NIS).
+     */
+    public function import(Request $request, StudentRegistrar $registrar): JsonResponse
+    {
+        abort_unless($request->user()->can('students.import'), 403);
+
+        $tenantId = $this->currentTenantId($request);
+        if (! $tenantId) {
+            return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
+        }
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:5120'],
+        ]);
+
+        $import = new StudentsImport($tenantId, $registrar);
+        Excel::import($import, $request->file('file'));
+
+        return $this->success([
+            'created' => $import->created,
+            'updated' => $import->updated,
+            'errors' => $import->errors,
+        ], "Import siswa selesai: {$import->created} ditambahkan, {$import->updated} diperbarui.");
+    }
+
+    /**
+     * Format berkas untuk export/template: xlsx (default) atau csv.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function fileFormat(Request $request): array
+    {
+        return strtolower((string) $request->get('format')) === 'csv'
+            ? ['csv', ExcelFormat::CSV]
+            : ['xlsx', ExcelFormat::XLSX];
+    }
+
+    /**
      * Remove the specified resource from storage.
      */
     public function destroy(Student $student): JsonResponse
@@ -295,25 +364,4 @@ class StudentController extends ApiController
         return $this->success(null, 'Foto berhasil dihapus');
     }
 
-    /**
-     * Export students.
-     */
-    public function export(Request $request): JsonResponse
-    {
-        // TODO: Implement export functionality
-        return $this->success(['url' => ''], 'Export sedang diproses');
-    }
-
-    /**
-     * Import students.
-     */
-    public function import(Request $request): JsonResponse
-    {
-        $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
-        ]);
-
-        // TODO: Implement import functionality
-        return $this->success(null, 'Import sedang diproses');
-    }
 }

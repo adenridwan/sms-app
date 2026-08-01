@@ -38,9 +38,11 @@ class ClassroomController extends ApiController
             ->when($request->academic_year_id, fn ($q, $id) => $q->where('academic_year_id', $id))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')));
 
+        // Default urut nama: kolom kode tidak lagi ditampilkan di tabel Kelas,
+        // jadi urutan berdasarkan kode akan terbaca acak oleh pengguna.
         $sortField = in_array($request->get('sort'), ['name', 'code', 'capacity', 'created_at'], true)
             ? $request->get('sort')
-            : 'code';
+            : 'name';
         $sortDirection = $request->get('direction') === 'desc' ? 'desc' : 'asc';
         $query->orderBy($sortField, $sortDirection);
 
@@ -291,10 +293,16 @@ class ClassroomController extends ApiController
         $import = new ClassroomsImport($academicYear);
         Excel::import($import, $request->file('file'));
 
+        $message = 'Import kelas selesai.';
+        if ($import->gradeLevelsCreated > 0) {
+            $message .= " {$import->gradeLevelsCreated} tingkat kelas baru dibuat otomatis.";
+        }
+
         return $this->success([
             'created' => $import->created,
             'updated' => $import->updated,
+            'grade_levels_created' => $import->gradeLevelsCreated,
             'errors' => $import->errors,
-        ], 'Import kelas selesai.');
+        ], $message);
     }
 }
