@@ -1,18 +1,44 @@
 /// Konfigurasi aplikasi tingkat build.
 ///
-/// Base URL bisa dioverride saat build/run:
-///   flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8080/api/v1
+/// **Base URL tidak pernah di-hardcode.** Nilainya ditentukan saat build lewat
+/// `--dart-define`, jadi APK yang sama bisa diarahkan ke mana saja tanpa
+/// mengubah kode:
 ///
-/// Default `10.0.2.2` adalah alias host-loopback untuk **emulator Android**
-/// (menunjuk ke `localhost` mesin pengembang). Untuk perangkat fisik, isi IP
-/// LAN backend lewat --dart-define.
+/// ```
+/// # Emulator Android (alias host-loopback ke localhost komputer)
+/// flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1
+///
+/// # Perangkat fisik via USB (butuh: adb reverse tcp:8000 tcp:8000)
+/// flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1
+///
+/// # Perangkat fisik via WiFi (backend harus --host=0.0.0.0)
+/// flutter run --dart-define=API_BASE_URL=http://192.168.1.19:8000/api/v1
+///
+/// # PRODUKSI — pakai domain + HTTPS, bukan IP
+/// flutter build apk --release \
+///   --dart-define=API_BASE_URL=https://api.sekolah.sch.id/api/v1
+/// ```
+///
+/// Untuk beberapa lingkungan sekaligus (dev/staging/prod), pakai
+/// `--dart-define-from-file=env/prod.json` agar tak perlu mengetik ulang.
+///
+/// Default di bawah sengaja diarahkan ke emulator: itu satu-satunya target
+/// yang aman ditebak saat pengembangan. Build rilis **wajib** menyertakan
+/// `--dart-define`, kalau tidak aplikasi akan menunjuk ke alamat emulator
+/// yang tak berarti apa-apa di perangkat pengguna.
 class AppConfig {
   const AppConfig._();
 
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8080/api/v1',
+    defaultValue: 'http://10.0.2.2:8000/api/v1',
   );
+
+  /// True bila memakai default pengembangan — dipakai untuk memperingatkan
+  /// diri sendiri kalau build rilis lupa menyertakan `--dart-define`.
+  static bool get isUsingDevDefault =>
+      const bool.fromEnvironment('dart.vm.product') &&
+      baseUrl.contains('10.0.2.2');
 
   static const String appName = 'SMS Absensi';
 

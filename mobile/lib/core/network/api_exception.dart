@@ -30,14 +30,21 @@ class ApiException implements Exception {
   @override
   String toString() => 'ApiException($statusCode): $message';
 
+  /// True bila [e] adalah kegagalan koneksi/timeout (bukan respons error dari server).
+  /// Dipakai juga oleh [BackendStatusController] untuk menandai server tak terjangkau.
+  static bool isNetworkError(DioException e) {
+    return e.response == null &&
+        (e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.connectionError);
+  }
+
   /// Bangun dari DioException, memilih pesan yang paling berguna.
   factory ApiException.fromDio(DioException e) {
     // Kegagalan koneksi / timeout → tak ada respons.
     if (e.response == null) {
-      final network = e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.connectionError;
+      final network = isNetworkError(e);
       return ApiException(
         message: network
             ? 'Tidak dapat terhubung ke server. Periksa koneksi Anda.'

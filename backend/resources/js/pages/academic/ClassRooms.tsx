@@ -66,7 +66,6 @@ import { classroomsApi, majorsApi, gradeLevelsApi, academicYearsApi, teachersApi
 import type { Classroom, Major, GradeLevel, AcademicYear, Teacher, PaginationMeta } from '@/types';
 
 interface ClassroomForm {
-    code: string;
     name: string;
     academic_year_id: string;
     grade_level_id: string;
@@ -78,7 +77,6 @@ interface ClassroomForm {
 }
 
 const emptyForm: ClassroomForm = {
-    code: '',
     name: '',
     academic_year_id: '',
     grade_level_id: '',
@@ -230,7 +228,6 @@ export default function AcademicClassRooms() {
             ]);
         }
         setForm({
-            code: classroom.code,
             name: classroom.name,
             academic_year_id: classroom.academic_year_id,
             grade_level_id: classroom.grade_level_id,
@@ -244,8 +241,8 @@ export default function AcademicClassRooms() {
     };
 
     const handleSubmit = async () => {
-        if (!form.code.trim() || !form.name.trim()) {
-            toast.error('Kode dan nama kelas wajib diisi');
+        if (!form.name.trim()) {
+            toast.error('Nama kelas wajib diisi');
             return;
         }
         if (!form.academic_year_id) {
@@ -260,7 +257,6 @@ export default function AcademicClassRooms() {
         setSaving(true);
         try {
             const payload = {
-                code: form.code.trim(),
                 name: form.name.trim(),
                 academic_year_id: form.academic_year_id,
                 grade_level_id: form.grade_level_id,
@@ -569,31 +565,27 @@ export default function AcademicClassRooms() {
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>{editingClassroom ? 'Edit Kelas' : 'Tambah Kelas'}</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2">
+                            {editingClassroom ? 'Edit Kelas' : 'Tambah Kelas'}
+                            {editingClassroom && (
+                                <Badge variant="outline">{editingClassroom.code}</Badge>
+                            )}
+                        </DialogTitle>
                         <DialogDescription>
-                            {editingClassroom ? 'Perbarui data kelas' : 'Isi data kelas baru'}
+                            {editingClassroom
+                                ? 'Perbarui data kelas. Kode dibuat otomatis dan tidak dapat diubah.'
+                                : 'Isi data kelas baru. Kode akan dibuat otomatis.'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="classroom-code">Kode *</Label>
-                                <Input
-                                    id="classroom-code"
-                                    placeholder="Contoh: X-IPA-1"
-                                    value={form.code}
-                                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="classroom-name">Nama *</Label>
-                                <Input
-                                    id="classroom-name"
-                                    placeholder="Contoh: X IPA 1"
-                                    value={form.name}
-                                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                />
-                            </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="classroom-name">Nama *</Label>
+                            <Input
+                                id="classroom-name"
+                                placeholder="Contoh: X IPA 1"
+                                value={form.name}
+                                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label>Tahun Ajaran *</Label>

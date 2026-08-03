@@ -1,0 +1,23 @@
+Akun untuk uji mobile
+Email	Peran	Yang terlihat di app
+admin@demo.sms.local	Administrator	105 izin — semua 8 aksi. Beranda admin: 540 siswa / 20 guru / 18 kelas, tombol Mulai Scan
+superadmin@sms.local	Super Admin	124 izin — semua aksi, akses penuh
+guru1@demo.sms.local	Guru	24 izin — Scan/Absen, Rekap, Nilai, Jadwal. Punya 3 kelas (wali X BAHASA 1) → Beranda guru + tombol Absen Kelas
+guru2@demo.sms.local	Guru (wali_kelas)	20 izin + Pengumuman. ⚠️ 0 kelas → akan tampil "belum terhubung ke kelas"
+kepsek@demo.sms.local	Kepala Sekolah	32 izin — Rekap, Pengumuman, Jadwal (tanpa scan)
+wakasek@demo.sms.local	Wakil Kepala	33 izin — Rekap, Izin/approve, Pengumuman, Jadwal
+tu@demo.sms.local	Tata Usaha	21 izin — hanya Rekap
+bendahara@demo.sms.local	Bendahara	18 izin — hanya Pembayaran
+pustakawan@demo.sms.local	Pustakawan	13 izin — hanya Perpustakaan
+Yang paling berguna diuji:
+
+admin@demo.sms.local — melihat semua aksi, semua kelas, tab Absensi aktif
+guru1@demo.sms.local — satu-satunya akun dengan kelas, jadi ini yang menunjukkan Beranda guru dan absen ceklis bekerja
+bendahara@demo.sms.local atau pustakawan@demo.sms.local — membuktikan penyaringan izin: grid aksinya nyaris kosong, dan tab Absensi hilang karena tak punya attendance.record
+guru2@demo.sms.local — menguji keadaan kosong "belum terhubung ke kelas"
+Yang ditolak masuk: akun siswa/orang tua (543 akun, mis. siswa1@demo.sms.local). Login API-nya sukses, tapi aplikasi menolak karena user_type di luar admin/staff/teacher/super_admin — pesannya "Akun ini tidak memiliki akses ke aplikasi absensi petugas."
+
+Dua catatan dari pengujian:
+
+Saya sempat kena "Too Many Attempts" — itu throttle:auth bekerja sebagaimana mestinya. Kalau Anda mengalaminya saat uji berulang, tunggu sebentar atau jalankan php artisan cache:clear.
+Untuk uji kode akses sekali-pakai, buat dulu lewat menu web Pengaturan → Keamanan Login, lalu di layar login mobile pilih "Masuk dengan kode akses".

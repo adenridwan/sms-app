@@ -6,10 +6,13 @@ use App\Exports\Academic\ClassroomsExport;
 use App\Exports\Academic\ClassroomsTemplateExport;
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Resources\Academic\ClassroomResource;
+use App\Http\Resources\Academic\ScheduleResource;
 use App\Http\Resources\StudentResource;
 use App\Imports\Academic\ClassroomsImport;
 use App\Infrastructure\Persistence\Eloquent\Academic\AcademicYear;
 use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
+use App\Infrastructure\Persistence\Eloquent\Academic\Schedule;
+use App\Infrastructure\Persistence\Eloquent\Academic\Semester;
 use App\Infrastructure\Persistence\Eloquent\Auth\User;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use App\Infrastructure\Persistence\Eloquent\Teacher\TeacherClassroom;
@@ -38,6 +41,18 @@ class ClassroomController extends ApiController
             ->when($request->academic_year_id, fn ($q, $id) => $q->where('academic_year_id', $id))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')));
 
+        // `?mine=1` — hanya kelas yang diampu pemanggil. Dipakai pemilih kelas
+        // di aplikasi mobile; peran ber-akses penuh tetap melihat semuanya.
+        if ($request->boolean('mine')) {
+            $user = $request->user();
+            $roles = $user->getRoleNames();
+
+            if ($roles->intersect(\App\Infrastructure\Persistence\Eloquent\Student\Student::ALL_ACCESS_ROLES)->isEmpty()) {
+                $ids = $user->teachingClassroomIds();
+                $query->whereIn('id', $ids === [] ? ['-'] : $ids);
+            }
+        }
+
         // Default urut nama: kolom kode tidak lagi ditampilkan di tabel Kelas,
         // jadi urutan berdasarkan kode akan terbaca acak oleh pengguna.
         $sortField = in_array($request->get('sort'), ['name', 'code', 'capacity', 'created_at'], true)
@@ -65,7 +80,6 @@ class ClassroomController extends ApiController
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'code' => ['required', 'string', 'max:50'],
             'academic_year_id' => ['required', 'uuid', 'exists:academic_years,id'],
             'grade_level_id' => ['required', 'uuid', 'exists:grade_levels,id'],
             'major_id' => ['nullable', 'uuid', 'exists:majors,id'],
@@ -82,13 +96,9 @@ class ClassroomController extends ApiController
             'homeroom_teacher_id.unique' => 'Guru ini sudah menjadi wali kelas lain pada tahun ajaran yang sama.',
         ]);
 
-        $codeExists = Classroom::where('academic_year_id', $data['academic_year_id'])
-            ->where('code', $data['code'])
-            ->exists();
-
-        if ($codeExists) {
-            return $this->validationError(['code' => ['Kode kelas sudah digunakan pada tahun ajaran ini.']]);
-        }
+        // Kode diisi otomatis (increment per tahun ajaran) agar pengguna
+        // tidak perlu mengetik kode manual, yang sering memicu error duplikat.
+        $data['code'] = $this->generateNextCode($data['academic_year_id']);
 
         $classroom = Classroom::create($data);
         $classroom->load(['academicYear', 'gradeLevel', 'major']);
@@ -116,7 +126,6 @@ class ClassroomController extends ApiController
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:100'],
-            'code' => ['sometimes', 'string', 'max:50'],
             'academic_year_id' => ['sometimes', 'uuid', 'exists:academic_years,id'],
             'grade_level_id' => ['sometimes', 'uuid', 'exists:grade_levels,id'],
             'major_id' => ['nullable', 'uuid', 'exists:majors,id'],
@@ -134,16 +143,18 @@ class ClassroomController extends ApiController
             'homeroom_teacher_id.unique' => 'Guru ini sudah menjadi wali kelas lain pada tahun ajaran yang sama.',
         ]);
 
-        $code = $data['code'] ?? $classroom->code;
-        $yearId = $data['academic_year_id'] ?? $classroom->academic_year_id;
+        // Kode bersifat generated dan tidak dapat diedit manual lewat form.
+        // Tapi jika kelas dipindah ke tahun ajaran lain dan kode lamanya
+        // kebetulan sudah dipakai kelas lain di sana, generate kode baru
+        // otomatis supaya constraint unique per tahun ajaran tetap aman.
+        if (isset($data['academic_year_id']) && $data['academic_year_id'] !== $classroom->academic_year_id) {
+            $codeExists = Classroom::where('academic_year_id', $data['academic_year_id'])
+                ->where('code', $classroom->code)
+                ->exists();
 
-        $codeExists = Classroom::where('academic_year_id', $yearId)
-            ->where('code', $code)
-            ->where('id', '!=', $classroom->id)
-            ->exists();
-
-        if ($codeExists) {
-            return $this->validationError(['code' => ['Kode kelas sudah digunakan pada tahun ajaran ini.']]);
+            if ($codeExists) {
+                $data['code'] = $this->generateNextCode($data['academic_year_id']);
+            }
         }
 
         $classroom->update($data);
@@ -235,10 +246,19 @@ class ClassroomController extends ApiController
     /**
      * Get students enrolled in a classroom.
      */
-    public function students(Classroom $classroom): JsonResponse
+    public function students(Request $request, Classroom $classroom): JsonResponse
     {
+        // Tanpa penjagaan ini, guru bisa membaca daftar siswa kelas mana pun di
+        // tenant-nya hanya dengan menebak/menyalin UUID kelas — memfilter di
+        // klien saja tidak cukup karena endpoint bisa dipanggil langsung.
+        if (! self::canAccessClassroom($request->user(), $classroom->id)) {
+            return $this->forbidden('Anda tidak memiliki akses ke kelas ini.');
+        }
+
+        // `user.profile` ikut dimuat karena StudentResource membacanya; tanpa
+        // ini endpoint gagal total saat lazy loading dimatikan.
         $students = $classroom->enrollments()
-            ->with('student.user')
+            ->with('student.user.profile')
             ->get()
             ->pluck('student')
             ->filter()
@@ -248,11 +268,45 @@ class ClassroomController extends ApiController
     }
 
     /**
-     * Get the classroom schedule (not implemented yet).
+     * Peran ber-akses penuh melihat semua kelas; guru/wali kelas hanya kelas
+     * yang benar-benar diampunya. Aturannya sengaja dibuat sama dengan
+     * `Student::scopeVisibleTo()` dan `StudentAttendanceController`.
      */
-    public function schedule(Classroom $classroom): JsonResponse
+    private static function canAccessClassroom(?User $user, string $classroomId): bool
     {
-        return $this->success([], 'Jadwal belum tersedia.');
+        if (! $user) {
+            return false;
+        }
+
+        $roles = $user->getRoleNames();
+
+        if ($roles->intersect(\App\Infrastructure\Persistence\Eloquent\Student\Student::ALL_ACCESS_ROLES)->isNotEmpty()) {
+            return true;
+        }
+
+        return $roles->intersect(['guru', 'wali_kelas'])->isNotEmpty()
+            && in_array($classroomId, $user->teachingClassroomIds(), true);
+    }
+
+    /**
+     * Get the classroom schedule for a semester (default: semester aktif).
+     */
+    public function schedule(Request $request, Classroom $classroom): JsonResponse
+    {
+        $semesterId = $request->get('semester_id')
+            ?? Semester::where('tenant_id', $classroom->tenant_id)->where('is_active', true)->value('id');
+
+        if (! $semesterId) {
+            return $this->success([], 'Belum ada semester aktif.');
+        }
+
+        $schedules = Schedule::with(['subject', 'teacher', 'timeSlot'])
+            ->where('classroom_id', $classroom->id)
+            ->where('semester_id', $semesterId)
+            ->orderBy('day_of_week')
+            ->get();
+
+        return $this->success(ScheduleResource::collection($schedules));
     }
 
     /**
@@ -304,5 +358,23 @@ class ClassroomController extends ApiController
             'grade_levels_created' => $import->gradeLevelsCreated,
             'errors' => $import->errors,
         ], $message);
+    }
+
+    /**
+     * Generate a unique, incrementing code (KLS01, KLS02, ...) scoped to
+     * the given academic year, retrying past any gaps left by deleted
+     * records. Import tetap punya kode sendiri dari file (lihat
+     * ClassroomsImport) — ini hanya untuk kelas yang dibuat lewat form.
+     */
+    private function generateNextCode(string $academicYearId): string
+    {
+        $sequence = Classroom::withTrashed()->where('academic_year_id', $academicYearId)->count();
+
+        do {
+            $sequence++;
+            $code = 'KLS'.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT);
+        } while (Classroom::withTrashed()->where('academic_year_id', $academicYearId)->where('code', $code)->exists());
+
+        return $code;
     }
 }

@@ -70,6 +70,10 @@ class MasterDataSeeder extends Seeder
             ['name' => 'Uang Praktikum', 'code' => 'UPRAK', 'frequency' => 'semester', 'mandatory' => false],
             ['name' => 'Uang Ekstrakulikuler', 'code' => 'UEKS', 'frequency' => 'monthly', 'mandatory' => false],
             ['name' => 'Uang Wisuda', 'code' => 'UW', 'frequency' => 'once', 'mandatory' => false],
+            // Uang kas kelas — iuran rutin, ditagih & dibayar lewat alur biaya
+            // yang sama seperti jenis lain. (Tabungan siswa TIDAK di sini:
+            // arahnya dua arah / bersaldo, jadi butuh modul tersendiri.)
+            ['name' => 'Uang Kas', 'code' => 'UKAS', 'frequency' => 'monthly', 'mandatory' => false],
         ];
 
         foreach ($types as $type) {

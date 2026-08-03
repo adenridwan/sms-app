@@ -8,6 +8,20 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class User extends \App\Infrastructure\Persistence\Eloquent\Auth\User
 {
     /**
+     * Spatie's guard-guessing (Guard::getNames()) matches instances against
+     * config('auth.providers.*.model') by strict class equality — this
+     * subclass never matches, so it falls back to config('auth.defaults.guard'),
+     * which auth:sanctum middleware mutates to 'sanctum' for the rest of the
+     * request (Authenticate::authenticate() calls Auth::shouldUse()). Every
+     * role is seeded under guard 'web' only, so assignRole() on a fresh
+     * instance of this class then throws "no role named ... for guard
+     * sanctum". Declaring guard_name explicitly short-circuits the guessing.
+     *
+     * @var string
+     */
+    protected $guard_name = 'web';
+
+    /**
      * Allow legacy controllers to pass profile fields during create/update.
      *
      * @var list<string>

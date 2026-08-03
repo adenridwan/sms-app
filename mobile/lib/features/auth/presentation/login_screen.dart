@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/backend_status_dot.dart';
 import '../../../core/theme/theme_mode_button.dart';
 import 'auth_controller.dart';
 
@@ -16,24 +17,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _codeCtrl = TextEditingController();
   bool _remember = true;
   bool _obscure = true;
+  bool _useOtp = false;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _codeCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    await ref.read(authControllerProvider.notifier).login(
-          email: _emailCtrl.text.trim(),
-          password: _passwordCtrl.text,
-          remember: _remember,
-        );
+    final notifier = ref.read(authControllerProvider.notifier);
+    if (_useOtp) {
+      await notifier.loginWithOtp(
+        email: _emailCtrl.text.trim(),
+        code: _codeCtrl.text.trim(),
+      );
+    } else {
+      await notifier.login(
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+        remember: _remember,
+      );
+    }
   }
 
   @override
@@ -54,7 +66,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        actions: const [ThemeModeButton(), SizedBox(width: 4)],
+        actions: const [
+          Center(child: BackendStatusDot()),
+          SizedBox(width: 12),
+          ThemeModeButton(),
+          SizedBox(width: 4),
+        ],
       ),
       body: SafeArea(
         child: Center(
@@ -105,45 +122,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       },
                     ),
                     const SizedBox(height: 14),
-                    TextFormField(
-                      controller: _passwordCtrl,
-                      enabled: !busy,
-                      obscureText: _obscure,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      onFieldSubmitted: (_) => busy ? null : _submit(),
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outline_rounded),
-                        suffixIcon: IconButton(
-                          onPressed: () =>
-                              setState(() => _obscure = !_obscure),
-                          icon: Icon(_obscure
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
+                    if (_useOtp)
+                      TextFormField(
+                        controller: _codeCtrl,
+                        enabled: !busy,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                        maxLength: 6,
+                        onFieldSubmitted: (_) => busy ? null : _submit(),
+                        decoration: const InputDecoration(
+                          labelText: 'Kode akses (6 digit)',
+                          helperText: 'Minta kode ke administrator sekolah',
+                          prefixIcon: Icon(Icons.pin_rounded),
+                          counterText: '',
                         ),
+                        validator: (v) {
+                          final s = (v ?? '').trim();
+                          if (s.isEmpty) return 'Kode akses wajib diisi';
+                          if (s.length != 6) return 'Kode akses harus 6 digit';
+                          return null;
+                        },
+                      )
+                    else
+                      TextFormField(
+                        controller: _passwordCtrl,
+                        enabled: !busy,
+                        obscureText: _obscure,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        onFieldSubmitted: (_) => busy ? null : _submit(),
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          suffixIcon: IconButton(
+                            onPressed: () =>
+                                setState(() => _obscure = !_obscure),
+                            icon: Icon(_obscure
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                          ),
+                        ),
+                        validator: (v) {
+                          if ((v ?? '').isEmpty) return 'Password wajib diisi';
+                          if ((v ?? '').length < 6) {
+                            return 'Password minimal 6 karakter';
+                          }
+                          return null;
+                        },
                       ),
-                      validator: (v) {
-                        if ((v ?? '').isEmpty) return 'Password wajib diisi';
-                        if ((v ?? '').length < 6) {
-                          return 'Password minimal 6 karakter';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _remember,
-                          onChanged: busy
-                              ? null
-                              : (v) =>
-                                  setState(() => _remember = v ?? true),
-                        ),
-                        const Text('Ingat saya'),
-                      ],
-                    ),
+                    if (!_useOtp) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _remember,
+                            onChanged: busy
+                                ? null
+                                : (v) =>
+                                    setState(() => _remember = v ?? true),
+                          ),
+                          const Text('Ingat saya'),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     FilledButton(
                       onPressed: busy ? null : _submit,
@@ -157,6 +198,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             )
                           : const Text('Masuk'),
+                    ),
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: busy
+                          ? null
+                          : () => setState(() => _useOtp = !_useOtp),
+                      child: Text(_useOtp
+                          ? 'Masuk dengan password'
+                          : 'Masuk dengan kode akses'),
                     ),
                   ],
                 ),

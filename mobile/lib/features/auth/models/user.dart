@@ -51,4 +51,18 @@ class User {
       permissions: permissions ?? asStringList(json['permissions']),
     );
   }
+
+  /// Untuk cache lokal (bukan bentuk API) — dibaca kembali lewat [User.fromJson]
+  /// karena bentuknya sama persis (permissions/roles sudah flat di sini).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'full_name': fullName,
+        'email': email,
+        'username': username,
+        'user_type': userType,
+        'avatar_url': avatarUrl,
+        'tenant_id': tenantId,
+        'roles': roles,
+        'permissions': permissions,
+      };
 }

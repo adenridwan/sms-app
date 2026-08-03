@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/theme_mode_button.dart';
+import '../../../core/network/backend_status_dot.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../models/scan_time.dart';
 import 'scan_controller.dart';
@@ -21,13 +21,10 @@ class ScannerHomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Absensi'),
-        actions: [
-          const ThemeModeButton(),
-          IconButton(
-            tooltip: 'Keluar',
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () => _confirmLogout(context, ref),
-          ),
+        // Keluar & tema kini ada di tab Profil.
+        actions: const [
+          Center(child: BackendStatusDot()),
+          SizedBox(width: 16),
         ],
       ),
       body: RefreshIndicator(
@@ -142,28 +139,6 @@ class ScannerHomeScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Keluar?'),
-        content: const Text('Anda akan keluar dari aplikasi.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Keluar'),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) {
-      await ref.read(authControllerProvider.notifier).logout();
-    }
-  }
 }
 
 class _ModeSelector extends StatelessWidget {

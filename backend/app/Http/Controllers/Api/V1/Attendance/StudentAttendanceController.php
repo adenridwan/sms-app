@@ -6,6 +6,7 @@ use App\Domain\Attendance\Enums\AttendanceStatus;
 use App\Domain\Attendance\Jobs\SendClassAttendanceRecap;
 use App\Domain\Attendance\Services\AttendanceStatusResolver;
 use App\Http\Controllers\Api\ApiController;
+use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
 use App\Infrastructure\Persistence\Eloquent\Attendance\NotificationSetting;
 use App\Infrastructure\Persistence\Eloquent\Attendance\StudentAttendance;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
@@ -134,6 +135,18 @@ class StudentAttendanceController extends ApiController
             return $this->error('Kelas tidak memiliki siswa aktif', 422);
         }
 
+        // Sumber kebenaran tenant untuk baris absensi adalah kelasnya sendiri.
+        // Super admin lintas-tenant punya `users.tenant_id` null, jadi tenant
+        // user tidak bisa dipakai; fallback ke tenant user hanya untuk kasus
+        // data lama yang kelasnya belum ber-tenant.
+        $classroomTenantId = Classroom::withoutGlobalScopes()
+            ->whereKey($data['classroom_id'])
+            ->value('tenant_id') ?? $request->user()->tenant_id;
+
+        if (!$classroomTenantId) {
+            return $this->error('Kelas tidak memiliki sekolah (tenant) yang valid.', 422);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -161,7 +174,11 @@ class StudentAttendanceController extends ApiController
                         ->first();
 
                     StudentAttendance::create([
-                        'tenant_id' => $request->user()->tenant_id,
+                        // Tenant diambil dari KELAS, bukan dari user yang
+                        // login: super admin bersifat lintas-tenant dan
+                        // `users.tenant_id`-nya null, sehingga memakai
+                        // tenant user akan melanggar NOT NULL di sini.
+                        'tenant_id' => $classroomTenantId,
                         'student_id' => $att['student_id'],
                         'classroom_id' => $data['classroom_id'],
                         'academic_year_id' => $studentEnrollment?->academic_year_id,

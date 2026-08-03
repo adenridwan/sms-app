@@ -3,7 +3,26 @@
 > Arsitektur navigasi aplikasi mobile "selayaknya app utuh": splash → login →
 > **app shell** (bottom navigation + Beranda + Profil) dengan **menu dinamis
 > berbasis izin** yang meniru RBAC backend. Prinsip: **hanya transaksi, tanpa
-> master**. Fase analisis — belum ada kode.
+> master**.
+
+> **Status: Tahap 3a SUDAH DIIMPLEMENTASIKAN** (2026-08-02). Tahap 3b–3f masih
+> rencana. Peta kode:
+>
+> | Bagian | Berkas |
+> |---|---|
+> | App shell (bottom nav 4 tab) | [lib/core/routing/app_shell.dart](../lib/core/routing/app_shell.dart) |
+> | Router (`StatefulShellRoute.indexedStack`) | [lib/core/routing/app_router.dart](../lib/core/routing/app_router.dart) |
+> | Beranda + grid aksi | [lib/features/home/presentation/home_screen.dart](../lib/features/home/presentation/home_screen.dart) |
+> | Katalog aksi → izin (§5) | [lib/features/home/models/action_item.dart](../lib/features/home/models/action_item.dart) |
+> | Notifikasi | [lib/features/notifications/](../lib/features/notifications/) |
+> | Profil | [lib/features/profile/presentation/profile_screen.dart](../lib/features/profile/presentation/profile_screen.dart) |
+>
+> Beda dari rancangan di bawah: rute tab Absensi memakai path `/attendance`
+> (bukan `/dashboard`), dan `/scan` · `/manual` · `/queue` dipasang di root
+> navigator sehingga tampil **penuh tanpa bottom nav** — alur scan tak boleh
+> terpotong navigasi. Kartu modul yang belum dibangun (Nilai, Pembayaran,
+> Perpustakaan, dll) tetap tampil di grid dalam keadaan **nonaktif berlabel
+> "Segera"**, supaya peta fitur terbaca tanpa berpura-pura sudah jadi.
 
 Referensi: `01-EXISTING-SYSTEM.md` (RBAC), `03-API-CONTRACT.md` (endpoint),
 `API-GAP-ANALYSIS.md` (kesiapan). Pengguna utama: **Administrator, Guru, Staf**.
@@ -40,7 +59,8 @@ peran/izin, master tetap di web.
 
 ```
 Splash (branded, cek token via /auth/me)
-  ├─ tidak ada sesi → Login (Sanctum Bearer)  [sudah ada]
+  ├─ tidak ada sesi → Login (password ATAU kode akses)  [sudah ada]
+  ├─ backend tak terjangkau + ada cache → masuk app (sesi "belum terverifikasi")
   └─ ada sesi ────────────────────────────────┐
                                                ▼
 App Shell  ── Bottom Navigation (tetap) ───────────────────────
@@ -144,8 +164,31 @@ menjadi salah satu tab, bukan beranda tunggal.
 
 ## 8. Ketergantungan Backend
 
-- **Siap dipakai**: absensi, izin, notifikasi, pengumuman, nilai, pembayaran,
-  perpustakaan, jadwal (via `/academic/*`).
+- **Sudah ada sejak dokumen ini ditulis** (2026-08-02):
+  - `POST /auth/login-otp` — masuk dengan kode akses sekali-pakai dari admin.
+  - Sesi offline-tolerant + indikator koneksi (dot hijau/kuning/merah) di app bar,
+    lihat [../../docs/06-AUTH-FLOW.md](../../docs/06-AUTH-FLOW.md) §3 & §4a.
+  - Menu web **Pengaturan → Keamanan Login** (riwayat login, buat/cabut kode
+    akses, cabut sesi perangkat).
+  - **Push notification masih belum ada sama sekali** (tak ada FCM di mobile
+    maupun backend). Ini prasyarat kalau nanti OTP mau dikirim otomatis ke app
+    (Opsi B) — ditunda, karena butuh device sudah pernah login lebih dulu.
+- ✅ **`GET /notifications` kini sudah jadi** (2026-08-02) —
+  `NotificationController` diisi (list/unread-count/read/read-all/delete),
+  model `Notification` dibuat di atas tabel yang memang sudah ada. Query
+  di-scope per `user_id`, bukan hanya per tenant; sudah diuji bahwa user tak
+  bisa membaca/menghapus notifikasi user lain di tenant yang sama (404).
+- ✅ **Beranda memakai `GET /dashboard`** — endpoint ini ternyata sudah lama
+  ada dan berfungsi (stats per paket peran). Usulan `GET /me/dashboard` di §8
+  versi lama **tidak diperlukan**.
+- ⚠️ **Modul besar masih stub di backend** (diperiksa 2026-08-02): Exam/Nilai
+  **4 dari 4** controller stub, Library **6 dari 6** stub, Finance **5 dari 7**
+  stub (hanya `PaymentController` & `FeeTypeController` yang nyata). Jadi
+  Tahap 3c–3e bukan pekerjaan mobile — masing-masing perlu modul backend dulu.
+  Kartu aksinya sengaja tampil nonaktif berlabel "Segera".
+- **Siap dipakai**: absensi, izin, notifikasi, jadwal (via `/academic/*`),
+  pembayaran (sebagian). Nama izin di §5 sudah diverifikasi cocok dengan
+  `/auth/me` (8 dari 8 izin yang dipakai grid aksi).
 - **Perlu ditambah (usul)**:
   - `GET /me/dashboard` — ringkasan Beranda per-peran (angka absensi hari ini,
     tugas verifikasi, dll) agar Beranda tidak menambal banyak panggilan.
@@ -182,7 +225,7 @@ menuVisible(item):
 
 | Tahap | Isi |
 |---|---|
-| 3a | App shell (bottom nav) + Beranda + Profil; pindahkan Absensi jadi tab |
+| ~~3a~~ ✅ | App shell (bottom nav) + Beranda + Profil; Absensi jadi tab — **selesai** |
 | 3b | Menu dinamis berbasis izin (grid aksi) + Notifikasi/Pengumuman |
 | 3c | Modul Nilai (input/finalisasi) |
 | 3d | Modul Pembayaran (terima/verifikasi/tagihan/laporan) |

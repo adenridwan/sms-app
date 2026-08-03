@@ -30,7 +30,7 @@ android {
         //    flutter_secure_storage `encryptedSharedPreferences`.
         //  - targetSdk 33 = Android 13 — matang & luas, bukan versi terbaru.
         //  - compileSdk tetap mengikuti Flutter (kompilasi terhadap SDK terbaru).
-        minSdk = 23
+        minSdkVersion = flutter.minSdkVersion
         targetSdk = 33
         versionCode = flutter.versionCode
         versionName = flutter.versionName

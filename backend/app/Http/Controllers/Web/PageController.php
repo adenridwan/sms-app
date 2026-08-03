@@ -236,14 +236,6 @@ class PageController extends Controller
     }
 
     /**
-     * Display subjects list.
-     */
-    public function subjects(): Response
-    {
-        return Inertia::render('master/Subjects');
-    }
-
-    /**
      * Display payments list.
      */
     public function payments(): Response
@@ -417,6 +409,22 @@ class PageController extends Controller
     }
 
     /**
+     * Display database backups page (super admin only).
+     */
+    public function backups(): Response
+    {
+        return Inertia::render('settings/Backups');
+    }
+
+    /**
+     * Display login security page (riwayat login, kode akses, cabut sesi).
+     */
+    public function loginSecurity(): Response
+    {
+        return Inertia::render('settings/LoginSecurity');
+    }
+
+    /**
      * Display settings page.
      */
     public function settings(): Response
@@ -459,5 +467,23 @@ class PageController extends Controller
     public function academicGradeLevels(): Response
     {
         return Inertia::render('academic/GradeLevels');
+    }
+
+    /**
+     * Display curricula (kurikulum) page (Akademik) — sebelumnya hanya
+     * skema+seed tanpa antarmuka pengelolaan sama sekali.
+     */
+    public function academicCurricula(): Response
+    {
+        return Inertia::render('academic/Curricula');
+    }
+
+    /**
+     * Display subjects (mata pelajaran) page (Akademik) — sebelumnya hanya
+     * skema+seed tanpa antarmuka pengelolaan sama sekali.
+     */
+    public function academicSubjects(): Response
+    {
+        return Inertia::render('academic/Subjects');
     }
 }

@@ -69,6 +69,8 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     // Academic Module
     Route::prefix('academic')->name('academic.')->group(function () {
         Route::get('/years', [PageController::class, 'academicYears'])->name('years');
+        Route::get('/curricula', [PageController::class, 'academicCurricula'])->name('curricula');
+        Route::get('/subjects', [PageController::class, 'academicSubjects'])->name('subjects');
         Route::get('/schedules', [PageController::class, 'schedules'])->name('schedules');
         // Kelas & Jurusan dipindah kesini dari menu Pengaturan supaya tidak
         // dobel (lihat redirect /settings/class-rooms dan /settings/majors
@@ -81,7 +83,9 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     // Master Data Module
     Route::prefix('master')->name('master.')->group(function () {
         Route::get('/class-rooms', [PageController::class, 'classRooms'])->name('class-rooms');
-        Route::get('/subjects', [PageController::class, 'subjects'])->name('subjects');
+        // Mata Pelajaran sekarang di menu Akademik (`/academic/subjects`);
+        // redirect dipertahankan supaya tautan/bookmark lama tidak 404.
+        Route::redirect('/subjects', '/academic/subjects')->name('subjects');
     });
 
     // Finance Module
@@ -111,6 +115,12 @@ Route::middleware(['auth', 'password.current'])->group(function () {
         Route::get('/users', [PageController::class, 'users'])
             ->middleware('role:super_admin')
             ->name('users');
+        Route::get('/login-security', [PageController::class, 'loginSecurity'])
+            ->middleware('permission:settings.manage')
+            ->name('login-security');
+        Route::get('/backups', [PageController::class, 'backups'])
+            ->middleware('role:super_admin')
+            ->name('backups');
         // Kelas & Jurusan dipindah ke menu Akademik (biar tidak dobel);
         // route lama dipertahankan sebagai redirect saja supaya tautan atau
         // bookmark yang sudah ada tidak berujung 404.

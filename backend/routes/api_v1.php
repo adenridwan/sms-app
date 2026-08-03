@@ -16,6 +16,10 @@ Route::prefix('auth')->name('auth.')->group(function () {
         ->middleware('throttle:auth')
         ->name('login');
 
+    Route::post('/login-otp', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'loginWithOtp'])
+        ->middleware('throttle:auth')
+        ->name('login-otp');
+
     Route::post('/register', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'register'])
         ->middleware('throttle:auth')
         ->name('register');
@@ -92,9 +96,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Subjects
         Route::apiResource('subjects', \App\Http\Controllers\Api\V1\Academic\SubjectController::class);
 
-        // Schedules
+        // Schedules (static routes must be registered before apiResource)
+        Route::get('schedules/export-pdf', [\App\Http\Controllers\Api\V1\Academic\ScheduleController::class, 'exportPdf'])->name('schedules.export-pdf');
         Route::apiResource('schedules', \App\Http\Controllers\Api\V1\Academic\ScheduleController::class);
-        Route::post('schedules/generate', [\App\Http\Controllers\Api\V1\Academic\ScheduleController::class, 'generate'])->name('schedules.generate');
 
         // Time Slots
         Route::apiResource('time-slots', \App\Http\Controllers\Api\V1\Academic\TimeSlotController::class);
@@ -399,6 +403,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Audit Logs
         Route::get('audit-logs', [\App\Http\Controllers\Api\V1\Admin\AuditLogController::class, 'index'])->name('audit-logs.index');
+
+        // Keamanan Login: riwayat login, kode akses sekali-pakai, cabut sesi.
+        Route::prefix('login-security')->name('login-security.')->group(function () {
+            Route::get('logs', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'logs'])->name('logs');
+            Route::post('users/{user}/otp', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'generateOtp'])->name('otp.generate');
+            Route::delete('users/{user}/otp', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'revokeOtp'])->name('otp.revoke');
+            Route::post('users/{user}/revoke-sessions', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'revokeSessions'])->name('sessions.revoke');
+        });
         Route::get('audit-logs/{auditLog}', [\App\Http\Controllers\Api\V1\Admin\AuditLogController::class, 'show'])->name('audit-logs.show');
 
         // Activity Logs
@@ -417,6 +429,29 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // System Health
         Route::get('health', [\App\Http\Controllers\Api\V1\Admin\SystemController::class, 'health'])->name('health');
         Route::get('metrics', [\App\Http\Controllers\Api\V1\Admin\SystemController::class, 'metrics'])->name('metrics');
+
+        // Database Backups
+        Route::get('backups', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'index'])->name('backups.index');
+        Route::post('backups', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'store'])->name('backups.store');
+        Route::get('backups/{filename}/download', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'download'])->name('backups.download');
+        Route::delete('backups/{filename}', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'destroy'])->name('backups.destroy');
+
+        // Koneksi Database Aplikasi (.env DB_*) — digabung ke menu Backup Database.
+        // Password akses terpisah dari login, lihat DatabaseConnectionController.
+        Route::prefix('db-connection')->name('db-connection.')->group(function () {
+            Route::get('access-status', [\App\Http\Controllers\Api\V1\System\DatabaseConnectionController::class, 'accessStatus'])->name('access-status');
+            Route::middleware('throttle:sensitive')->group(function () {
+                Route::post('access-password', [\App\Http\Controllers\Api\V1\System\DatabaseConnectionController::class, 'setAccessPassword'])->name('access-password');
+                Route::post('reveal', [\App\Http\Controllers\Api\V1\System\DatabaseConnectionController::class, 'reveal'])->name('reveal');
+                Route::post('test', [\App\Http\Controllers\Api\V1\System\DatabaseConnectionController::class, 'test'])->name('test');
+                Route::put('/', [\App\Http\Controllers\Api\V1\System\DatabaseConnectionController::class, 'update'])->name('update');
+            });
+        });
+
+        // Versi aplikasi (ditampilkan di footer) — dikelola dari menu yang
+        // sama dengan Koneksi Database Aplikasi. Bukan data sensitif, jadi
+        // tidak digerbangi access_password/throttle:sensitive.
+        Route::put('app-version', [\App\Http\Controllers\Api\V1\System\DatabaseConnectionController::class, 'updateAppVersion'])->name('app-version.update');
     });
 });
 

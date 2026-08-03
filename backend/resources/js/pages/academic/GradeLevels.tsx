@@ -40,7 +40,6 @@ import { gradeLevelsApi } from '@/services/api';
 import type { GradeLevel, PaginationMeta } from '@/types';
 
 interface GradeLevelForm {
-    code: string;
     name: string;
     order: string;
     description: string;
@@ -48,7 +47,6 @@ interface GradeLevelForm {
 }
 
 const emptyForm: GradeLevelForm = {
-    code: '',
     name: '',
     order: '0',
     description: '',
@@ -109,7 +107,6 @@ export default function AcademicGradeLevels() {
     const openEdit = (gradeLevel: GradeLevel) => {
         setEditingGradeLevel(gradeLevel);
         setForm({
-            code: gradeLevel.code,
             name: gradeLevel.name,
             order: String(gradeLevel.order ?? 0),
             description: gradeLevel.description ?? '',
@@ -119,15 +116,14 @@ export default function AcademicGradeLevels() {
     };
 
     const handleSubmit = async () => {
-        if (!form.code.trim() || !form.name.trim()) {
-            toast.error('Kode dan nama tingkat wajib diisi');
+        if (!form.name.trim()) {
+            toast.error('Nama tingkat wajib diisi');
             return;
         }
 
         setSaving(true);
         try {
             const payload = {
-                code: form.code.trim(),
                 name: form.name.trim(),
                 order: Number(form.order) || 0,
                 description: form.description.trim() || null,
@@ -220,7 +216,8 @@ export default function AcademicGradeLevels() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-[100px]">Kode</TableHead>
+                                            {/* Kode sengaja tidak ditampilkan di tabel (generated otomatis,
+                                                bukan identitas yang perlu dilihat pengguna). */}
                                             <TableHead>Nama</TableHead>
                                             <TableHead className="w-[90px]">Urutan</TableHead>
                                             <TableHead>Deskripsi</TableHead>
@@ -231,8 +228,7 @@ export default function AcademicGradeLevels() {
                                     <TableBody>
                                         {gradeLevels.map((level) => (
                                             <TableRow key={level.id}>
-                                                <TableCell className="font-medium">{level.code}</TableCell>
-                                                <TableCell>{level.name}</TableCell>
+                                                <TableCell className="font-medium">{level.name}</TableCell>
                                                 <TableCell>{level.order}</TableCell>
                                                 <TableCell className="max-w-[300px] truncate text-muted-foreground">
                                                     {level.description || '-'}
@@ -302,35 +298,19 @@ export default function AcademicGradeLevels() {
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>{editingGradeLevel ? 'Edit Tingkat Kelas' : 'Tambah Tingkat Kelas'}</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2">
+                            {editingGradeLevel ? 'Edit Tingkat Kelas' : 'Tambah Tingkat Kelas'}
+                            {editingGradeLevel && (
+                                <Badge variant="outline">{editingGradeLevel.code}</Badge>
+                            )}
+                        </DialogTitle>
                         <DialogDescription>
                             {editingGradeLevel
-                                ? 'Perbarui data tingkat kelas'
-                                : 'Isi data tingkat kelas baru'}
+                                ? 'Perbarui data tingkat kelas. Kode dibuat otomatis dan tidak dapat diubah.'
+                                : 'Isi data tingkat kelas baru. Kode akan dibuat otomatis.'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="gradelevel-code">Kode *</Label>
-                                <Input
-                                    id="gradelevel-code"
-                                    placeholder="Contoh: X"
-                                    value={form.code}
-                                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="gradelevel-order">Urutan</Label>
-                                <Input
-                                    id="gradelevel-order"
-                                    type="number"
-                                    min={0}
-                                    value={form.order}
-                                    onChange={(e) => setForm({ ...form, order: e.target.value })}
-                                />
-                            </div>
-                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="gradelevel-name">Nama *</Label>
                             <Input
@@ -338,6 +318,19 @@ export default function AcademicGradeLevels() {
                                 placeholder="Contoh: Kelas 10"
                                 value={form.name}
                                 onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="gradelevel-order">Urutan</Label>
+                            <Input
+                                id="gradelevel-order"
+                                type="number"
+                                min={0}
+                                inputMode="numeric"
+                                value={form.order}
+                                onChange={(e) =>
+                                    setForm({ ...form, order: e.target.value.replace(/[^0-9]/g, '') })
+                                }
                             />
                         </div>
                         <div className="space-y-2">

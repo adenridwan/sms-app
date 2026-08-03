@@ -183,7 +183,7 @@ class StudentController extends ApiController
             unset(
                 $data['first_name'], $data['last_name'], $data['email'], $data['username'], $data['password'],
                 $data['gender'], $data['birth_place'], $data['birth_date'], $data['religion'], $data['address'], $data['nik'],
-                $data['entry_year'], $data['entry_class'], $data['entry_semester']
+                $data['phone'], $data['entry_year'], $data['entry_class'], $data['entry_semester']
             );
 
             // Update student (only real students.* columns remain in $data)

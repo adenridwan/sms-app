@@ -42,15 +42,14 @@ class GradeLevelController extends ApiController
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'code' => ['required', 'string', 'max:20'],
             'order' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string', 'max:500'],
             'is_active' => ['boolean'],
         ]);
 
-        if (GradeLevel::where('code', $data['code'])->exists()) {
-            return $this->validationError(['code' => ['Kode tingkat sudah digunakan.']]);
-        }
+        // Kode diisi otomatis (increment) agar pengguna tidak perlu
+        // mengetik kode manual, yang sering memicu error duplikat.
+        $data['code'] = $this->generateNextCode();
 
         // create() tidak membaca ulang baris dari DB, jadi default kolom
         // is_active (true) tidak otomatis terisi di model in-memory bila
@@ -78,16 +77,12 @@ class GradeLevelController extends ApiController
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:100'],
-            'code' => ['sometimes', 'string', 'max:20'],
             'order' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string', 'max:500'],
             'is_active' => ['boolean'],
         ]);
 
-        if (isset($data['code']) && GradeLevel::where('code', $data['code'])->where('id', '!=', $gradeLevel->id)->exists()) {
-            return $this->validationError(['code' => ['Kode tingkat sudah digunakan.']]);
-        }
-
+        // Kode bersifat generated dan tidak dapat diubah melalui form.
         $gradeLevel->update($data);
 
         return $this->success(new GradeLevelResource($gradeLevel), 'Tingkat kelas berhasil diperbarui');
@@ -107,5 +102,21 @@ class GradeLevelController extends ApiController
         $gradeLevel->delete();
 
         return $this->success(null, 'Tingkat kelas berhasil dihapus');
+    }
+
+    /**
+     * Generate a unique, incrementing code (TK01, TK02, ...) scoped to the
+     * current tenant, retrying past any gaps left by deleted records.
+     */
+    private function generateNextCode(): string
+    {
+        $sequence = GradeLevel::withTrashed()->count();
+
+        do {
+            $sequence++;
+            $code = 'TK'.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT);
+        } while (GradeLevel::withTrashed()->where('code', $code)->exists());
+
+        return $code;
     }
 }

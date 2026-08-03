@@ -185,6 +185,8 @@ const menuItems: MenuItem[] = [
             { key: 'settings.attendance', title: 'Pengaturan Absensi', href: '/attendance/settings', permission: 'settings.attendance' },
             { key: 'settings.menu', title: 'Pengaturan Menu', href: '/settings/menu', permission: 'settings.manage' },
             { key: 'settings.users', title: 'Pengguna', href: '/settings/users', superAdminOnly: true },
+            { key: 'settings.login-security', title: 'Keamanan Login', href: '/settings/login-security', permission: 'settings.manage' },
+            { key: 'settings.backups', title: 'Backup Database', href: '/settings/backups', superAdminOnly: true },
         ],
     },
 ];
@@ -563,7 +565,10 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                         <p>
                             &copy; {new Date().getFullYear()} {schoolName}. Hak cipta dilindungi.
                         </p>
-                        <p>School Management System</p>
+                        <p>
+                            School Management System
+                            {app.version ? ` · v${app.version}` : ''}
+                        </p>
                     </div>
                 </footer>
             </SidebarInset>

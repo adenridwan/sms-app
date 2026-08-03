@@ -1,11 +1,14 @@
-import { Head, Link, useForm } from '@inertiajs/react';
-import { FormEvent } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
+import { FormEvent, useState } from 'react';
+import axios from 'axios';
+import { toast } from 'sonner';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Select,
     SelectContent,
@@ -14,35 +17,81 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { studentsApi } from '@/services/api';
+
+const emptyForm = {
+    // User data
+    first_name: '',
+    last_name: '',
+    email: '',
+    username: '',
+    password: '',
+
+    // Student data
+    nis: '',
+    nisn: '',
+    nik: '',
+    gender: '',
+    birth_place: '',
+    birth_date: '',
+    religion: '',
+    address: '',
+    phone: '',
+    previous_school: '',
+    entry_year: new Date().getFullYear().toString(),
+    entry_class: '',
+    entry_semester: '1',
+};
+
+function getErrors(error: unknown): { fieldErrors: Record<string, string>; message: string | null } {
+    if (axios.isAxiosError(error) && error.response) {
+        const { message, errors } = error.response.data ?? {};
+        if (errors) {
+            const fieldErrors: Record<string, string> = {};
+            Object.entries(errors as Record<string, string[]>).forEach(([field, messages]) => {
+                fieldErrors[field] = messages[0];
+            });
+            return { fieldErrors, message: null };
+        }
+        return { fieldErrors: {}, message: message ?? 'Gagal menyimpan data siswa' };
+    }
+    return { fieldErrors: {}, message: 'Tidak dapat terhubung ke server' };
+}
 
 export default function CreateStudent() {
-    const { data, setData, post, processing, errors } = useForm({
-        // User data
-        first_name: '',
-        last_name: '',
-        email: '',
-        username: '',
-        password: '',
+    const [data, setDataRaw] = useState(emptyForm);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [formError, setFormError] = useState<string | null>(null);
+    const [processing, setProcessing] = useState(false);
 
-        // Student data
-        nis: '',
-        nisn: '',
-        nik: '',
-        gender: '',
-        birth_place: '',
-        birth_date: '',
-        religion: '',
-        address: '',
-        phone: '',
-        previous_school: '',
-        entry_year: new Date().getFullYear().toString(),
-        entry_class: '',
-        entry_semester: '1',
-    });
+    const setData = <K extends keyof typeof emptyForm>(field: K, value: string) => {
+        setDataRaw((d) => ({ ...d, [field]: value }));
+    };
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
-        post('/api/v1/students');
+        setProcessing(true);
+        setErrors({});
+        setFormError(null);
+        try {
+            const formData = new FormData();
+            Object.entries(data).forEach(([key, value]) => formData.append(key, value));
+
+            const response = await studentsApi.create(formData);
+            toast.success('Siswa berhasil ditambahkan');
+            router.get(`/students/${response.data.data?.id}`);
+        } catch (error) {
+            const { fieldErrors, message } = getErrors(error);
+            setErrors(fieldErrors);
+            if (message) {
+                setFormError(message);
+                toast.error(message);
+            } else {
+                toast.error('Data siswa gagal disimpan, periksa isian yang ditandai merah.');
+            }
+        } finally {
+            setProcessing(false);
+        }
     };
 
     return (
@@ -63,6 +112,12 @@ export default function CreateStudent() {
                         </p>
                     </div>
                 </div>
+
+                {formError && (
+                    <Alert variant="destructive">
+                        <AlertDescription>{formError}</AlertDescription>
+                    </Alert>
+                )}
 
                 <form onSubmit={submit}>
                     <div className="grid gap-6 lg:grid-cols-2">

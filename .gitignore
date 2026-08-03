@@ -6,6 +6,7 @@
 .env
 .env.local
 .env.*.local
+.env.testing
 !.env.example
 
 # Dependencies
@@ -25,6 +26,8 @@ backend/storage/framework/sessions/*
 backend/storage/framework/views/*
 backend/storage/logs/*
 backend/storage/app/public/*
+backend/storage/app/private/backups/*
+!backend/storage/app/private/backups/.gitkeep
 backend/bootstrap/cache/*
 !backend/storage/framework/cache/.gitkeep
 !backend/storage/framework/sessions/.gitkeep

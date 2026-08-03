@@ -67,6 +67,7 @@ export interface PageProps {
         name: string;
         locale: string;
         timezone: string;
+        version: string;
     };
     [key: string]: unknown;
 }
@@ -295,21 +296,6 @@ export interface Semester {
     updated_at: string;
 }
 
-export interface Subject {
-    id: string;
-    code: string;
-    name: string;
-    description: string | null;
-    category: 'mandatory' | 'local' | 'elective' | 'extracurricular';
-    category_label: string;
-    credit_hours: number | null;
-    is_active: boolean;
-    teachers_count?: number;
-    teachers?: Teacher[];
-    created_at: string;
-    updated_at: string;
-}
-
 export interface ClassRoom {
     id: string;
     name: string;
@@ -355,6 +341,34 @@ export interface GradeLevel {
     updated_at: string;
 }
 
+export interface Curriculum {
+    id: string;
+    name: string;
+    code: string | null;
+    description: string | null;
+    is_active: boolean;
+    subjects_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export const SUBJECT_CATEGORIES = ['Wajib', 'Peminatan IPA', 'Peminatan IPS', 'Muatan Lokal'] as const;
+
+export type SubjectCategory = (typeof SUBJECT_CATEGORIES)[number];
+
+export interface Subject {
+    id: string;
+    curriculum_id: string | null;
+    curriculum?: { id: string; name: string; code: string | null } | null;
+    name: string;
+    code: string;
+    category: SubjectCategory | null;
+    description: string | null;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Classroom {
     id: string;
     name: string;
@@ -385,6 +399,36 @@ export interface Classroom {
         name: string;
     } | null;
     students_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TimeSlot {
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
+    order: number;
+    is_break: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Schedule {
+    id: string;
+    academic_year_id: string;
+    semester_id: string;
+    classroom_id: string;
+    subject_id: string;
+    subject?: { id: string; name: string; code: string };
+    teacher_id: string;
+    teacher?: { id: string; full_name: string };
+    time_slot_id: string;
+    time_slot?: { id: string; name: string; start_time: string; end_time: string; order: number; is_break: boolean };
+    day_of_week: number;
+    day_name: string;
+    room: string | null;
+    is_active: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -453,23 +497,18 @@ export interface Attendance {
     updated_at: string;
 }
 
-// Schedule Types
-export interface Schedule {
-    id: string;
-    class_room_id: string;
-    subject_id: string;
-    teacher_id: string;
-    academic_year_id: string;
-    semester_id: string | null;
-    day: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
-    start_time: string;
-    end_time: string;
-    room: string | null;
-    class_room?: ClassRoom;
-    subject?: Subject;
-    teacher?: Teacher;
+export interface BackupFile {
+    filename: string;
+    size: number;
     created_at: string;
-    updated_at: string;
+}
+
+export interface DbConnectionInfo {
+    connection: string;
+    host: string;
+    port: number;
+    database: string;
+    username: string;
 }
 
 // API Response types

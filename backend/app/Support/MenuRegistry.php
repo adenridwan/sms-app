@@ -109,6 +109,8 @@ class MenuRegistry
                     ['key' => 'settings.attendance', 'title' => 'Pengaturan Absensi', 'permission' => 'settings.attendance'],
                     ['key' => 'settings.menu', 'title' => 'Pengaturan Menu', 'permission' => 'settings.manage', 'protected' => true],
                     ['key' => 'settings.users', 'title' => 'Pengguna', 'permission' => null, 'super_admin_only' => true],
+                    ['key' => 'settings.login-security', 'title' => 'Keamanan Login', 'permission' => 'settings.manage'],
+                    ['key' => 'settings.backups', 'title' => 'Backup Database', 'permission' => null, 'super_admin_only' => true],
                 ],
             ],
         ];

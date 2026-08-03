@@ -11,8 +11,13 @@ Base URL dev: `http://localhost:8080/api/v1` · Prefix nama route: `api.v1.*`
 ## 1. Autentikasi & Header
 
 ### Alur token (mobile)
-1. `POST /auth/login` dengan `{ email, password, remember? }`.
+1. `POST /auth/login` dengan `{ email, password, remember? }` — atau
+   `POST /auth/login-otp` dengan `{ email, code }` bila user memakai kode akses
+   sekali-pakai dari administrator (lupa password / perangkat baru). Keduanya
+   mengembalikan envelope yang sama.
 2. Simpan `data.token` (Sanctum personal access token, **Bearer**, berlaku ~**7 hari**).
+   Simpan juga profil user ke cache lokal — dipakai memulihkan sesi saat backend
+   tak terjangkau (lihat [06-AUTH-FLOW.md §3](../../docs/06-AUTH-FLOW.md)).
 3. Sertakan header pada semua request terproteksi:
 
 ```
@@ -92,9 +97,10 @@ Legenda: 🔓 publik · 🔒 `auth:sanctum` · 👑 role/permission tambahan.
 | Method | Path | Ket |
 |---|---|---|
 | POST | `/auth/login` 🔓 | terbit token |
+| POST | `/auth/login-otp` 🔓 | `{email, code}` — kode 6 digit sekali-pakai dari admin; terbit token sama seperti `/auth/login`. throttle:auth |
 | POST | `/auth/register` 🔓 | throttle:auth |
-| POST | `/auth/forgot-password` 🔓 | |
-| POST | `/auth/reset-password` 🔓 | |
+| POST | `/auth/forgot-password` 🔓 | ⚠️ rusak di server (method tak ada) — pakai `/auth/login-otp` |
+| POST | `/auth/reset-password` 🔓 | ⚠️ rusak di server (method tak ada) |
 | POST | `/auth/logout` 🔒 | revoke token |
 | GET | `/auth/me` 🔒 | user+roles+permissions |
 | PUT | `/auth/profile` 🔒 | update profil (avatar multipart) |
@@ -170,7 +176,7 @@ Legenda: 🔓 publik · 🔒 `auth:sanctum` · 👑 role/permission tambahan.
 ### 4.13 Notifications 🔒
 | Method | Path |
 |---|---|
-| GET | `/notifications` · `/notifications/unread-count` |
+| GET | `/notifications` (paginator; `?unread_only=1`, `?per_page=`) · `/notifications/unread-count` → `{count}` |
 | POST | `/notifications/{n}/read` · `/notifications/read-all` |
 | DELETE | `/notifications/{n}` |
 | apiResource | `/notifications/announcements` (+`/{a}/publish`) |
@@ -185,6 +191,12 @@ Users (👑`super_admin`): `apiResource /admin/users` (+`activate`,`deactivate`,
 `GET/POST /admin/schools`, `POST /admin/schools/{id}/activate|deactivate`,
 `DELETE /admin/schools/{id}`. `apiResource /admin/roles`, `GET /admin/permissions`,
 `GET /admin/audit-logs`(+`/{id}`), `GET /admin/activity-logs`.
+
+Keamanan Login (menu web **Pengaturan → Keamanan Login**, bukan untuk mobile):
+`GET /admin/login-security/logs` (riwayat login, filter `email|user_id|method|successful|from_date|to_date`),
+`POST|DELETE /admin/login-security/users/{user}/otp` (buat/cabut kode akses sekali-pakai —
+kode polos hanya dikembalikan sekali saat dibuat),
+`POST /admin/login-security/users/{user}/revoke-sessions` (cabut semua token perangkat user).
 
 ### 4.16 Super Admin 👑`role:super_admin`
 `apiResource /super-admin/tenants` (+`activate`,`suspend`) — **stub 501**.

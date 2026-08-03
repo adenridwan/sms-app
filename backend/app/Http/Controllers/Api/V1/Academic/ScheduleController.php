@@ -3,40 +3,46 @@
 namespace App\Http\Controllers\Api\V1\Academic;
 
 use App\Http\Controllers\Api\ApiController;
-use App\Models\Academic\Schedule;
+use App\Http\Resources\Academic\ScheduleResource;
+use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
+use App\Infrastructure\Persistence\Eloquent\Academic\Schedule;
+use App\Infrastructure\Persistence\Eloquent\Academic\Semester;
+use App\Infrastructure\Persistence\Eloquent\Academic\TimeSlot;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class ScheduleController extends ApiController
 {
+    // 'teacher.profile' (bukan cuma 'teacher') wajib: ScheduleResource baca
+    // $teacher->full_name, yang accessor-nya butuh $teacher->profile untuk
+    // first_name/last_name. Tanpa ini, lazy load ->profile kena
+    // Model::preventLazyLoading() (aktif di luar production) dan 500 setiap
+    // GET /schedules — lihat storage/logs (LazyLoadingViolationException).
+    private const RELATIONS = ['subject', 'teacher.profile', 'timeSlot'];
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Schedule::with(['classRoom', 'subject', 'teacher.user'])
-            ->when($request->class_room_id, fn($q, $classId) => $q->where('class_room_id', $classId))
-            ->when($request->teacher_id, fn($q, $teacherId) => $q->where('teacher_id', $teacherId))
-            ->when($request->subject_id, fn($q, $subjectId) => $q->where('subject_id', $subjectId))
-            ->when($request->day, fn($q, $day) => $q->where('day', $day))
-            ->when($request->academic_year_id, fn($q, $yearId) => $q->where('academic_year_id', $yearId))
-            ->when($request->semester_id, fn($q, $semesterId) => $q->where('semester_id', $semesterId));
+        $request->validate([
+            'classroom_id' => ['required', 'uuid'],
+            'semester_id' => ['required', 'uuid'],
+        ]);
 
-        $sortField = $request->get('sort', 'day');
-        $sortDirection = $request->get('direction', 'asc');
+        $query = Schedule::with(self::RELATIONS)
+            ->where('classroom_id', $request->classroom_id)
+            ->where('semester_id', $request->semester_id)
+            ->when($request->filled('teacher_id'), fn ($q) => $q->where('teacher_id', $request->get('teacher_id')))
+            ->orderBy('day_of_week');
 
-        if ($sortField === 'day') {
-            $query->orderByRaw("FIELD(day, 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')")
-                ->orderBy('start_time', 'asc');
-        } else {
-            $query->orderBy($sortField, $sortDirection);
-        }
-
-        $perPage = $request->get('per_page', 50);
+        $perPage = min((int) $request->get('per_page', 100), 200);
         $schedules = $query->paginate($perPage);
 
-        return $this->success($schedules);
+        return $this->success(ScheduleResource::collection($schedules)->response()->getData(true));
     }
 
     /**
@@ -44,28 +50,33 @@ class ScheduleController extends ApiController
      */
     public function store(Request $request): JsonResponse
     {
+        abort_unless($request->user()->can('schedules.manage'), 403);
+
+        if (! $this->currentTenantId($request)) {
+            return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
+        }
+
         $data = $request->validate([
-            'class_room_id' => ['required', 'uuid', 'exists:class_rooms,id'],
-            'subject_id' => ['required', 'uuid', 'exists:subjects,id'],
-            'teacher_id' => ['required', 'uuid', 'exists:teachers,id'],
-            'academic_year_id' => ['required', 'uuid', 'exists:academic_years,id'],
-            'semester_id' => ['nullable', 'uuid', 'exists:semesters,id'],
-            'day' => ['required', 'in:monday,tuesday,wednesday,thursday,friday,saturday,sunday'],
-            'start_time' => ['required', 'date_format:H:i'],
-            'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
+            'academic_year_id' => ['required', 'uuid', Rule::exists('academic_years', 'id')],
+            'semester_id' => ['required', 'uuid', Rule::exists('semesters', 'id')],
+            'classroom_id' => ['required', 'uuid', Rule::exists('classrooms', 'id')],
+            'subject_id' => ['required', 'uuid', Rule::exists('subjects', 'id')],
+            'teacher_id' => ['required', 'uuid', Rule::exists('users', 'id')],
+            'time_slot_id' => ['required', 'uuid', Rule::exists('time_slots', 'id')],
+            'day_of_week' => ['required', 'integer', 'between:1,6'],
             'room' => ['nullable', 'string', 'max:50'],
+            'is_active' => ['boolean'],
         ]);
 
-        // Check for schedule conflicts
-        $conflict = $this->checkConflict($data);
+        $conflict = $this->findConflict($data);
         if ($conflict) {
             return $this->error($conflict, 422);
         }
 
         $schedule = Schedule::create($data);
-        $schedule->load(['classRoom', 'subject', 'teacher.user']);
+        $schedule->load(self::RELATIONS);
 
-        return $this->success($schedule, 'Jadwal berhasil ditambahkan', 201);
+        return $this->success(new ScheduleResource($schedule), 'Jadwal berhasil ditambahkan', 201);
     }
 
     /**
@@ -73,9 +84,9 @@ class ScheduleController extends ApiController
      */
     public function show(Schedule $schedule): JsonResponse
     {
-        $schedule->load(['classRoom', 'subject', 'teacher.user', 'academicYear', 'semester']);
+        $schedule->load(self::RELATIONS);
 
-        return $this->success($schedule);
+        return $this->success(new ScheduleResource($schedule));
     }
 
     /**
@@ -83,27 +94,76 @@ class ScheduleController extends ApiController
      */
     public function update(Request $request, Schedule $schedule): JsonResponse
     {
+        abort_unless($request->user()->can('schedules.manage'), 403);
+
         $data = $request->validate([
-            'class_room_id' => ['sometimes', 'uuid', 'exists:class_rooms,id'],
-            'subject_id' => ['sometimes', 'uuid', 'exists:subjects,id'],
-            'teacher_id' => ['sometimes', 'uuid', 'exists:teachers,id'],
-            'day' => ['sometimes', 'in:monday,tuesday,wednesday,thursday,friday,saturday,sunday'],
-            'start_time' => ['sometimes', 'date_format:H:i'],
-            'end_time' => ['sometimes', 'date_format:H:i', 'after:start_time'],
+            'subject_id' => ['sometimes', 'uuid', Rule::exists('subjects', 'id')],
+            'teacher_id' => ['sometimes', 'uuid', Rule::exists('users', 'id')],
+            'time_slot_id' => ['sometimes', 'uuid', Rule::exists('time_slots', 'id')],
+            'day_of_week' => ['sometimes', 'integer', 'between:1,6'],
             'room' => ['nullable', 'string', 'max:50'],
+            'is_active' => ['boolean'],
         ]);
 
-        // Check for schedule conflicts
-        $checkData = array_merge($schedule->toArray(), $data);
-        $conflict = $this->checkConflict($checkData, $schedule->id);
+        $conflict = $this->findConflict(array_merge($schedule->only([
+            'classroom_id', 'semester_id', 'teacher_id', 'time_slot_id', 'day_of_week',
+        ]), $data), $schedule->id);
         if ($conflict) {
             return $this->error($conflict, 422);
         }
 
         $schedule->update($data);
-        $schedule->load(['classRoom', 'subject', 'teacher.user']);
+        $schedule->load(self::RELATIONS);
 
-        return $this->success($schedule, 'Jadwal berhasil diperbarui');
+        return $this->success(new ScheduleResource($schedule), 'Jadwal berhasil diperbarui');
+    }
+
+    /**
+     * Export the weekly schedule grid for a classroom+semester as PDF —
+     * same grid shape as the frontend (time_slots as rows, day_of_week 1-6
+     * as columns, is_break rows spanning the full width).
+     */
+    public function exportPdf(Request $request)
+    {
+        $data = $request->validate([
+            'classroom_id' => ['required', 'uuid', Rule::exists('classrooms', 'id')],
+            'semester_id' => ['required', 'uuid', Rule::exists('semesters', 'id')],
+        ]);
+
+        $classroom = Classroom::with(['gradeLevel', 'major', 'academicYear'])->findOrFail($data['classroom_id']);
+        $semester = Semester::findOrFail($data['semester_id']);
+
+        $schedules = Schedule::with(self::RELATIONS)
+            ->where('classroom_id', $data['classroom_id'])
+            ->where('semester_id', $data['semester_id'])
+            ->where('is_active', true)
+            ->get();
+
+        $timeSlots = TimeSlot::orderBy('order')->orderBy('start_time')->get();
+
+        $grid = $timeSlots->map(function (TimeSlot $slot) use ($schedules) {
+            $days = [];
+            if (! $slot->is_break) {
+                foreach (range(1, 6) as $day) {
+                    $days[$day] = $schedules->first(
+                        fn (Schedule $s) => (int) $s->day_of_week === $day && $s->time_slot_id === $slot->id
+                    );
+                }
+            }
+
+            return ['slot' => $slot, 'days' => $days];
+        });
+
+        $pdf = Pdf::loadView('reports.academic.schedule', [
+            'classroom' => $classroom,
+            'semester' => $semester,
+            'grid' => $grid,
+            'dayNames' => array_slice(Schedule::DAY_NAMES, 1, 6),
+        ])->setPaper('a4', 'landscape');
+
+        $filename = 'jadwal-' . Str::slug($classroom->name) . '-' . Str::slug($semester->name) . '.pdf';
+
+        return $pdf->download($filename);
     }
 
     /**
@@ -111,143 +171,40 @@ class ScheduleController extends ApiController
      */
     public function destroy(Schedule $schedule): JsonResponse
     {
+        abort_unless(request()->user()->can('schedules.manage'), 403);
+
         $schedule->delete();
 
         return $this->success(null, 'Jadwal berhasil dihapus');
     }
 
     /**
-     * Get schedule by class.
+     * Cari konflik kelas (dijamin unique constraint DB juga) atau guru
+     * (tidak ada constraint DB — guru secara desain boleh dobel dalam kasus
+     * tertentu, tapi kita tetap tolak dengan pesan jelas by default).
      */
-    public function byClass(Request $request): JsonResponse
+    private function findConflict(array $data, ?string $excludeId = null): ?string
     {
-        $request->validate([
-            'class_room_id' => ['required', 'uuid', 'exists:class_rooms,id'],
-        ]);
-
-        $schedules = Schedule::with(['subject', 'teacher.user'])
-            ->where('class_room_id', $request->class_room_id)
-            ->orderByRaw("FIELD(day, 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')")
-            ->orderBy('start_time')
-            ->get()
-            ->groupBy('day');
-
-        return $this->success($schedules);
-    }
-
-    /**
-     * Get schedule by teacher.
-     */
-    public function byTeacher(Request $request): JsonResponse
-    {
-        $request->validate([
-            'teacher_id' => ['required', 'uuid', 'exists:teachers,id'],
-        ]);
-
-        $schedules = Schedule::with(['classRoom', 'subject'])
-            ->where('teacher_id', $request->teacher_id)
-            ->orderByRaw("FIELD(day, 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')")
-            ->orderBy('start_time')
-            ->get()
-            ->groupBy('day');
-
-        return $this->success($schedules);
-    }
-
-    /**
-     * Bulk create schedules.
-     */
-    public function bulkStore(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'schedules' => ['required', 'array', 'min:1'],
-            'schedules.*.class_room_id' => ['required', 'uuid', 'exists:class_rooms,id'],
-            'schedules.*.subject_id' => ['required', 'uuid', 'exists:subjects,id'],
-            'schedules.*.teacher_id' => ['required', 'uuid', 'exists:teachers,id'],
-            'schedules.*.academic_year_id' => ['required', 'uuid', 'exists:academic_years,id'],
-            'schedules.*.semester_id' => ['nullable', 'uuid', 'exists:semesters,id'],
-            'schedules.*.day' => ['required', 'in:monday,tuesday,wednesday,thursday,friday,saturday,sunday'],
-            'schedules.*.start_time' => ['required', 'date_format:H:i'],
-            'schedules.*.end_time' => ['required', 'date_format:H:i', 'after:schedules.*.start_time'],
-            'schedules.*.room' => ['nullable', 'string', 'max:50'],
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            $created = [];
-            $errors = [];
-
-            foreach ($data['schedules'] as $index => $scheduleData) {
-                $conflict = $this->checkConflict($scheduleData);
-                if ($conflict) {
-                    $errors[] = "Jadwal #{$index}: {$conflict}";
-                    continue;
-                }
-
-                $created[] = Schedule::create($scheduleData);
-            }
-
-            if (!empty($errors) && empty($created)) {
-                DB::rollBack();
-                return $this->error('Gagal membuat jadwal: ' . implode('; ', $errors), 422);
-            }
-
-            DB::commit();
-
-            $message = count($created) . ' jadwal berhasil ditambahkan';
-            if (!empty($errors)) {
-                $message .= '. ' . count($errors) . ' jadwal gagal: ' . implode('; ', $errors);
-            }
-
-            return $this->success(['count' => count($created)], $message, 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->error('Gagal membuat jadwal: ' . $e->getMessage(), 500);
-        }
-    }
-
-    /**
-     * Check for schedule conflicts.
-     */
-    private function checkConflict(array $data, ?string $excludeId = null): ?string
-    {
-        // Check teacher conflict
-        $teacherConflict = Schedule::where('teacher_id', $data['teacher_id'])
-            ->where('day', $data['day'])
-            ->where('academic_year_id', $data['academic_year_id'])
-            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
-            ->where(function ($q) use ($data) {
-                $q->whereBetween('start_time', [$data['start_time'], $data['end_time']])
-                    ->orWhereBetween('end_time', [$data['start_time'], $data['end_time']])
-                    ->orWhere(function ($q) use ($data) {
-                        $q->where('start_time', '<=', $data['start_time'])
-                            ->where('end_time', '>=', $data['end_time']);
-                    });
-            })
-            ->exists();
-
-        if ($teacherConflict) {
-            return 'Guru sudah memiliki jadwal lain pada waktu yang sama';
-        }
-
-        // Check class conflict
-        $classConflict = Schedule::where('class_room_id', $data['class_room_id'])
-            ->where('day', $data['day'])
-            ->where('academic_year_id', $data['academic_year_id'])
-            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
-            ->where(function ($q) use ($data) {
-                $q->whereBetween('start_time', [$data['start_time'], $data['end_time']])
-                    ->orWhereBetween('end_time', [$data['start_time'], $data['end_time']])
-                    ->orWhere(function ($q) use ($data) {
-                        $q->where('start_time', '<=', $data['start_time'])
-                            ->where('end_time', '>=', $data['end_time']);
-                    });
-            })
+        $classConflict = Schedule::where('classroom_id', $data['classroom_id'])
+            ->where('semester_id', $data['semester_id'])
+            ->where('day_of_week', $data['day_of_week'])
+            ->where('time_slot_id', $data['time_slot_id'])
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->exists();
 
         if ($classConflict) {
-            return 'Kelas sudah memiliki jadwal lain pada waktu yang sama';
+            return 'Kelas sudah memiliki jadwal lain pada hari dan jam yang sama';
+        }
+
+        $teacherConflict = Schedule::where('teacher_id', $data['teacher_id'])
+            ->where('semester_id', $data['semester_id'])
+            ->where('day_of_week', $data['day_of_week'])
+            ->where('time_slot_id', $data['time_slot_id'])
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+            ->exists();
+
+        if ($teacherConflict) {
+            return 'Guru sudah memiliki jadwal mengajar lain pada hari dan jam yang sama';
         }
 
         return null;

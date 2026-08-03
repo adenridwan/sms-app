@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Infrastructure\Persistence\Eloquent\System\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -98,6 +99,9 @@ class HandleInertiaRequests extends Middleware
                 'name' => config('app.name'),
                 'locale' => app()->getLocale(),
                 'timezone' => config('app.timezone'),
+                // Diisi lewat menu Pengaturan > Backup Database ("Versi
+                // Aplikasi"), ditampilkan di footer MainLayout.tsx.
+                'version' => Setting::getGlobal('app', 'version') ?? '1.0.0',
             ],
         ];
     }
