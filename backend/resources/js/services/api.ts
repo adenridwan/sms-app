@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse, PaginatedResponse, Student, Teacher, TeacherFormData, TeacherAssignment, TeacherDocumentCollection, TeacherDocuments, ClassRoom, Subject, Curriculum, AcademicYear, Semester, Payment, FeeType, Attendance, DashboardStats, User, Major, GradeLevel, Classroom, TimeSlot, Schedule, BackupFile, DbConnectionInfo } from '@/types';
+import type { ApiResponse, PaginatedResponse, Student, Teacher, TeacherFormData, TeacherAssignment, TeacherDocumentCollection, TeacherDocuments, ClassRoom, Subject, Curriculum, AcademicYear, Semester, StudentFee, Payment, FeeType, FeeStructure, PaymentMethod, Discount, SalaryGrade, SalaryComponent, BpjsRate, TaxBracket, TaxSetting, EmployeeSalary, PayrollPeriod, PayrollSlip, Attendance, DashboardStats, User, Major, GradeLevel, Classroom, TimeSlot, Schedule, BackupFile, DbConnectionInfo } from '@/types';
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -8,15 +8,13 @@ const api = axios.create({
         'Accept': 'application/json',
     },
     withCredentials: true,
+    // Axios akan otomatis baca cookie XSRF-TOKEN dan kirim sebagai header X-XSRF-TOKEN
+    xsrfCookieName: 'XSRF-TOKEN',
+    xsrfHeaderName: 'X-XSRF-TOKEN',
 });
 
-// Add CSRF token & tenant context to requests
+// Add tenant context to requests
 api.interceptors.request.use((config) => {
-    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-    if (token) {
-        config.headers['X-CSRF-TOKEN'] = token;
-    }
-
     // Tenant context for super admin (chosen via tenant switcher in the header).
     // Regular users are resolved from their own tenant_id server-side.
     const tenantId = localStorage.getItem('active_tenant_id');
@@ -26,6 +24,13 @@ api.interceptors.request.use((config) => {
 
     return config;
 });
+
+/**
+ * Ambil CSRF cookie dari Laravel Sanctum.
+ * HARUS dipanggil sebelum request POST/PUT/DELETE pertama (login, register, dll).
+ * Cookie XSRF-TOKEN akan di-set oleh Laravel, lalu axios otomatis kirim sebagai header.
+ */
+export const getCsrfCookie = () => axios.get('/sanctum/csrf-cookie', { withCredentials: true });
 
 // Handle errors
 api.interceptors.response.use(
@@ -40,11 +45,17 @@ api.interceptors.response.use(
 
 // Auth
 export const authApi = {
-    login: (data: { email: string; password: string; remember?: boolean }) =>
-        api.post<ApiResponse<{ user: User; token: string }>>('/auth/login', data),
+    login: async (data: { email: string; password: string; remember?: boolean }) => {
+        // Ambil CSRF cookie dulu sebelum POST login
+        await getCsrfCookie();
+        return api.post<ApiResponse<{ user: User; token: string }>>('/auth/login', data);
+    },
 
-    register: (data: { username: string; email: string; password: string; password_confirmation: string; first_name: string; last_name?: string }) =>
-        api.post<ApiResponse<{ user: User; token: string }>>('/auth/register', data),
+    register: async (data: { username: string; email: string; password: string; password_confirmation: string; first_name: string; last_name?: string }) => {
+        // Ambil CSRF cookie dulu sebelum POST register
+        await getCsrfCookie();
+        return api.post<ApiResponse<{ user: User; token: string }>>('/auth/register', data);
+    },
 
     logout: () => api.post<ApiResponse>('/auth/logout'),
 
@@ -466,37 +477,91 @@ export const scheduleApi = {
         api.get('/academic/schedules/export-pdf', { params, responseType: 'blob' }),
 };
 
+// Student Fees
+export const studentFeesApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<StudentFee>>>('/finance/fees', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<StudentFee>>(`/finance/fees/${id}`),
+
+    create: (data: Partial<StudentFee>) =>
+        api.post<ApiResponse<StudentFee>>('/finance/fees', data),
+
+    update: (id: string, data: Partial<StudentFee>) =>
+        api.put<ApiResponse<StudentFee>>(`/finance/fees/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/finance/fees/${id}`),
+
+    generate: (data: {
+        academic_year_id: string;
+        grade_level_id?: string;
+        classroom_id?: string;
+        fee_type_id?: string;
+        month: number;
+        year: number;
+        due_date: string;
+        apply_discounts?: boolean;
+    }) => api.post<ApiResponse<{ created: number; skipped: number }>>('/finance/fees/generate', data),
+
+    waive: (id: string, data: { reason: string }) =>
+        api.post<ApiResponse>(`/finance/fees/${id}/waive`, data),
+
+    studentHistory: (studentId: string, params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<StudentFee>>>(`/finance/fees/student/${studentId}`, { params }),
+
+    summary: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse>('/finance/fees/summary', { params }),
+
+    statuses: () =>
+        api.get<ApiResponse<Record<string, string>>>('/finance/fees/statuses'),
+};
+
 // Payments
 export const paymentsApi = {
     list: (params?: Record<string, unknown>) =>
-        api.get<PaginatedResponse<Payment>>('/finance/payments', { params }),
+        api.get<ApiResponse<PaginatedResponse<Payment>>>('/finance/payments', { params }),
 
     get: (id: string) =>
         api.get<ApiResponse<Payment>>(`/finance/payments/${id}`),
 
-    create: (data: Partial<Payment>) =>
-        api.post<ApiResponse<Payment>>('/finance/payments', data),
+    create: (data: {
+        student_id: string;
+        payment_method_id: string;
+        student_fee_ids: string[];
+        amounts: number[];
+        notes?: string;
+    }) => api.post<ApiResponse<Payment>>('/finance/payments', data),
 
-    update: (id: string, data: Partial<Payment>) =>
-        api.put<ApiResponse<Payment>>(`/finance/payments/${id}`, data),
+    complete: (id: string, data?: { transaction_id?: string; notes?: string }) =>
+        api.post<ApiResponse<Payment>>(`/finance/payments/${id}/complete`, data),
 
-    delete: (id: string) =>
-        api.delete<ApiResponse>(`/finance/payments/${id}`),
+    uploadProof: (id: string, formData: FormData) =>
+        api.post<ApiResponse<Payment>>(`/finance/payments/${id}/upload-proof`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
 
-    pay: (id: string, data: { payment_method: string; payment_reference?: string; notes?: string }) =>
-        api.post<ApiResponse<Payment>>(`/finance/payments/${id}/pay`, data),
+    verify: (id: string, data: { approved: boolean; notes?: string }) =>
+        api.post<ApiResponse<Payment>>(`/finance/payments/${id}/verify`, data),
 
     cancel: (id: string, data?: { reason?: string }) =>
         api.post<ApiResponse>(`/finance/payments/${id}/cancel`, data),
 
+    receipt: (id: string) =>
+        api.get<ApiResponse>(`/finance/payments/${id}/receipt`),
+
     summary: (params?: Record<string, unknown>) =>
         api.get<ApiResponse>('/finance/payments/summary', { params }),
+
+    statuses: () =>
+        api.get<ApiResponse<Record<string, string>>>('/finance/payments/statuses'),
 };
 
 // Fee Types
 export const feeTypesApi = {
     list: (params?: Record<string, unknown>) =>
-        api.get<PaginatedResponse<FeeType>>('/finance/fee-types', { params }),
+        api.get<ApiResponse<PaginatedResponse<FeeType>>>('/finance/fee-types', { params }),
 
     get: (id: string) =>
         api.get<ApiResponse<FeeType>>(`/finance/fee-types/${id}`),
@@ -509,6 +574,387 @@ export const feeTypesApi = {
 
     delete: (id: string) =>
         api.delete<ApiResponse>(`/finance/fee-types/${id}`),
+};
+
+// Fee Structures
+export const feeStructuresApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<FeeStructure>>>('/finance/fee-structures', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<FeeStructure>>(`/finance/fee-structures/${id}`),
+
+    create: (data: Partial<FeeStructure>) =>
+        api.post<ApiResponse<FeeStructure>>('/finance/fee-structures', data),
+
+    update: (id: string, data: Partial<FeeStructure>) =>
+        api.put<ApiResponse<FeeStructure>>(`/finance/fee-structures/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/finance/fee-structures/${id}`),
+
+    bulkCreate: (data: {
+        academic_year_id: string;
+        grade_level_id: string;
+        major_id?: string | null;
+        structures: Array<{
+            fee_type_id: string;
+            amount: number;
+            discount_amount?: number;
+            due_date?: string;
+            due_day?: number;
+            is_active?: boolean;
+        }>;
+    }) => api.post<ApiResponse<FeeStructure[]>>('/finance/fee-structures/bulk', data),
+};
+
+// Payment Methods
+export const paymentMethodsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<PaymentMethod>>>('/finance/payment-methods', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<PaymentMethod>>(`/finance/payment-methods/${id}`),
+
+    create: (data: Partial<PaymentMethod>) =>
+        api.post<ApiResponse<PaymentMethod>>('/finance/payment-methods', data),
+
+    update: (id: string, data: Partial<PaymentMethod>) =>
+        api.put<ApiResponse<PaymentMethod>>(`/finance/payment-methods/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/finance/payment-methods/${id}`),
+
+    types: () =>
+        api.get<ApiResponse<Record<string, string>>>('/finance/payment-methods/types'),
+};
+
+// Discounts
+export const discountsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<Discount>>>('/finance/discounts', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<Discount>>(`/finance/discounts/${id}`),
+
+    create: (data: Partial<Discount>) =>
+        api.post<ApiResponse<Discount>>('/finance/discounts', data),
+
+    update: (id: string, data: Partial<Discount>) =>
+        api.put<ApiResponse<Discount>>(`/finance/discounts/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/finance/discounts/${id}`),
+
+    types: () =>
+        api.get<ApiResponse<Record<string, string>>>('/finance/discounts/types'),
+};
+
+// Salary Grades
+export const salaryGradesApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<SalaryGrade>>>('/payroll/salary-grades', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<SalaryGrade>>(`/payroll/salary-grades/${id}`),
+
+    create: (data: Partial<SalaryGrade>) =>
+        api.post<ApiResponse<SalaryGrade>>('/payroll/salary-grades', data),
+
+    update: (id: string, data: Partial<SalaryGrade>) =>
+        api.put<ApiResponse<SalaryGrade>>(`/payroll/salary-grades/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/payroll/salary-grades/${id}`),
+};
+
+// Salary Components
+export const salaryComponentsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<SalaryComponent>>>('/payroll/salary-components', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<SalaryComponent>>(`/payroll/salary-components/${id}`),
+
+    create: (data: Partial<SalaryComponent>) =>
+        api.post<ApiResponse<SalaryComponent>>('/payroll/salary-components', data),
+
+    update: (id: string, data: Partial<SalaryComponent>) =>
+        api.put<ApiResponse<SalaryComponent>>(`/payroll/salary-components/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/payroll/salary-components/${id}`),
+
+    types: () =>
+        api.get<ApiResponse<Record<string, string>>>('/payroll/salary-components/types'),
+
+    calculationTypes: () =>
+        api.get<ApiResponse<Record<string, string>>>('/payroll/salary-components/calculation-types'),
+};
+
+// BPJS Rates
+export const bpjsRatesApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<BpjsRate>>>('/payroll/bpjs-rates', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<BpjsRate>>(`/payroll/bpjs-rates/${id}`),
+
+    create: (data: Partial<BpjsRate>) =>
+        api.post<ApiResponse<BpjsRate>>('/payroll/bpjs-rates', data),
+
+    update: (id: string, data: Partial<BpjsRate>) =>
+        api.put<ApiResponse<BpjsRate>>(`/payroll/bpjs-rates/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/payroll/bpjs-rates/${id}`),
+
+    types: () =>
+        api.get<ApiResponse<Record<string, string>>>('/payroll/bpjs-rates/types'),
+
+    currentRates: () =>
+        api.get<ApiResponse<BpjsRate[]>>('/payroll/bpjs-rates/current'),
+};
+
+// Tax Brackets
+export const taxBracketsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<TaxBracket>>>('/payroll/tax-brackets', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<TaxBracket>>(`/payroll/tax-brackets/${id}`),
+
+    create: (data: Partial<TaxBracket>) =>
+        api.post<ApiResponse<TaxBracket>>('/payroll/tax-brackets', data),
+
+    update: (id: string, data: Partial<TaxBracket>) =>
+        api.put<ApiResponse<TaxBracket>>(`/payroll/tax-brackets/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/payroll/tax-brackets/${id}`),
+
+    forYear: (year: number) =>
+        api.get<ApiResponse<TaxBracket[]>>(`/payroll/tax-brackets/year/${year}`),
+
+    calculate: (data: { pkp: number; year: number }) =>
+        api.post<ApiResponse<{
+            pkp: number;
+            pkp_formatted: string;
+            tax: number;
+            tax_formatted: string;
+            effective_rate: number;
+        }>>('/payroll/tax-brackets/calculate', data),
+};
+
+// Tax Settings
+export const taxSettingsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<TaxSetting>>>('/payroll/tax-settings', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<TaxSetting>>(`/payroll/tax-settings/${id}`),
+
+    create: (data: Partial<TaxSetting>) =>
+        api.post<ApiResponse<TaxSetting>>('/payroll/tax-settings', data),
+
+    update: (id: string, data: Partial<TaxSetting>) =>
+        api.put<ApiResponse<TaxSetting>>(`/payroll/tax-settings/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/payroll/tax-settings/${id}`),
+
+    categories: () =>
+        api.get<ApiResponse<Record<string, string>>>('/payroll/tax-settings/categories'),
+
+    ptkpLabels: () =>
+        api.get<ApiResponse<Record<string, string>>>('/payroll/tax-settings/ptkp-labels'),
+
+    ptkpForYear: (year: number) =>
+        api.get<ApiResponse<TaxSetting[]>>(`/payroll/tax-settings/ptkp/year/${year}`),
+
+    getPtkpValue: (data: { status: string; year: number }) =>
+        api.post<ApiResponse<{
+            status: string;
+            year: number;
+            value: number;
+            value_formatted: string;
+        }>>('/payroll/tax-settings/ptkp/value', data),
+
+    biayaJabatanForYear: (year: number) =>
+        api.get<ApiResponse<{
+            year: number;
+            rate: number;
+            rate_formatted: string;
+            max_per_year: number;
+            max_per_year_formatted: string;
+            max_per_month: number;
+            max_per_month_formatted: string;
+        }>>(`/payroll/tax-settings/biaya-jabatan/year/${year}`),
+};
+
+// Employee Salaries
+export const employeeSalariesApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<EmployeeSalary>>>('/payroll/employee-salaries', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<EmployeeSalary>>(`/payroll/employee-salaries/${id}`),
+
+    create: (data: Record<string, unknown>) =>
+        api.post<ApiResponse<EmployeeSalary>>('/payroll/employee-salaries', data),
+
+    update: (id: string, data: Record<string, unknown>) =>
+        api.put<ApiResponse<EmployeeSalary>>(`/payroll/employee-salaries/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/payroll/employee-salaries/${id}`),
+
+    availableEmployees: (params?: Record<string, string>) =>
+        api.get<ApiResponse<{ data: Array<{
+            id: string;
+            type: 'teacher' | 'staff';
+            type_label: string;
+            identifier: string;
+            name: string;
+            email?: string;
+            employment_status?: string;
+        }> }>>('/payroll/employee-salaries/available-employees', { params }),
+
+    ptkpStatuses: () =>
+        api.get<ApiResponse<{ data: Array<{ code: string; label: string }> }>>('/payroll/employee-salaries/ptkp-statuses'),
+
+    summary: () =>
+        api.get<ApiResponse<{
+            total_employees: number;
+            total_teachers: number;
+            total_staff: number;
+            total_base_salary: number;
+            total_base_salary_formatted: string;
+            average_base_salary: number;
+            average_base_salary_formatted: string;
+            by_grade: Array<{ grade: string; count: number; total: number; total_formatted: string }>;
+        }>>('/payroll/employee-salaries/summary'),
+
+    history: (id: string) =>
+        api.get<ApiResponse<{ data: Array<{
+            id: string;
+            change_type: string;
+            change_type_label: string;
+            old_grade?: { id: string; code: string; name: string };
+            new_grade?: { id: string; code: string; name: string };
+            old_base_salary?: number;
+            old_base_salary_formatted?: string;
+            new_base_salary: number;
+            new_base_salary_formatted: string;
+            salary_difference: number;
+            salary_difference_formatted: string;
+            percentage_change: number;
+            effective_date: string;
+            reason?: string;
+            changed_by?: { id: string; name: string };
+            created_at: string;
+        }> }>>(`/payroll/employee-salaries/${id}/history`),
+
+    syncComponents: (id: string, data: { components: Array<{ salary_component_id: string; value: number; is_active?: boolean }> }) =>
+        api.put<ApiResponse<EmployeeSalary>>(`/payroll/employee-salaries/${id}/components`, data),
+};
+
+// Payroll Periods
+export const payrollPeriodsApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<PayrollPeriod>>>('/payroll/periods', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}`),
+
+    create: (data: {
+        year: number;
+        month: number;
+        start_date: string;
+        end_date: string;
+        payment_date?: string | null;
+        notes?: string | null;
+    }) => api.post<ApiResponse<PayrollPeriod>>('/payroll/periods', data),
+
+    update: (id: string, data: Partial<{
+        start_date: string;
+        end_date: string;
+        payment_date: string | null;
+        notes: string | null;
+    }>) => api.put<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/payroll/periods/${id}`),
+
+    statuses: () =>
+        api.get<ApiResponse<{ data: Record<string, string> }>>('/payroll/periods/statuses'),
+
+    generateSlips: (id: string) =>
+        api.post<ApiResponse<{ slips_created: number }>>(`/payroll/periods/${id}/generate-slips`),
+
+    calculate: (id: string) =>
+        api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/calculate`),
+
+    submitForApproval: (id: string) =>
+        api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/submit-for-approval`),
+
+    approve: (id: string) =>
+        api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/approve`),
+
+    markAsPaid: (id: string) =>
+        api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/mark-as-paid`),
+
+    finalize: (id: string) =>
+        api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/finalize`),
+
+    summary: (id: string) =>
+        api.get<ApiResponse>(`/payroll/periods/${id}/summary`),
+};
+
+// Payroll Slips
+export const payrollSlipsApi = {
+    list: (periodId: string, params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<PayrollSlip>>>(`/payroll/periods/${periodId}/slips`, { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<PayrollSlip>>(`/payroll/slips/${id}`),
+
+    updateItems: (id: string, data: { items: Array<{
+        id?: string;
+        salary_component_id?: string;
+        component_code: string;
+        component_name: string;
+        type: 'earning' | 'deduction';
+        category: string;
+        amount: number;
+        quantity?: number;
+        rate?: number;
+        is_taxable?: boolean;
+        is_auto_calculated?: boolean;
+        notes?: string;
+    }> }) => api.put<ApiResponse<PayrollSlip>>(`/payroll/slips/${id}/items`, data),
+
+    addItem: (id: string, data: {
+        salary_component_id?: string;
+        component_code: string;
+        component_name: string;
+        type: 'earning' | 'deduction';
+        category: string;
+        amount: number;
+        quantity?: number;
+        rate?: number;
+        is_taxable?: boolean;
+        notes?: string;
+    }) => api.post<ApiResponse<PayrollSlip>>(`/payroll/slips/${id}/items`, data),
+
+    removeItem: (slipId: string, itemId: string) =>
+        api.delete<ApiResponse<PayrollSlip>>(`/payroll/slips/${slipId}/items/${itemId}`),
+
+    updateNotes: (id: string, notes: string | null) =>
+        api.put<ApiResponse<PayrollSlip>>(`/payroll/slips/${id}/notes`, { notes }),
+
+    printData: (id: string) =>
+        api.get<ApiResponse>(`/payroll/slips/${id}/print`),
 };
 
 // Attendance
@@ -646,6 +1092,60 @@ export const loginSecurityApi = {
 
     revokeSessions: (userId: string) =>
         api.post<ApiResponse<{ revoked: number }>>(`/admin/login-security/users/${userId}/revoke-sessions`),
+};
+
+// Finance Reports
+export const financeReportsApi = {
+    dashboard: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse>('/finance/reports/dashboard', { params }),
+
+    outstanding: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse>('/finance/reports/outstanding', { params }),
+
+    byClassroom: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse>('/finance/reports/by-classroom', { params }),
+
+    monthly: (params: { month: number; year: number; academic_year_id?: string; classroom_id?: string; status?: string; per_page?: number }) =>
+        api.get<ApiResponse>('/finance/reports/monthly', { params }),
+
+    studentHistory: (studentId: string) =>
+        api.get<ApiResponse>(`/finance/reports/student/${studentId}/history`),
+
+    exportOutstanding: (params?: Record<string, unknown>) =>
+        api.get('/finance/reports/export/outstanding', { params, responseType: 'blob' }),
+
+    exportByClassroom: (params?: Record<string, unknown>) =>
+        api.get('/finance/reports/export/by-classroom', { params, responseType: 'blob' }),
+
+    exportMonthly: (params: { month: number; year: number; academic_year_id?: string; classroom_id?: string }) =>
+        api.get('/finance/reports/export/monthly', { params, responseType: 'blob' }),
+};
+
+// Payroll Reports
+export const payrollReportsApi = {
+    dashboard: (params?: { year?: number }) =>
+        api.get<ApiResponse>('/payroll/reports/dashboard', { params }),
+
+    monthlyRecap: (params: { year: number; month?: number }) =>
+        api.get<ApiResponse>('/payroll/reports/monthly-recap', { params }),
+
+    pph21: (params: { year: number; month?: number; period_id?: string; per_page?: number }) =>
+        api.get<ApiResponse>('/payroll/reports/pph21', { params }),
+
+    bpjs: (params: { year: number; month?: number; period_id?: string; type?: string; per_page?: number }) =>
+        api.get<ApiResponse>('/payroll/reports/bpjs', { params }),
+
+    employeeHistory: (employeeId: string, params: { employee_type: 'teacher' | 'staff' }) =>
+        api.get<ApiResponse>(`/payroll/reports/employee/${employeeId}/history`, { params }),
+
+    exportMonthlyRecap: (params: { year: number }) =>
+        api.get('/payroll/reports/export/monthly-recap', { params, responseType: 'blob' }),
+
+    exportPph21: (params: { year: number; month?: number }) =>
+        api.get('/payroll/reports/export/pph21', { params, responseType: 'blob' }),
+
+    exportBpjs: (params: { year: number; month?: number }) =>
+        api.get('/payroll/reports/export/bpjs', { params, responseType: 'blob' }),
 };
 
 export default api;

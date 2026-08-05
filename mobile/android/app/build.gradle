@@ -11,7 +11,7 @@ android {
     // (mobile_scanner, geolocator) butuh compileSdk 34 dan properti bawaan
     // tidak ter-resolve pada setup Gradle ini.
     compileSdk = 34
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "26.1.10909125"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -30,7 +30,7 @@ android {
         //    flutter_secure_storage `encryptedSharedPreferences`.
         //  - targetSdk 33 = Android 13 — matang & luas, bukan versi terbaru.
         //  - compileSdk tetap mengikuti Flutter (kompilasi terhadap SDK terbaru).
-        minSdkVersion = flutter.minSdkVersion
+        minSdkVersion = 23
         targetSdk = 33
         versionCode = flutter.versionCode
         versionName = flutter.versionName

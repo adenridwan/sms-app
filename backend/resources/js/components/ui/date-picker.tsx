@@ -56,7 +56,7 @@ export function DatePicker({
     const selected = parseValue(value);
 
     return (
-        <Popover>
+        <Popover modal={true}>
             <PopoverTrigger asChild>
                 <Button
                     id={id}
@@ -74,7 +74,7 @@ export function DatePicker({
                     {selected ? format(selected, 'd MMMM yyyy', { locale: localeId }) : placeholder}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-3">
+            <PopoverContent className="w-auto p-3" onOpenAutoFocus={(e) => e.preventDefault()}>
                 <Calendar
                     mode="single"
                     selected={selected}

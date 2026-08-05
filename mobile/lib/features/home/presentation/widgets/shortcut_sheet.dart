@@ -135,7 +135,7 @@ class _ShortcutSheet extends ConsumerWidget {
                         size: 21,
                         color: isPinned
                             ? scheme.primary
-                            : scheme.onSurfaceVariant.withValues(alpha: .5),
+                            : scheme.onSurfaceVariant.withOpacity(.5),
                       ),
                     ),
                   );

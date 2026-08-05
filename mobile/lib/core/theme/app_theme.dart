@@ -63,7 +63,7 @@ class AppTheme {
           letterSpacing: -0.2,
         ),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         elevation: 0,
         color: surface,
         surfaceTintColor: Colors.transparent,

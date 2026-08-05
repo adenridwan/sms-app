@@ -36,7 +36,7 @@ class BackendStatusDot extends ConsumerWidget {
       color = const Color(0xFF22C55E);
       label = 'Terhubung ke server';
     } else {
-      color = scheme.onSurfaceVariant.withValues(alpha: 0.4);
+      color = scheme.onSurfaceVariant.withOpacity(0.4);
       label = unverifiedSession
           ? 'Belum terhubung — memakai sesi tersimpan'
           : 'Memeriksa koneksi server…';

@@ -73,7 +73,7 @@ class HomeHero extends StatelessWidget {
             Text(
               subtitle,
               style: TextStyle(
-                color: onHero.withValues(alpha: .82),
+                color: onHero.withOpacity(.82),
                 fontSize: 11.5,
               ),
             ),
@@ -84,7 +84,7 @@ class HomeHero extends StatelessWidget {
               padding: const EdgeInsets.only(top: 13),
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: onHero.withValues(alpha: .18)),
+                  top: BorderSide(color: onHero.withOpacity(.18)),
                 ),
               ),
               child: Row(
@@ -98,7 +98,7 @@ class HomeHero extends StatelessWidget {
                             : BoxDecoration(
                                 border: Border(
                                   left: BorderSide(
-                                      color: onHero.withValues(alpha: .18)),
+                                      color: onHero.withOpacity(.18)),
                                 ),
                               ),
                         child: Column(
@@ -119,7 +119,7 @@ class HomeHero extends StatelessWidget {
                             Text(
                               figures[i].label.toUpperCase(),
                               style: TextStyle(
-                                color: onHero.withValues(alpha: .75),
+                                color: onHero.withOpacity(.75),
                                 fontSize: 9.5,
                                 letterSpacing: .6,
                               ),
