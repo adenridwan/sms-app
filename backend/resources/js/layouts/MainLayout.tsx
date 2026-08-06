@@ -48,6 +48,7 @@ import {
     ChevronRight,
     ChevronDown,
     Check,
+    KeyRound,
     LogOut,
     User,
     Moon,
@@ -442,7 +443,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                     <div className="flex items-center gap-2 rounded-lg p-1.5 group-data-[state=collapsed]:flex-col group-data-[state=collapsed]:gap-1.5 group-data-[state=collapsed]:p-0">
                         <Link href="/profile" title="Profil" className="shrink-0">
                             <Avatar className="h-8 w-8 ring-1 ring-border transition-shadow hover:ring-2 hover:ring-primary">
-                                <AvatarImage src={auth.user?.avatar ?? undefined} />
+                                <AvatarImage src={auth.user?.avatar_url ?? undefined} />
                                 <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                                     {getInitials(userName)}
                                 </AvatarFallback>
@@ -524,7 +525,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                                 className="h-9 gap-2 rounded-full px-1.5 md:pr-2.5"
                             >
                                 <Avatar className="h-7 w-7">
-                                    <AvatarImage src={auth.user?.avatar ?? undefined} />
+                                    <AvatarImage src={auth.user?.avatar_url ?? undefined} />
                                     <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                                         {getInitials(userName)}
                                     </AvatarFallback>
@@ -547,6 +548,12 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                                 <Link href="/profile">
                                     <User className="mr-2 h-4 w-4" />
                                     Profil Saya
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href="/profile?tab=security">
+                                    <KeyRound className="mr-2 h-4 w-4" />
+                                    Ganti Password
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />

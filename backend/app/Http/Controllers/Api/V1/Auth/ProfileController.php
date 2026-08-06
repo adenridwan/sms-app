@@ -17,7 +17,7 @@ class ProfileController extends ApiController
      */
     public function show(Request $request): JsonResponse
     {
-        $user = $request->user()->load('roles');
+        $user = $request->user()->load(['profile', 'roles']);
 
         return $this->success(new UserResource($user), 'Profile retrieved successfully');
     }
@@ -44,12 +44,21 @@ class ProfileController extends ApiController
 
         $user->update($userData);
 
-        UserProfile::query()->updateOrCreate(
-            ['user_id' => $user->id],
-            $profileData
-        );
+        // Hanya sentuh user_profiles kalau memang ada field profil yang dikirim —
+        // permintaan yang cuma mengganti avatar/email tidak perlu membuat baris
+        // profil kosong. `first_name` NOT NULL, jadi saat barisnya belum ada dan
+        // request tidak mengirim first_name, isi dari nilai lama/username supaya
+        // tidak jatuh ke 500 (Not null violation).
+        if ($profileData !== []) {
+            UserProfile::query()->updateOrCreate(
+                ['user_id' => $user->id],
+                $profileData + ['first_name' => $user->first_name ?: $user->username],
+            );
+        }
 
-        $user->load('roles');
+        // `profile` ikut di-load ulang: accessor first_name/last_name/phone
+        // membaca relasi ini, dan relasi lama masih memegang nilai sebelum update.
+        $user->load(['profile', 'roles']);
 
         return $this->success(new UserResource($user), 'Profile updated successfully');
     }

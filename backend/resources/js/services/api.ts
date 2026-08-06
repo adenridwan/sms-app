@@ -61,10 +61,19 @@ export const authApi = {
 
     me: () => api.get<ApiResponse<User>>('/auth/me'),
 
-    updateProfile: (data: FormData) =>
-        api.post<ApiResponse<User>>('/auth/profile', data, {
+    profile: () => api.get<ApiResponse<User>>('/auth/profile'),
+
+    // Route-nya PUT, tapi dikirim sebagai POST + `_method=PUT` (method spoofing
+    // Laravel): PHP tidak mem-parse body multipart pada request PUT asli, jadi
+    // file avatar tidak akan sampai kalau benar-benar dikirim via PUT.
+    updateProfile: (data: FormData) => {
+        data.append('_method', 'PUT');
+        return api.post<ApiResponse<User>>('/auth/profile', data, {
             headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+        });
+    },
+
+    deleteAvatar: () => api.delete<ApiResponse>('/auth/profile/avatar'),
 
     // Route memakai PUT (lihat routes/api_v1.php: auth.password.update)
     changePassword: (data: { current_password: string; password: string; password_confirmation: string }) =>

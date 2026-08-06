@@ -42,7 +42,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('/logout', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'logout'])->name('logout');
         Route::get('/me', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'me'])->name('me');
+        Route::get('/profile', [\App\Http\Controllers\Api\V1\Auth\ProfileController::class, 'show'])->name('profile.show');
+        // Frontend mengirim multipart (avatar) lewat POST + `_method=PUT` —
+        // PHP tidak mem-parse body multipart pada request PUT asli.
         Route::put('/profile', [\App\Http\Controllers\Api\V1\Auth\ProfileController::class, 'update'])->name('profile.update');
+        Route::delete('/profile/avatar', [\App\Http\Controllers\Api\V1\Auth\ProfileController::class, 'deleteAvatar'])->name('profile.avatar.destroy');
         // Nama method controller adalah `change` — route dulu salah rujuk ke `update` (selalu 500)
         Route::put('/password', [\App\Http\Controllers\Api\V1\Auth\PasswordController::class, 'change'])->name('password.update');
     });

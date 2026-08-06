@@ -148,9 +148,7 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     });
 
     // Profile Routes
-    Route::get('/profile', function () {
-        return Inertia::render('Profile/Edit');
-    })->name('profile.edit');
+    Route::get('/profile', [PageController::class, 'profile'])->name('profile.edit');
 });
 
 // Fallback: elegant 404 page for unknown routes

@@ -425,6 +425,15 @@ class PageController extends Controller
     }
 
     /**
+     * Display the signed-in user's own profile page (data diri, avatar, password).
+     * Datanya diambil halaman lewat API (GET /api/v1/auth/profile).
+     */
+    public function profile(): Response
+    {
+        return Inertia::render('Profile/Edit');
+    }
+
+    /**
      * Display menu visibility settings page (Pengaturan Menu).
      * Data matriks diambil halaman via API (GET /api/v1/settings/menu).
      */

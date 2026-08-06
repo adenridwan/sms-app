@@ -52,6 +52,14 @@ class HandleInertiaRequests extends Middleware
                     'username' => $request->user()->username,
                     'email' => $request->user()->email,
                     'avatar' => $request->user()->avatar,
+                    // URL siap pakai untuk <img>; `avatar` mentah hanya path
+                    // relatif di disk `public` sehingga tidak bisa dipasang langsung.
+                    // Dibuat root-relative (sama seperti logo tenant di bawah) supaya
+                    // tidak ikut host APP_URL yang bisa beda dengan host browser.
+                    'avatar_url' => $request->user()->avatar
+                        ? (parse_url(\Illuminate\Support\Facades\Storage::disk('public')->url($request->user()->avatar), PHP_URL_PATH)
+                            ?: '/storage/'.$request->user()->avatar)
+                        : null,
                     'user_type' => $request->user()->user_type,
                     'full_name' => $request->user()->full_name,
                     'roles' => $request->user()->getRoleNames(),
