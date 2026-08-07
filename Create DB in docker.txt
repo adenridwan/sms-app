@@ -1,0 +1,14 @@
+Create DB
+docker exec sms_postgres createdb -U sms_user -O sms_user db_prod
+
+Migrasi
+docker exec sms_php php artisan migrate --force
+
+Seed minimal (login saja)
+docker exec sms_php php artisan db:seed --class=PermissionSeeder --force
+docker exec sms_php php artisan db:seed --class=RoleSeeder --force
+docker exec sms_php php artisan permission:cache-reset
+docker exec sms_php php artisan db:seed --class=UserSeeder --force
+
+superadmin@sms.local / password
+
