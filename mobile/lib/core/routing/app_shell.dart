@@ -73,16 +73,38 @@ class AppShell extends ConsumerWidget {
         .indexWhere((d) => d.branch == navigationShell.currentIndex)
         .clamp(0, destinations.length - 1);
 
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selected,
-        onDestinationSelected: (i) => navigationShell.goBranch(
-          destinations[i].branch,
-          // Tap tab yang sedang aktif → kembali ke akar tab tsb.
-          initialLocation: destinations[i].branch == navigationShell.currentIndex,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          border: Border(top: BorderSide(color: scheme.outlineVariant)),
         ),
-        destinations: [for (final d in destinations) d.dest],
+        child: NavigationBar(
+          selectedIndex: selected,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          height: 66,
+          // Label selalu tampil: tab di sini jarang ditebak dari ikon saja
+          // (Absensi vs Riwayat mudah tertukar).
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          // Pil bertinta di balik ikon aktif — penanda posisi yang terbaca
+          // sekilas, sesuai rujukan desain.
+          indicatorColor: scheme.primary.withValues(alpha: .12),
+          indicatorShape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          onDestinationSelected: (i) => navigationShell.goBranch(
+            destinations[i].branch,
+            // Tap tab yang sedang aktif → kembali ke akar tab tsb.
+            initialLocation:
+                destinations[i].branch == navigationShell.currentIndex,
+          ),
+          destinations: [for (final d in destinations) d.dest],
+        ),
       ),
     );
   }

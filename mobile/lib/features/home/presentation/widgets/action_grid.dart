@@ -6,16 +6,17 @@ import '../../data/shortcut_store.dart';
 import '../../models/action_item.dart';
 import 'shortcut_sheet.dart';
 
-/// Grid aksi datar — ikon dalam ubin lembut, tanpa bingkai kartu.
-///
-/// Menampilkan maksimal [ShortcutController.maxVisible] pintasan plus satu
-/// ubin "Semua menu", sehingga tinggi Beranda tetap sama berapa pun menu
-/// bertambah di katalog.
+/// Kartu aksi 2 kolom. Kartu **pertama** diisi warna aksen sebagai tugas
+/// utama; sisanya putih dengan ikon bertinta — hierarki terbaca sekali lihat,
+/// tanpa perlu membaca label satu per satu.
 class ActionGrid extends ConsumerWidget {
-  const ActionGrid({super.key, required this.actions});
+  const ActionGrid({super.key, required this.actions, this.primaryKey});
 
   /// Aksi yang boleh dilihat user (sudah tersaring izin).
   final List<ActionItem> actions;
+
+  /// Kunci aksi yang ditonjolkan (kartu biru). Bila null, yang pertama.
+  final String? primaryKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,107 +32,180 @@ class ActionGrid extends ConsumerWidget {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('AKSI',
-            style: TextStyle(
-              fontSize: 10,
-              letterSpacing: 1.3,
-              fontWeight: FontWeight.w700,
-              color: scheme.onSurfaceVariant,
-            )),
-        const SizedBox(height: 12),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 4,
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 6,
-          childAspectRatio: 0.82,
-          children: [
-            for (final a in shown)
-              _Tile(
-                icon: a.icon,
-                label: a.title,
-                enabled: a.isAvailable,
-                onTap: a.route == null ? null : () => context.push(a.route!),
-              ),
-            _Tile(
-              icon: Icons.apps_rounded,
-              label: 'Semua menu',
-              enabled: true,
-              muted: true,
-              onTap: () => showShortcutSheet(context, actions),
-            ),
-          ],
+    // Ubin "Semua menu" selalu menutup daftar, sehingga tinggi Beranda tidak
+    // ikut tumbuh saat katalog menu bertambah.
+    final tiles = <Widget>[
+      for (final a in shown)
+        _ActionCard(
+          action: a,
+          primary: primaryKey == null
+              ? a.key == shown.first.key
+              : a.key == primaryKey,
+          onTap: a.route == null ? null : () => context.push(a.route!),
         ),
-      ],
+      _MoreCard(onTap: () => showShortcutSheet(context, actions)),
+    ];
+
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 11,
+      crossAxisSpacing: 11,
+      childAspectRatio: 1.62,
+      children: tiles,
     );
   }
 }
 
-class _Tile extends StatelessWidget {
-  const _Tile({
-    required this.icon,
-    required this.label,
-    required this.enabled,
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.action,
+    required this.primary,
     this.onTap,
-    this.muted = false,
   });
 
-  final IconData icon;
-  final String label;
-  final bool enabled;
-  final bool muted;
+  final ActionItem action;
+  final bool primary;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final active = enabled && onTap != null;
+    final enabled = action.isAvailable && onTap != null;
+    final filled = primary && enabled;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: active && !muted
-                  ? scheme.primaryContainer
-                  : scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              icon,
-              size: 21,
-              color: active && !muted
-                  ? scheme.onPrimaryContainer
-                  : scheme.onSurfaceVariant,
+    final bg = filled ? scheme.primary : scheme.surface;
+    final fg = filled ? Colors.white : scheme.onSurface;
+    final sub = filled
+        ? Colors.white.withValues(alpha: .8)
+        : scheme.onSurfaceVariant;
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Opacity(
+          opacity: enabled ? 1 : .55,
+          child: Padding(
+            padding: const EdgeInsets.all(13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: filled
+                        ? Colors.white.withValues(alpha: .22)
+                        : action.tint.withValues(alpha: .14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    action.icon,
+                    size: 20,
+                    color: filled ? Colors.white : action.tint,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  action.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -.2,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  enabled ? action.caption : 'Segera hadir',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: sub, fontSize: 11.5),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.5,
-              height: 1.25,
-              color: active ? scheme.onSurface : scheme.onSurfaceVariant,
-            ),
-          ),
-          if (!enabled)
-            Text('Segera',
-                style: TextStyle(
-                    fontSize: 8.5, color: scheme.onSurfaceVariant)),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+class _MoreCard extends StatelessWidget {
+  const _MoreCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: DottedBorderBox(
+          child: Padding(
+            padding: const EdgeInsets.all(13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.apps_rounded,
+                      size: 20, color: scheme.onSurfaceVariant),
+                ),
+                const Spacer(),
+                Text('Semua menu',
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -.2,
+                    )),
+                const SizedBox(height: 1),
+                Text('Atur pintasan',
+                    style: TextStyle(
+                        color: scheme.onSurfaceVariant, fontSize: 11.5)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kotak bergaris putus-putus — menandai "ini bukan aksi, ini pintu ke daftar
+/// penuh" tanpa perlu warna tambahan.
+class DottedBorderBox extends StatelessWidget {
+  const DottedBorderBox({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: .55),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.outlineVariant, width: 1.4),
+      ),
+      child: child,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/providers.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../data/notification_repository.dart';
 import '../models/app_notification.dart';
 
@@ -74,7 +75,10 @@ final notificationRepositoryProvider = Provider<NotificationRepository>(
   (ref) => NotificationRepository(ref.watch(dioProvider)),
 );
 
+/// Bergantung pada id user agar notifikasi tidak terbawa antar akun saat
+/// berganti login (lihat catatan serupa di `dashboardStatsProvider`).
 final notificationControllerProvider =
-    StateNotifierProvider<NotificationController, NotificationState>(
-  (ref) => NotificationController(ref.watch(notificationRepositoryProvider)),
-);
+    StateNotifierProvider<NotificationController, NotificationState>((ref) {
+  ref.watch(authControllerProvider.select((s) => s.user?.id));
+  return NotificationController(ref.watch(notificationRepositoryProvider));
+});

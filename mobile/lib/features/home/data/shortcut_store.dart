@@ -41,7 +41,7 @@ class ShortcutController extends StateNotifier<List<String>?> {
 
   /// Banyaknya pintasan yang tampil di Beranda sebelum ubin "Semua menu".
   /// Dengan batas ini, tinggi Beranda tidak ikut tumbuh saat menu bertambah.
-  static const maxVisible = 7;
+  static const maxVisible = 5;
 
   Future<void> _load() async {
     state = await _store.load();
@@ -78,7 +78,14 @@ List<ActionItem> visibleShortcuts(
   List<String>? pinned,
 ) {
   if (pinned == null || pinned.isEmpty) {
-    return allowed.take(ShortcutController.maxVisible).toList();
+    // Bawaan: hanya modul yang benar-benar bisa dipakai. Kartu "Segera hadir"
+    // tak layak menempati ruang paling berharga di layar — tetap bisa dilihat
+    // lewat "Semua menu". Bila belum ada satu pun yang jadi, tampilkan apa
+    // adanya supaya Beranda tidak kosong melompong.
+    final ready = allowed.where((a) => a.isAvailable).toList();
+    return (ready.isEmpty ? allowed : ready)
+        .take(ShortcutController.maxVisible)
+        .toList();
   }
 
   // Urutan mengikuti urutan penyematan, dan tetap disaring izin agar pintasan

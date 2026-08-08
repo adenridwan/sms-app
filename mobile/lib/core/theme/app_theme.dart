@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
 
-/// Tema aplikasi — palet teal institusional, tampilan **clean** untuk mode
-/// terang & gelap. Warna terpusat di sini; ubah [_seed] atau token netral di
-/// bawah untuk menyetel keseluruhan tampilan.
+/// Tema aplikasi — palet **royal blue** dengan netral biru-abu, mengikuti
+/// rujukan desain dashboard (2026-08-02). Warna terpusat di sini; ubah [_seed]
+/// atau token netral di bawah untuk menyetel keseluruhan tampilan.
 class AppTheme {
   const AppTheme._();
 
   /// Warna aksen utama (ubah ini untuk mengganti nuansa aplikasi).
-  static const Color _seed = Color(0xFF0E7E71); // teal
+  static const Color _seed = Color(0xFF2563EB); // royal blue
 
-  // Netral yang dipilih (sedikit bias teal) — bukan abu-abu default M3.
-  static const _lightBg = Color(0xFFF5F8F7); // latar lembut
+  /// Ujung gelap gradien header. Dipakai [HomeHero] agar bidang biru punya
+  /// kedalaman, bukan blok warna datar.
+  static const Color heroGradientEnd = Color(0xFF1E40AF);
+
+  // Netral berbias biru — latar sengaja bukan putih agar kartu putih di
+  // atasnya "mengambang", persis seperti pada rujukan desain.
+  static const _lightBg = Color(0xFFEEF2F9); // latar biru-abu lembut
   static const _lightSurface = Color(0xFFFFFFFF); // kartu putih bersih
-  static const _lightField = Color(0xFFEFF3F1); // isian input
-  static const _lightLine = Color(0xFFE1E8E5); // garis hairline
+  static const _lightField = Color(0xFFF1F5FB); // isian input
+  static const _lightLine = Color(0xFFE2E8F2); // garis hairline
 
-  static const _darkBg = Color(0xFF0D1512);
-  static const _darkSurface = Color(0xFF16201C);
-  static const _darkField = Color(0xFF18241F);
-  static const _darkLine = Color(0xFF223129);
+  static const _darkBg = Color(0xFF0B1020);
+  static const _darkSurface = Color(0xFF141B2E);
+  static const _darkField = Color(0xFF19223A);
+  static const _darkLine = Color(0xFF25304C);
 
   static ThemeData light() => _build(Brightness.light);
   static ThemeData dark() => _build(Brightness.dark);
@@ -34,6 +39,17 @@ class AppTheme {
       seedColor: _seed,
       brightness: brightness,
     ).copyWith(
+      // `fromSeed` memetakan seed ke palet tonal M3, yang membuat biru merek
+      // ini keluar sebagai biru-abu kusam. Untuk warna aksen kita kunci nilai
+      // aslinya agar bidang biru benar-benar hidup seperti rujukan desain.
+      primary: isLight ? _seed : const Color(0xFF60A5FA),
+      onPrimary: isLight ? Colors.white : const Color(0xFF0B1020),
+      primaryContainer: isLight
+          ? const Color(0xFFDBE7FE)
+          : const Color(0xFF1E3A8A),
+      onPrimaryContainer: isLight
+          ? const Color(0xFF17337A)
+          : const Color(0xFFDBE7FE),
       surface: surface,
       surfaceContainerLowest: surface,
       outlineVariant: line,

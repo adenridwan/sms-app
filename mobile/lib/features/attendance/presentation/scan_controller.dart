@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/location/location_service.dart';
 import '../../../core/network/api_exception.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../data/attendance_providers.dart';
 import '../data/attendance_repository.dart';
 import '../data/offline_queue_store.dart';
@@ -145,8 +146,11 @@ class ScanController extends StateNotifier<ScanState> {
   }
 }
 
+/// Bergantung pada id user: bootstrap absensi (hari libur, wajib lokasi,
+/// tanggal) bisa berbeda per akun, dan tak boleh terbawa saat ganti login.
 final scanControllerProvider =
     StateNotifierProvider<ScanController, ScanState>((ref) {
+  ref.watch(authControllerProvider.select((s) => s.user?.id));
   return ScanController(
     ref.watch(attendanceRepositoryProvider),
     ref.watch(offlineQueueStoreProvider),

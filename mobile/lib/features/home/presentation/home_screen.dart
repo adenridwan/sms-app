@@ -8,15 +8,16 @@ import '../data/dashboard_repository.dart';
 import '../models/action_item.dart';
 import '../models/dashboard_stats.dart';
 import 'widgets/action_grid.dart';
-import 'widgets/attendance_bar.dart';
 import 'widgets/home_hero.dart';
+import 'widgets/section_header.dart';
+import 'widgets/stat_chips.dart';
 
-/// Tab Beranda — tata letak "Opsi A": satu blok header memikul identitas,
-/// sisanya rata tanpa bingkai kartu (lihat mockup redesign 2026-08-02).
+/// Tab Beranda.
 ///
-/// Isi menyesuaikan paket peran dari `GET /dashboard`: admin melihat angka
-/// se-sekolah dan bertugas memindai di gerbang; guru melihat kelas yang ia
-/// ampu dan bertugas mengabsen di ruangan.
+/// Susunan mengikuti rujukan desain: bidang biru dengan kartu status di
+/// dalamnya, kartu aksi 2 kolom (satu ditonjolkan), ringkasan angka bertinta,
+/// lalu daftar. Isi menyesuaikan paket peran dari `GET /dashboard` — admin
+/// bertugas memindai di gerbang, guru mengabsen di ruangan.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -30,6 +31,7 @@ class HomeScreen extends ConsumerWidget {
 
     final data = stats.valueOrNull;
     final isTeacher = data?.isTeacher ?? false;
+    final actions = visibleActionsFor(user);
 
     return Scaffold(
       body: RefreshIndicator(
@@ -41,14 +43,18 @@ class HomeScreen extends ConsumerWidget {
           padding: EdgeInsets.zero,
           children: [
             HomeHero(
+              greeting: _greeting(),
               name: user?.fullName ?? 'Petugas',
-              persona: _personaLine(user?.userType, data),
-              today: scan.bootstrap?.today,
-              figures: _figuresFor(data),
+              subtitle: _subtitle(user?.userType, data),
+              statusDate: _prettyDate(scan.bootstrap?.today),
+              statusTitle: _statusTitle(data, isTeacher),
+              statusCaption: _statusCaption(data, isTeacher),
+              statusColor: _statusColor(data),
+              statusIcon: _statusIcon(data),
             ),
 
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -56,78 +62,69 @@ class HomeScreen extends ConsumerWidget {
                     _Strip(
                       icon: Icons.cloud_off_rounded,
                       color: scheme.error,
-                      text:
-                          'Memakai sesi tersimpan — belum terhubung ke server. '
-                          'Scan tetap tersimpan dan disinkronkan nanti.',
+                      text: 'Memakai sesi tersimpan — belum terhubung ke '
+                          'server. Scan tetap disimpan dan disinkronkan nanti.',
                     ),
 
-                  // Guru yang belum ditempatkan di kelas mana pun: angka nol
-                  // akan membingungkan, jadi jelaskan penyebabnya.
                   if (isTeacher && data?.linked == false)
-                    _Strip(
+                    const _Strip(
                       icon: Icons.link_off_rounded,
-                      color: scheme.tertiary,
+                      color: Color(0xFFD97706),
                       text: 'Akun Anda belum terhubung ke kelas mana pun. '
                           'Hubungi administrator sekolah.',
                     ),
 
-                  if (data != null && data.attendanceSummary.isNotEmpty) ...[
-                    AttendanceBar(
-                      title: isTeacher
-                          ? 'Absensi kelas saya'
-                          : 'Absensi hari ini',
-                      percentage: data.attendancePercentage,
-                      summary: data.attendanceSummary,
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // Tugas utama berbeda per peran: guru mengabsen di kelas,
-                  // petugas lain memindai di gerbang.
-                  if (isTeacher)
-                    _PrimaryButton(
-                      icon: Icons.fact_check_rounded,
-                      label: 'Absen Kelas Hari Ini',
-                      onTap: data?.linked == false
-                          ? null
-                          : () => context.push('/class-attendance'),
-                    )
-                  else if (user?.hasPermission('attendance.record') ?? false)
-                    _PrimaryButton(
-                      icon: Icons.qr_code_scanner_rounded,
-                      label: 'Mulai Scan',
-                      onTap: () => context.push('/scan'),
-                    ),
-
-                  if (scan.queueCount > 0) ...[
-                    const SizedBox(height: 10),
+                  if (scan.queueCount > 0)
                     InkWell(
                       onTap: () => context.push('/queue'),
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(12),
                       child: _Strip(
                         icon: Icons.cloud_upload_rounded,
                         color: scheme.primary,
                         text: '${scan.queueCount} scan menunggu sinkron',
-                        margin: EdgeInsets.zero,
                       ),
                     ),
-                  ],
 
-                  const SizedBox(height: 24),
-                  ActionGrid(actions: visibleActionsFor(user)),
+                  ActionGrid(
+                    actions: actions,
+                    // Tugas utama berbeda per peran.
+                    primaryKey: isTeacher
+                        ? 'attendance.class'
+                        : 'attendance.scan',
+                  ),
+
+                  // Selama absensi belum dimulai, keempat ubin pasti berisi "0"
+                  // — itu hanya menambah bising, sedangkan kabar yang sama
+                  // sudah disampaikan kartu status di hero. Ubin baru muncul
+                  // setelah ada kehadiran yang benar-benar tercatat.
+                  if (data != null && !_notStarted(data)) ...[
+                    const SizedBox(height: 26),
+                    SectionHeader(
+                      title: isTeacher
+                          ? 'Absensi Kelas Saya'
+                          : 'Absensi Hari Ini',
+                      trailing: data.attendancePercentage == null
+                          ? null
+                          : '${_pct(data.attendancePercentage!)}% hadir',
+                    ),
+                    const SizedBox(height: 10),
+                    StatChips(summary: data.attendanceSummary),
+                    if ((data.attendanceSummary['belum_scan'] ?? 0) > 0) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '${data.attendanceSummary['belum_scan']} siswa belum tercatat hari ini',
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ],
 
                   if (isTeacher && (data?.myClasses.isNotEmpty ?? false)) ...[
                     const SizedBox(height: 26),
-                    Text('KELAS SAYA',
-                        style: TextStyle(
-                          fontSize: 10,
-                          letterSpacing: 1.3,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurfaceVariant,
-                        )),
-                    const SizedBox(height: 6),
+                    const SectionHeader(title: 'Kelas Saya'),
+                    const SizedBox(height: 10),
                     for (final c in data!.myClasses)
-                      _ClassRow(
+                      _ClassCard(
                         item: c,
                         isHomeroom: c.id == data.homeroomClassroomId,
                         onTap: () =>
@@ -143,8 +140,33 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// Baris kedua header: peran, dan untuk guru ditambah kelas perwaliannya.
-  static String _personaLine(String? userType, DashboardStats? data) {
+  static String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 11) return 'Selamat pagi,';
+    if (h < 15) return 'Selamat siang,';
+    if (h < 18) return 'Selamat sore,';
+    return 'Selamat malam,';
+  }
+
+  static String _pct(num v) => v.toStringAsFixed(v % 1 == 0 ? 0 : 1);
+
+  /// `2026-08-03` → `Sen, 3 Agu 2026`. Dikerjakan manual agar tak perlu
+  /// menambah paket intl hanya untuk satu label.
+  static String? _prettyDate(String? iso) {
+    if (iso == null || iso.isEmpty) return null;
+    final d = DateTime.tryParse(iso);
+    if (d == null) return iso;
+
+    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    ];
+    return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  /// Baris identitas: peran, dan untuk guru ditambah kelas perwaliannya.
+  static String _subtitle(String? userType, DashboardStats? data) {
     final persona = switch (userType) {
       'super_admin' => 'Super Admin',
       'admin' => 'Administrator',
@@ -157,69 +179,127 @@ class HomeScreen extends ConsumerWidget {
       final homeroom = data!.myClasses
           .where((c) => c.id == data.homeroomClassroomId)
           .map((c) => c.name);
-      if (homeroom.isNotEmpty) return '$persona · Wali Kelas ${homeroom.first}';
+      if (homeroom.isNotEmpty) return '$persona • Wali Kelas ${homeroom.first}';
+      if (data.totalClassrooms != null) {
+        return '$persona • ${data.totalClassrooms} kelas';
+      }
     }
     return persona;
   }
 
-  /// Angka di header — guru melihat lingkup kelasnya, bukan total sekolah.
-  static List<HeroFigure> _figuresFor(DashboardStats? d) {
-    if (d == null) return const [];
+  static int _total(DashboardStats? d) =>
+      d?.attendanceSummary.values.fold<int>(0, (a, b) => a + b) ?? 0;
 
-    if (d.isTeacher) {
-      return [
-        if (d.totalClassrooms != null)
-          HeroFigure(value: '${d.totalClassrooms}', label: 'Kelas'),
-        if (d.totalStudents != null)
-          HeroFigure(value: '${d.totalStudents}', label: 'Siswa'),
-      ];
+  /// True bila hari ini belum ada satu pun siswa tercatat.
+  ///
+  /// Termasuk kasus **semua angka nol** — itu terjadi di hari yang belum ada
+  /// datanya sama sekali. Tanpa penjagaan ini, layar sempat menampilkan
+  /// "0 dari 0 sudah hadir" berikut keterangan "Semua siswa hadir" yang
+  /// saling bertentangan.
+  static bool _notStarted(DashboardStats? d) {
+    final s = d?.attendanceSummary;
+    if (s == null || s.isEmpty) return true;
+    final total = _total(d);
+    if (total == 0) return true;
+    return (s['belum_scan'] ?? 0) == total;
+  }
+
+  /// Satu kalimat terpenting hari ini, di dalam hero.
+  static String _statusTitle(DashboardStats? d, bool isTeacher) {
+    if (d == null) return 'Memuat data…';
+
+    final s = d.attendanceSummary;
+    if (s.isEmpty) {
+      if (isTeacher && d.linked == false) return 'Belum terhubung ke kelas';
+      return 'Belum ada data absensi';
     }
 
-    return [
-      if (d.totalStudents != null)
-        HeroFigure(value: '${d.totalStudents}', label: 'Siswa'),
-      if (d.totalTeachers != null)
-        HeroFigure(value: '${d.totalTeachers}', label: 'Guru'),
-      if (d.totalClassrooms != null)
-        HeroFigure(value: '${d.totalClassrooms}', label: 'Kelas'),
-    ];
+    if (_total(d) == 0) return 'Belum ada data absensi';
+    if (_notStarted(d)) return 'Absensi belum dimulai';
+
+    return '${s['hadir'] ?? 0} dari ${_total(d)} sudah hadir';
+  }
+
+  static String? _statusCaption(DashboardStats? d, bool isTeacher) {
+    if (d == null) return null;
+    final s = d.attendanceSummary;
+    if (s.isEmpty) return null;
+
+    // Belum dimulai: jangan menyimpulkan apa pun soal kehadiran — dulu di sini
+    // sempat muncul "Semua siswa hadir" yang justru bertentangan dengan
+    // judulnya.
+    if (_notStarted(d)) {
+      final total = _total(d);
+      return total == 0
+          ? 'Belum ada data untuk hari ini'
+          : '$total siswa menunggu dicatat';
+    }
+
+    final belum = s['belum_scan'] ?? 0;
+    if (belum > 0) return '$belum belum tercatat';
+
+    final tidakHadir =
+        (s['sakit'] ?? 0) + (s['izin'] ?? 0) + (s['alfa'] ?? 0);
+    return tidakHadir == 0
+        ? 'Semua siswa hadir'
+        : '$tidakHadir tidak hadir hari ini';
+  }
+
+  static Color _statusColor(DashboardStats? d) {
+    // "Belum dimulai" bukan keadaan buruk — memberinya merah membuat layar
+    // terasa seperti ada masalah padahal harinya memang baru mulai.
+    if (_notStarted(d)) return const Color(0xFF64748B);
+
+    final pct = d?.attendancePercentage;
+    if (pct == null) return const Color(0xFF64748B);
+    if (pct >= 90) return const Color(0xFF22C55E);
+    if (pct >= 60) return const Color(0xFFD97706);
+    return const Color(0xFFDC2626);
+  }
+
+  static IconData _statusIcon(DashboardStats? d) {
+    if (_notStarted(d)) return Icons.schedule_rounded;
+    final pct = d?.attendancePercentage;
+    if (pct == null) return Icons.schedule_rounded;
+    return pct >= 90 ? Icons.check_circle_rounded : Icons.info_rounded;
   }
 }
 
-/// Pemberitahuan tipis dengan rel warna di kiri — pengganti kartu, agar
-/// tidak menambah satu permukaan lagi hanya untuk satu kalimat.
+/// Pemberitahuan tipis dengan rel warna di kiri — pengganti kartu, agar tidak
+/// menambah satu permukaan lagi hanya untuk satu kalimat.
 class _Strip extends StatelessWidget {
   const _Strip({
     required this.icon,
     required this.color,
     required this.text,
-    this.margin = const EdgeInsets.only(bottom: 16),
   });
 
   final IconData icon;
   final Color color;
   final String text;
-  final EdgeInsets margin;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      margin: margin,
-      padding: const EdgeInsets.fromLTRB(11, 10, 12, 10),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(12, 11, 13, 11),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
+        color: color.withValues(alpha: .09),
         border: Border(left: BorderSide(color: color, width: 3)),
-        borderRadius: const BorderRadius.horizontal(right: Radius.circular(9)),
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(12)),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: color),
+          Icon(icon, size: 17, color: color),
           const SizedBox(width: 10),
           Expanded(
             child: Text(text,
                 style: TextStyle(
-                    fontSize: 11.5, color: scheme.onSurfaceVariant, height: 1.35)),
+                  fontSize: 11.5,
+                  height: 1.35,
+                  color: scheme.onSurface.withValues(alpha: .8),
+                )),
           ),
         ],
       ),
@@ -227,38 +307,10 @@ class _Strip extends StatelessWidget {
   }
 }
 
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, size: 19),
-        label: Text(label),
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ClassRow extends StatelessWidget {
-  const _ClassRow({
+/// Baris kelas bergaya kartu — sama seperti daftar "Aktivitas Terbaru" pada
+/// rujukan: ikon bulat bertinta, judul tebal, meta abu, chevron.
+class _ClassCard extends StatelessWidget {
+  const _ClassCard({
     required this.item,
     required this.isHomeroom,
     required this.onTap,
@@ -271,75 +323,81 @@ class _ClassRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Text(
-                item.name.length > 4 ? item.name.substring(0, 4) : item.name,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onPrimaryContainer,
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: .11),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.groups_rounded,
+                      size: 20, color: scheme.primary),
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: Text(item.name,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w600)),
-                      ),
-                      if (isHomeroom) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: scheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(4),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(item.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -.2)),
                           ),
-                          child: Text('WALI',
-                              style: TextStyle(
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: .5,
-                                color: scheme.onPrimaryContainer,
-                              )),
-                        ),
-                      ],
+                          if (isHomeroom) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withValues(alpha: .12),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text('WALI',
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: .5,
+                                    color: scheme.primary,
+                                  )),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (item.studentsCount != null)
+                        Text('${item.studentsCount} siswa',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: scheme.onSurfaceVariant)),
                     ],
                   ),
-                  if (item.studentsCount != null)
-                    Text('${item.studentsCount} siswa',
-                        style: TextStyle(
-                            fontSize: 11, color: scheme.onSurfaceVariant)),
-                ],
-              ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    size: 20, color: scheme.onSurfaceVariant),
+              ],
             ),
-            Icon(Icons.chevron_right_rounded,
-                size: 20, color: scheme.onSurfaceVariant),
-          ],
+          ),
         ),
       ),
     );
