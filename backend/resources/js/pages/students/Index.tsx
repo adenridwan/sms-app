@@ -31,6 +31,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -83,6 +93,8 @@ export default function StudentsIndex({ students, filters }: Props) {
     const { tenant, auth } = usePage<PageProps>().props;
     const [search, setSearch] = useState(filters.search || '');
     const [printingId, setPrintingId] = useState<string | null>(null);
+    const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     // Import/export hanya untuk yang memang berizin (admin & tata usaha pada
     // seeder bawaan) — guru, wali kelas, siswa, dan orang tua tidak punya
@@ -193,9 +205,22 @@ export default function StudentsIndex({ students, filters }: Props) {
         return <Badge variant={variants[status] || 'default'}>{labels[status] || status}</Badge>;
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Apakah Anda yakin ingin menghapus siswa ini?')) {
-            router.delete(`/students/${id}`);
+    // Penghapusan lewat API (`DELETE /api/v1/students/{id}`), bukan
+    // `router.delete()` — rute web `students/*` hanya melayani GET (halaman
+    // Inertia), jadi Inertia delete selalu berakhir MethodNotAllowed.
+    const handleDelete = async () => {
+        if (!deletingStudent) return;
+
+        setDeleting(true);
+        try {
+            await studentsApi.delete(deletingStudent.id);
+            toast.success('Siswa berhasil dihapus');
+            setDeletingStudent(null);
+            router.reload({ only: ['students'] });
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Gagal menghapus siswa'));
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -389,7 +414,7 @@ export default function StudentsIndex({ students, filters }: Props) {
                                                             </DropdownMenuItem>
                                                             <DropdownMenuItem
                                                                 className="text-destructive"
-                                                                onClick={() => handleDelete(student.id)}
+                                                                onClick={() => setDeletingStudent(student)}
                                                             >
                                                                 <Trash2 className="mr-2 h-4 w-4" />
                                                                 Hapus
@@ -578,6 +603,35 @@ export default function StudentsIndex({ students, filters }: Props) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Delete Dialog */}
+            <AlertDialog open={!!deletingStudent} onOpenChange={(open) => !open && !deleting && setDeletingStudent(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Siswa</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus siswa{' '}
+                            <span className="font-medium">{deletingStudent?.full_name}</span>? Tindakan ini
+                            tidak dapat dibatalkan.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeletingStudent(null)} disabled={deleting}>
+                            Batal
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleDelete();
+                            }}
+                            disabled={deleting}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            {deleting ? 'Menghapus...' : 'Hapus'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </MainLayout>
     );
 }

@@ -110,3 +110,80 @@ test('download backup yang tidak ada mengembalikan 404', function () {
         ->getJson('/api/v1/super-admin/backups/tidak-ada.sql/download')
         ->assertNotFound();
 });
+
+// ---------- API: nama database aktif (untuk dialog konfirmasi restore) ----------
+
+test('super admin bisa melihat nama database aktif', function () {
+    $this->actingAs($this->superAdmin, 'sanctum')
+        ->getJson('/api/v1/super-admin/backups/active-database')
+        ->assertOk()
+        ->assertJsonPath('data.database', 'sms_testing');
+});
+
+test('admin biasa ditolak melihat nama database aktif', function () {
+    $this->actingAs($this->admin, 'sanctum')
+        ->getJson('/api/v1/super-admin/backups/active-database')
+        ->assertForbidden();
+});
+
+// ---------- API: restore & import ----------
+//
+// CATATAN: tidak ada test di sini yang benar-benar MENJALANKAN psql restore
+// terhadap sms_testing dengan sengaja. RefreshDatabase membungkus tiap test
+// dalam transaction Postgres yang masih terbuka selama test berjalan — kalau
+// test yang sama juga memanggil proses `psql` eksternal yang mengubah skema
+// sms_testing (CREATE TABLE/ALTER SEQUENCE dst.), proses itu butuh lock yang
+// bentrok dengan transaction test sendiri -> deadlock/hang (pernah terjadi,
+// lihat riwayat commit). pg_dump (backup:run) aman karena read-only, tidak
+// butuh lock eksklusif seperti itu. Jalur restore/import yang benar-benar
+// mengeksekusi psql sudah diverifikasi manual (wipe sms_testing -> restore
+// -> tabel & data kembali utuh), bukan lewat suite otomatis ini.
+
+test('restore ditolak 422 kalau confirm_database tidak cocok', function () {
+    Artisan::call('backup:run');
+    $filename = collect(File::files(config('backup.directory')))->first()->getFilename();
+
+    $this->actingAs($this->superAdmin, 'sanctum')
+        ->postJson("/api/v1/super-admin/backups/{$filename}/restore", ['confirm_database' => 'salah_nama_db'])
+        ->assertStatus(422);
+})->skip(! file_exists(PG_DUMP_TEST_BINARY), 'pg_dump tidak ditemukan di lingkungan ini');
+
+test('restore ditolak untuk admin biasa', function () {
+    $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/super-admin/backups/some-file.sql/restore', ['confirm_database' => 'sms_testing'])
+        ->assertForbidden();
+});
+
+test('restore file yang tidak ada mengembalikan 404', function () {
+    $this->actingAs($this->superAdmin, 'sanctum')
+        ->postJson('/api/v1/super-admin/backups/tidak-ada.sql/restore', ['confirm_database' => 'sms_testing'])
+        ->assertNotFound();
+});
+
+test('restore dengan nama file pola path traversal ditolak 404', function () {
+    $this->actingAs($this->superAdmin, 'sanctum')
+        ->postJson('/api/v1/super-admin/backups/....sql/restore', ['confirm_database' => 'sms_testing'])
+        ->assertNotFound();
+});
+
+test('import ditolak 422 kalau confirm_database tidak cocok', function () {
+    $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('dump.sql', "SELECT 1;\n");
+
+    $this->actingAs($this->superAdmin, 'sanctum')
+        ->post('/api/v1/super-admin/backups/import', [
+            'file' => $file,
+            'confirm_database' => 'salah',
+        ])
+        ->assertStatus(422);
+});
+
+test('import ditolak untuk admin biasa', function () {
+    $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('dump.sql', "SELECT 1;\n");
+
+    $this->actingAs($this->admin, 'sanctum')
+        ->post('/api/v1/super-admin/backups/import', [
+            'file' => $file,
+            'confirm_database' => 'sms_testing',
+        ])
+        ->assertForbidden();
+});

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Api\ApiController;
+use App\Http\Requests\Auth\ActivateAccountRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\LoginWithOtpRequest;
 use App\Http\Requests\Auth\RegisterRequest;
@@ -92,18 +93,60 @@ class AuthController extends ApiController
 
     /**
      * Register new user.
+     *
+     * Sengaja TIDAK menerbitkan token: akun lahir berstatus `pending` dan baru
+     * bisa dipakai setelah diaktifkan lewat `activate()` memakai kode dari
+     * admin (menu Keamanan Login).
      */
     public function register(RegisterRequest $request): JsonResponse
     {
         $user = $this->authService->register($request->validated());
 
-        $token = $user->createToken('auth_token')->plainTextToken;
-
         return $this->created([
             'user' => new UserResource($user->load('profile')),
-            'token' => $token,
-            'token_type' => 'Bearer',
-        ], 'Registrasi berhasil.');
+            'status' => $user->status,
+            'requires_activation' => true,
+        ], 'Pendaftaran berhasil. Akun masih menunggu aktivasi — hubungi administrator sekolah untuk mendapatkan kode OTP, lalu masukkan kode tersebut untuk mengaktifkan akun.');
+    }
+
+    /**
+     * Aktivasi akun `pending` memakai kode sekali-pakai dari admin.
+     *
+     * Urutan cek disengaja: kode diverifikasi lebih dulu, baru status akun
+     * diperiksa. Kalau dibalik, endpoint ini jadi alat untuk menebak email mana
+     * yang terdaftar — sama seperti alasan di `loginWithOtp()`.
+     */
+    public function activate(ActivateAccountRequest $request): JsonResponse
+    {
+        $email = (string) $request->input('email');
+        $user = User::where('email', $email)->first();
+
+        if (!$user || !$this->otp->verify($user, (string) $request->input('code'))) {
+            $this->loginLog->record($request, $user, $email, 'activation', false, 'invalid_otp');
+            return $this->unauthorized('Kode aktivasi tidak valid atau sudah kedaluwarsa.');
+        }
+
+        if ($user->status === 'active') {
+            return $this->success(null, 'Akun Anda sudah aktif. Silakan masuk seperti biasa.');
+        }
+
+        // Hanya `pending` yang boleh menghidupkan dirinya sendiri. Akun
+        // `inactive`/`suspended` dimatikan oleh keputusan admin, jadi tidak
+        // boleh hidup lagi sebagai efek samping kode akses.
+        if ($user->status !== 'pending') {
+            $this->loginLog->record($request, $user, $email, 'activation', false, 'inactive_account');
+            return $this->forbidden('Akun Anda tidak dapat diaktifkan sendiri. Silakan hubungi administrator.');
+        }
+
+        // `is_active` sengaja tidak ikut di-update: ia atribut turunan dari
+        // kolom `status` yang sama (User::getIsActiveAttribute).
+        $user->update(['status' => 'active']);
+
+        $this->loginLog->record($request, $user, $email, 'activation', true);
+
+        return $this->success([
+            'status' => $user->status,
+        ], 'Akun berhasil diaktifkan. Silakan masuk memakai email dan password Anda.');
     }
 
     /**

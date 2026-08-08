@@ -24,6 +24,11 @@ Route::prefix('auth')->name('auth.')->group(function () {
         ->middleware('throttle:auth')
         ->name('register');
 
+    // Aktivasi akun hasil /register memakai kode dari menu Keamanan Login.
+    Route::post('/activate', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'activate'])
+        ->middleware('throttle:auth')
+        ->name('activate');
+
     Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Auth\PasswordController::class, 'forgot'])
         ->middleware('throttle:auth')
         ->name('password.forgot');
@@ -431,10 +436,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('metrics', [\App\Http\Controllers\Api\V1\Admin\SystemController::class, 'metrics'])->name('metrics');
 
         // Database Backups
+        Route::get('backups/active-database', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'activeDatabase'])->name('backups.active-database');
         Route::get('backups', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'index'])->name('backups.index');
         Route::post('backups', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'store'])->name('backups.store');
         Route::get('backups/{filename}/download', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'download'])->name('backups.download');
         Route::delete('backups/{filename}', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'destroy'])->name('backups.destroy');
+        Route::middleware('throttle:sensitive')->group(function () {
+            Route::post('backups/{filename}/restore', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'restore'])->name('backups.restore');
+            Route::post('backups/import', [\App\Http\Controllers\Api\V1\System\BackupController::class, 'import'])->name('backups.import');
+        });
 
         // Koneksi Database Aplikasi (.env DB_*) — digabung ke menu Backup Database.
         // Password akses terpisah dari login, lihat DatabaseConnectionController.

@@ -14,6 +14,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Lokasi binary psql (dipakai untuk restore/import backup)
+    |--------------------------------------------------------------------------
+    | Biasanya satu folder dengan pg_dump. Sama seperti PG_DUMP_PATH, di
+    | Windows isi path lengkap di .env:
+    |   PSQL_PATH="C:\Program Files\PostgreSQL\18\bin\psql.exe"
+    */
+    'psql_path' => env('PSQL_PATH', 'psql'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Retensi backup (hari)
     |--------------------------------------------------------------------------
     | Backup yang lebih tua dari ini otomatis dihapus tiap kali backup:run

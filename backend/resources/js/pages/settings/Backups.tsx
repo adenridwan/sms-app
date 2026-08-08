@@ -46,6 +46,9 @@ import {
     XCircle,
     ShieldAlert,
     Tag,
+    Upload,
+    DatabaseZap,
+    AlertTriangle,
 } from 'lucide-react';
 import { backupsApi, dbConnectionApi, type DbConnectionInput } from '@/services/api';
 import type { BackupFile, DbConnectionInfo, PageProps } from '@/types';
@@ -182,6 +185,75 @@ export default function SettingsBackups() {
             toast.error(getErrorMessage(error, 'Gagal menghapus backup'));
         } finally {
             setDeleting(false);
+        }
+    };
+
+    // ---------- Restore / Import ----------
+    const [activeDatabase, setActiveDatabase] = useState<string>('');
+    const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+    const [restoreMode, setRestoreMode] = useState<'existing' | 'upload'>('existing');
+    const [restoreFilename, setRestoreFilename] = useState<string | null>(null);
+    const [restoreFile, setRestoreFile] = useState<File | null>(null);
+    const [restoreConfirmInput, setRestoreConfirmInput] = useState('');
+    const [restoring, setRestoring] = useState(false);
+
+    const fetchActiveDatabase = useCallback(async () => {
+        try {
+            const response = await backupsApi.activeDatabase();
+            setActiveDatabase(response.data.data.database);
+        } catch {
+            // Diam saja — cuma dipakai sebagai hint di dialog konfirmasi,
+            // validasi sesungguhnya tetap di server.
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchActiveDatabase();
+    }, [fetchActiveDatabase]);
+
+    const openRestoreExisting = (backup: BackupFile) => {
+        setRestoreMode('existing');
+        setRestoreFilename(backup.filename);
+        setRestoreFile(null);
+        setRestoreConfirmInput('');
+        setRestoreDialogOpen(true);
+    };
+
+    const openImportUpload = () => {
+        setRestoreMode('upload');
+        setRestoreFilename(null);
+        setRestoreFile(null);
+        setRestoreConfirmInput('');
+        setRestoreDialogOpen(true);
+    };
+
+    const handleRestore = async () => {
+        if (restoreConfirmInput !== activeDatabase) {
+            toast.error(`Ketik persis nama database aktif: "${activeDatabase}"`);
+            return;
+        }
+
+        setRestoring(true);
+        try {
+            const response =
+                restoreMode === 'existing' && restoreFilename
+                    ? await backupsApi.restore(restoreFilename, restoreConfirmInput)
+                    : restoreMode === 'upload' && restoreFile
+                      ? await backupsApi.import(restoreFile, restoreConfirmInput)
+                      : null;
+
+            if (!response) {
+                toast.error(restoreMode === 'upload' ? 'Pilih file .sql dulu' : 'File backup tidak valid');
+                return;
+            }
+
+            toast.success(response.data.message ?? 'Restore berhasil dijalankan', { duration: 8000 });
+            setRestoreDialogOpen(false);
+            fetchBackups();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Restore gagal'));
+        } finally {
+            setRestoring(false);
         }
     };
 
@@ -338,14 +410,20 @@ export default function SettingsBackups() {
                         <h1 className="text-3xl font-bold tracking-tight">Backup Database</h1>
                         <p className="text-muted-foreground">Backup manual dan terjadwal — khusus Super Admin</p>
                     </div>
-                    <Button onClick={handleCreate} disabled={creating}>
-                        {creating ? (
-                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                            <DatabaseBackup className="mr-2 h-4 w-4" />
-                        )}
-                        Backup Sekarang
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={openImportUpload}>
+                            <Upload className="mr-2 h-4 w-4" />
+                            Import File SQL
+                        </Button>
+                        <Button onClick={handleCreate} disabled={creating}>
+                            {creating ? (
+                                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <DatabaseBackup className="mr-2 h-4 w-4" />
+                            )}
+                            Backup Sekarang
+                        </Button>
+                    </div>
                 </div>
 
                 <Alert>
@@ -414,6 +492,15 @@ export default function SettingsBackups() {
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
+                                                            className="text-muted-foreground hover:text-amber-600"
+                                                            title="Restore ke database aktif"
+                                                            onClick={() => openRestoreExisting(backup)}
+                                                        >
+                                                            <DatabaseZap className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
                                                             className="text-muted-foreground hover:text-red-600"
                                                             onClick={() => setDeletingBackup(backup)}
                                                         >
@@ -427,6 +514,11 @@ export default function SettingsBackups() {
                                 </Table>
                             </div>
                         )}
+                        <p className="text-xs text-muted-foreground">
+                            Ikon <DatabaseZap className="inline h-3 w-3 align-text-bottom" /> me-restore file itu ke
+                            database yang sedang aktif — berguna saat pindah database supaya tidak perlu input ulang
+                            data manual.
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -673,6 +765,81 @@ export default function SettingsBackups() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Restore / Import Dialog */}
+            <Dialog open={restoreDialogOpen} onOpenChange={(open) => !restoring && setRestoreDialogOpen(open)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {restoreMode === 'existing' ? 'Restore Backup' : 'Import File SQL'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {restoreMode === 'existing'
+                                ? `Menjalankan isi "${restoreFilename}" ke database yang sedang aktif.`
+                                : 'Upload file .sql (hasil export dari database lain) lalu langsung jalankan ke database yang sedang aktif.'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <Alert className="border-amber-300 dark:border-amber-800">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTitle>Perhatikan sebelum lanjut</AlertTitle>
+                            <AlertDescription>
+                                Paling aman dijalankan ke database yang masih <strong>kosong</strong> (baru pindah
+                                koneksi, belum ada data). Kalau database aktif sudah berisi tabel/data, sebagian
+                                perintah di file ini bisa gagal ("sudah ada") — itu tidak menghapus data lama, tapi
+                                bisa meninggalkan campuran data lama & baru yang tidak konsisten.
+                            </AlertDescription>
+                        </Alert>
+
+                        {restoreMode === 'upload' && (
+                            <div className="space-y-2">
+                                <Label htmlFor="restore-file">File .sql</Label>
+                                <Input
+                                    id="restore-file"
+                                    type="file"
+                                    accept=".sql,.txt"
+                                    onChange={(e) => setRestoreFile(e.target.files?.[0] ?? null)}
+                                />
+                            </div>
+                        )}
+
+                        <div className="space-y-2">
+                            <Label htmlFor="restore-confirm">
+                                Ketik persis nama database aktif untuk konfirmasi
+                                {activeDatabase && (
+                                    <>
+                                        : <span className="font-mono font-semibold">{activeDatabase}</span>
+                                    </>
+                                )}
+                            </Label>
+                            <Input
+                                id="restore-confirm"
+                                value={restoreConfirmInput}
+                                onChange={(e) => setRestoreConfirmInput(e.target.value)}
+                                placeholder={activeDatabase || 'nama database aktif'}
+                                className="font-mono"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRestoreDialogOpen(false)} disabled={restoring}>
+                            Batal
+                        </Button>
+                        <Button
+                            onClick={handleRestore}
+                            disabled={
+                                restoring ||
+                                restoreConfirmInput !== activeDatabase ||
+                                (restoreMode === 'upload' && !restoreFile)
+                            }
+                            className="bg-amber-600 hover:bg-amber-700"
+                        >
+                            {restoring && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                            Restore Sekarang
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Setel/Ubah Password Akses Dialog */}
             <Dialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen}>

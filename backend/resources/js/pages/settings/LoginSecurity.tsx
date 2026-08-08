@@ -19,6 +19,12 @@ const failureLabel: Record<string, string> = {
     invalid_otp: 'Kode akses tidak valid',
 };
 
+const methodLabel: Record<string, string> = {
+    password: 'Password',
+    otp: 'Kode Akses',
+    activation: 'Aktivasi Akun',
+};
+
 export default function LoginSecurity() {
     const [logs, setLogs] = useState<LoginLogEntry[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(true);
@@ -101,8 +107,9 @@ export default function LoginSecurity() {
                         </CardTitle>
                         <CardDescription>
                             Cari pengguna, lalu buat kode akses sekali-pakai untuk membantunya masuk di aplikasi
-                            mobile (mis. lupa password). Bacakan kode ke pengguna lewat kanal terpercaya — kode
-                            hanya ditampilkan sekali di sini.
+                            mobile (mis. lupa password) atau untuk <strong>mengaktifkan akun yang baru mendaftar
+                            sendiri</strong> (bertanda “Menunggu aktivasi”). Bacakan kode ke pengguna lewat kanal
+                            terpercaya — kode hanya ditampilkan sekali di sini.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -148,7 +155,19 @@ export default function LoginSecurity() {
                                 {users.map((u) => (
                                     <div key={u.id} className="flex items-center justify-between gap-4 p-3">
                                         <div className="min-w-0">
-                                            <p className="truncate font-medium">{u.full_name}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="truncate font-medium">{u.full_name}</p>
+                                                {u.status === 'pending' && (
+                                                    <Badge className="shrink-0 bg-amber-500 hover:bg-amber-500">
+                                                        Menunggu aktivasi
+                                                    </Badge>
+                                                )}
+                                                {(u.status === 'inactive' || u.status === 'suspended') && (
+                                                    <Badge variant="destructive" className="shrink-0">
+                                                        {u.status === 'suspended' ? 'Ditangguhkan' : 'Nonaktif'}
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             <p className="text-muted-foreground truncate text-xs">{u.email}</p>
                                         </div>
                                         <div className="flex shrink-0 gap-2">
@@ -206,7 +225,7 @@ export default function LoginSecurity() {
                                                 <td className="whitespace-nowrap p-2">{formatDateTime(log.created_at)}</td>
                                                 <td className="p-2">{log.user?.full_name ?? log.email ?? '—'}</td>
                                                 <td className="p-2">
-                                                    <Badge variant="outline">{log.method === 'otp' ? 'Kode Akses' : 'Password'}</Badge>
+                                                    <Badge variant="outline">{methodLabel[log.method] ?? log.method}</Badge>
                                                 </td>
                                                 <td className="p-2">
                                                     {log.successful ? (

@@ -43,8 +43,13 @@ export const authApi = {
     login: (data: { email: string; password: string; remember?: boolean }) =>
         api.post<ApiResponse<{ user: User; token: string }>>('/auth/login', data),
 
+    // Tidak mengembalikan token: akun lahir `pending` dan harus diaktifkan
+    // dengan kode dari admin lewat authApi.activate().
     register: (data: { username: string; email: string; password: string; password_confirmation: string; first_name: string; last_name?: string }) =>
-        api.post<ApiResponse<{ user: User; token: string }>>('/auth/register', data),
+        api.post<ApiResponse<{ user: User; status: string; requires_activation: boolean }>>('/auth/register', data),
+
+    activate: (data: { email: string; code: string }) =>
+        api.post<ApiResponse<{ status: string }>>('/auth/activate', data),
 
     logout: () => api.post<ApiResponse>('/auth/logout'),
 
@@ -579,6 +584,9 @@ export const backupsApi = {
     list: () =>
         api.get<ApiResponse<BackupFile[]>>('/super-admin/backups'),
 
+    activeDatabase: () =>
+        api.get<ApiResponse<{ database: string }>>('/super-admin/backups/active-database'),
+
     create: () =>
         api.post<ApiResponse<{ output: string }>>('/super-admin/backups'),
 
@@ -587,6 +595,20 @@ export const backupsApi = {
 
     delete: (filename: string) =>
         api.delete<ApiResponse>(`/super-admin/backups/${filename}`),
+
+    restore: (filename: string, confirmDatabase: string) =>
+        api.post<ApiResponse<{ output: string }>>(`/super-admin/backups/${filename}/restore`, {
+            confirm_database: confirmDatabase,
+        }),
+
+    import: (file: File, confirmDatabase: string) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('confirm_database', confirmDatabase);
+        return api.post<ApiResponse<{ output: string }>>('/super-admin/backups/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
 };
 
 // Koneksi Database Aplikasi (super admin only, digabung ke menu Backup Database)

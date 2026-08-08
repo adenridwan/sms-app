@@ -82,6 +82,25 @@ Kalau "Koneksi Database Aplikasi" diarahkan ke database yang **benar-benar baru/
 3. Login lagi dengan `superadmin@sms.local` / `password` (dari `UserSeeder`) — segera ganti password setelah masuk kalau database ini bukan sekadar untuk uji coba.
 4. Password akses "Koneksi Database Aplikasi" **tidak ikut pindah** (tersimpan di tabel `settings` database lama) — di database baru otomatis dianggap belum dikonfigurasi, tinggal buat baru dari UI.
 
+## Pendaftaran mandiri `/register` — pending + aktivasi OTP (dibuat 2026-08-03)
+
+Halaman `/register` tetap terbuka untuk publik, tapi akunnya **tidak lagi langsung aktif**:
+
+1. `AuthService::register()` membuat user berstatus **`pending`**, tanpa role, dan `AuthController::register()` **tidak menerbitkan token** — jadi pendaftar tidak bisa masuk. `AuthController::login()` sudah menolak status non-`active`, jadi ini otomatis terkunci.
+2. Admin membuka **Pengaturan → Keamanan Login**, cari pendaftar (ditandai badge "Menunggu aktivasi"), klik **Buat Kode** — kode 6 digit, berlaku 15 menit, sekali pakai (`OtpService`). Kode polos hanya muncul sekali di layar admin, disampaikan ke pendaftar lewat kanal luar.
+3. Pendaftar memasukkan kode di layar aktivasi (`Register.tsx` berpindah tahap setelah daftar berhasil) → `POST /api/v1/auth/activate` → status jadi `active`, lalu login biasa memakai password yang ia buat sendiri.
+
+Aturan yang jangan diubah tanpa alasan:
+
+- **Hanya `pending` yang boleh mengaktifkan dirinya sendiri.** Akun `inactive`/`suspended` dimatikan oleh keputusan admin — `activate()` menolaknya (403) supaya kode akses tidak jadi jalan pintas menghidupkan akun yang sengaja diblokir.
+- **Kode diverifikasi dulu, status akun dicek belakangan.** Kalau dibalik, endpoint ini jadi alat menebak email mana yang terdaftar (alasan yang sama sudah dipakai di `loginWithOtp()`).
+- **Jangan set `is_active` saat menulis status.** `is_active` bukan kolom — mutator `User::setIsActiveAttribute()` menimpa kolom `status` jadi `active`/`inactive`, sehingga `'status' => 'pending'` akan hilang diam-diam kalau keduanya dikirim bersamaan.
+- Aktivasi tercatat di riwayat login dengan `method = 'activation'` (sukses maupun gagal), terbaca di tabel menu Keamanan Login.
+
+Test: `RegisterActivationTest` (11 kasus, termasuk kode salah/kedaluwarsa/sekali-pakai dan akun suspended).
+
+Bug lama yang ikut diperbaiki: `LoginLogService::paginate()` memakai `with('user:id,full_name,email')`, padahal `full_name` accessor (dirakit dari `user_profiles`) — bukan kolom. Akibatnya tabel riwayat login 500 begitu ada log dengan `user_id` terisi. Sekarang eager-load-nya mengambil `id,username,email` + relasi `profile` utuh (semua isi `User::$appends` membacanya saat serialisasi).
+
 ## Ringkasan implementasi terkini (update 2026-08-02)
 
 Panduan cara pakai (bukan aturan wajib) ada di [docs/TUTORIAL-APLIKASI.md](docs/TUTORIAL-APLIKASI.md) — termasuk analisis kelayakan "pisah database per tenant".
