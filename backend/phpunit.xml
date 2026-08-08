@@ -31,5 +31,15 @@
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="BROADCAST_CONNECTION" value="log"/>
+        <!--
+            Pengaman file, JANGAN dihapus (lihat CLAUDE.md § Keselamatan Database).
+            DatabaseConnectionTest menulis lalu MENGHAPUS config('backup.env_file'),
+            dan BackupTest menghapus seluruh isi config('backup.directory').
+            Tanpa override ini keduanya jatuh ke default — .env asli dan folder
+            backup asli. Sebelumnya override hanya ada di .env.testing yang tidak
+            ikut ter-commit, jadi hilang begitu repo di-clone ulang.
+        -->
+        <env name="ENV_FILE_PATH" value="./storage/framework/testing/scratch.env"/>
+        <env name="BACKUP_DIRECTORY" value="./storage/framework/testing/backups"/>
     </php>
 </phpunit>

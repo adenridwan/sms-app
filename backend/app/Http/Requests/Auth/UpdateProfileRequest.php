@@ -30,7 +30,11 @@ class UpdateProfileRequest extends FormRequest
                 'string',
                 'min:3',
                 'max:50',
-                'alpha_dash',
+                // Titik ikut diizinkan: username yang dibuat sistem berbentuk
+                // slug bertitik (Str::slug($nama, '.') di TeacherRegistrar /
+                // StudentRegistrar), sehingga `alpha_dash` justru menolak
+                // username milik guru & siswa sendiri saat menyimpan profil.
+                'regex:/^[A-Za-z0-9._-]+$/',
                 Rule::unique('users', 'username')->ignore($userId),
             ],
             'email' => [
@@ -56,7 +60,7 @@ class UpdateProfileRequest extends FormRequest
     {
         return [
             'username.unique' => 'Username sudah digunakan.',
-            'username.alpha_dash' => 'Username hanya boleh berisi huruf, angka, dash dan underscore.',
+            'username.regex' => 'Username hanya boleh berisi huruf, angka, titik, dash, dan underscore.',
             'email.email' => 'Format email tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
             'avatar.image' => 'File harus berupa gambar.',

@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Path dari env boleh relatif terhadap root proyek — phpunit.xml hanya bisa
+ * memuat string literal, tidak bisa memanggil base_path(). Path absolut
+ * (unix `/…` maupun windows `C:\…`) dibiarkan apa adanya.
+ */
+$resolvePath = function (?string $path, string $default) {
+    if (! $path) {
+        return $default;
+    }
+
+    return preg_match('#^([A-Za-z]:[\\\\/]|[\\\\/])#', $path) === 1
+        ? $path
+        : base_path($path);
+};
+
 return [
 
     /*
@@ -38,15 +53,17 @@ return [
     | Sengaja dibuat bisa dioverride (BACKUP_DIRECTORY) supaya test tidak
     | menulis/menghapus file di folder backup dev/produksi yang sama.
     */
-    'directory' => env('BACKUP_DIRECTORY', storage_path('app/private/backups')),
+    'directory' => $resolvePath(env('BACKUP_DIRECTORY'), storage_path('app/private/backups')),
 
     /*
     |--------------------------------------------------------------------------
     | File .env yang ditulis oleh fitur "Ubah Koneksi Database"
     |--------------------------------------------------------------------------
-    | WAJIB dioverride (ENV_FILE_PATH) di .env.testing ke file scratch —
-    | jangan sampai test menulis ke .env asli (lihat CLAUDE.md insiden 2026-08-01).
+    | WAJIB dioverride (ENV_FILE_PATH) saat testing ke file scratch — jangan
+    | sampai test menulis/menghapus .env asli (lihat CLAUDE.md insiden
+    | 2026-08-01). Override-nya ada di phpunit.xml supaya ikut ter-commit dan
+    | tidak bisa hilang seperti kalau hanya mengandalkan .env.testing.
     */
-    'env_file' => env('ENV_FILE_PATH', base_path('.env')),
+    'env_file' => $resolvePath(env('ENV_FILE_PATH'), base_path('.env')),
 
 ];

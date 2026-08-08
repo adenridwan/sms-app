@@ -90,7 +90,26 @@ Route::middleware(['auth', 'password.current'])->group(function () {
 
     // Finance Module
     Route::prefix('finance')->name('finance.')->group(function () {
+        Route::get('/fee-types', [PageController::class, 'feeTypes'])->name('fee-types');
+        Route::get('/fee-structures', [PageController::class, 'feeStructures'])->name('fee-structures');
+        Route::get('/payment-methods', [PageController::class, 'paymentMethods'])->name('payment-methods');
+        Route::get('/discounts', [PageController::class, 'discounts'])->name('discounts');
+        Route::get('/fees', [PageController::class, 'studentFees'])->name('fees');
         Route::get('/payments', [PageController::class, 'payments'])->name('payments');
+        Route::get('/reports', [PageController::class, 'financeReports'])->name('reports');
+    });
+
+    // Payroll Module
+    Route::prefix('payroll')->name('payroll.')->group(function () {
+        Route::get('/salary-grades', [PageController::class, 'salaryGrades'])->name('salary-grades');
+        Route::get('/salary-components', [PageController::class, 'salaryComponents'])->name('salary-components');
+        Route::get('/bpjs-rates', [PageController::class, 'bpjsRates'])->name('bpjs-rates');
+        Route::get('/tax-brackets', [PageController::class, 'taxBrackets'])->name('tax-brackets');
+        Route::get('/tax-settings', [PageController::class, 'taxSettings'])->name('tax-settings');
+        Route::get('/employee-salaries', [PageController::class, 'employeeSalaries'])->name('employee-salaries');
+        Route::get('/periods', [PageController::class, 'payrollPeriods'])->name('periods');
+        Route::get('/slips/{periodId}', [PageController::class, 'payrollSlips'])->name('slips');
+        Route::get('/reports', [PageController::class, 'payrollReports'])->name('reports');
     });
 
     // Attendance Module
@@ -129,9 +148,7 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     });
 
     // Profile Routes
-    Route::get('/profile', function () {
-        return Inertia::render('Profile/Edit');
-    })->name('profile.edit');
+    Route::get('/profile', [PageController::class, 'profile'])->name('profile.edit');
 });
 
 // Fallback: elegant 404 page for unknown routes

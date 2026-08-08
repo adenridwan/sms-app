@@ -54,6 +54,12 @@ class RoleSeeder extends Seeder
                 'payments.view', 'payments.create', 'payments.verify', 'payments.manage',
                 'discounts.view', 'discounts.manage',
                 'finance.report',
+                // Payroll
+                'payroll.view', 'payroll.manage', 'payroll.process', 'payroll.approve', 'payroll.report',
+                'salary-grades.view', 'salary-grades.manage',
+                'salary-components.view', 'salary-components.manage',
+                'bpjs-rates.view', 'bpjs-rates.manage',
+                'tax-settings.view', 'tax-settings.manage',
                 // Library
                 'library.view', 'library.manage',
                 'books.view', 'books.create', 'books.update', 'books.delete',

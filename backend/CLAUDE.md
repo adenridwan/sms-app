@@ -38,9 +38,21 @@ Proyek ini punya **dua database Postgres terpisah**:
 Menu Backup Database punya section "Koneksi Database Aplikasi" untuk lihat/ubah `.env` DB_* langsung dari browser — super_admin saja, digerbangi **password akses terpisah dari password login** (hash disimpan di tabel `settings`, group=`security`, key=`db_config_access_password`; lihat `App\Infrastructure\Persistence\Eloquent\System\Setting`).
 
 - Backend: `App\Http\Controllers\Api\V1\System\DatabaseConnectionController` — `reveal`/`test`/`update` semua WAJIB kirim `access_password` yang valid di tiap request (tidak ada sesi "unlock" di server). `update()` SELALU mencoba koneksi PDO ke kredensial baru dulu — kalau gagal, `.env` tidak disentuh sama sekali.
-- Penulisan `.env` lewat `App\Support\EnvFileWriter` — otomatis bikin `.env.bak` sebelum overwrite, dan path filenya dari `config('backup.env_file')` (bukan hardcode `base_path('.env')`) supaya test bisa diarahkan ke file scratch (`ENV_FILE_PATH` di `.env.testing`) dan **tidak pernah menulis ke `.env` asli**.
+- Penulisan `.env` lewat `App\Support\EnvFileWriter` — otomatis bikin `.env.bak` sebelum overwrite, dan path filenya dari `config('backup.env_file')` (bukan hardcode `base_path('.env')`) supaya test bisa diarahkan ke file scratch (`ENV_FILE_PATH`) dan **tidak pernah menulis ke `.env` asli**.
 - Endpoint yang menerima `access_password` (`access-password`, `reveal`, `test`, update) dibatasi `throttle:sensitive` (5x/menit) supaya tidak bisa di-brute-force.
-- **Kalau menambah command/test baru yang menyentuh `config('backup.env_file')` atau memanggil `DatabaseConnectionController::update()`**, pastikan `.env.testing` tetap override `ENV_FILE_PATH` — jangan sampai konfigurasi ini bocor balik ke default `base_path('.env')` saat testing.
+- **Kalau menambah command/test baru yang menyentuh `config('backup.env_file')` atau memanggil `DatabaseConnectionController::update()`**, pastikan override `ENV_FILE_PATH` tetap ada — jangan sampai konfigurasi ini bocor balik ke default `base_path('.env')` saat testing.
+
+### Insiden nyaris: override test hanya ada di `.env.testing` (ditemukan 2026-08-06)
+
+`ENV_FILE_PATH` dan `BACKUP_DIRECTORY` dulu **hanya** di-override lewat `.env.testing`, file yang tidak ikut ter-commit. Di mesin yang tidak punya file itu (termasuk mesin ini), `config('backup.env_file')` jatuh ke default `base_path('.env')` — dan `DatabaseConnectionTest` menimpa lalu **menghapus** file itu di `afterEach`, sementara `BackupTest` menghapus seluruh isi `config('backup.directory')`. Artinya `php artisan test` polos bisa melenyapkan `.env` asli dan folder backup asli.
+
+Sekarang kedua override dipindah ke **`phpunit.xml`** (ikut ter-commit, tidak bisa hilang), dan `config/backup.php` me-resolve path relatif terhadap root proyek karena `phpunit.xml` hanya bisa memuat string literal. **Jangan hapus dua baris `<env>` itu**, dan jangan kembalikan ketergantungan ke `.env.testing` saja. Cara cepat memastikan masih aman:
+
+```bash
+php artisan tinker --execute="echo config('backup.env_file');"                       # → .env asli (runtime normal)
+docker exec -e ENV_FILE_PATH=./storage/framework/testing/scratch.env sms_php \
+  php artisan tinker --execute="echo config('backup.env_file');"                     # → file scratch (testing)
+```
 
 ### Lupa password akses
 

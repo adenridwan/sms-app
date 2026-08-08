@@ -236,14 +236,6 @@ class PageController extends Controller
     }
 
     /**
-     * Display payments list.
-     */
-    public function payments(): Response
-    {
-        return Inertia::render('finance/Payments');
-    }
-
-    /**
      * Display attendance page.
      */
     public function attendance(): Response
@@ -433,6 +425,15 @@ class PageController extends Controller
     }
 
     /**
+     * Display the signed-in user's own profile page (data diri, avatar, password).
+     * Datanya diambil halaman lewat API (GET /api/v1/auth/profile).
+     */
+    public function profile(): Response
+    {
+        return Inertia::render('Profile/Edit');
+    }
+
+    /**
      * Display menu visibility settings page (Pengaturan Menu).
      * Data matriks diambil halaman via API (GET /api/v1/settings/menu).
      */
@@ -485,5 +486,143 @@ class PageController extends Controller
     public function academicSubjects(): Response
     {
         return Inertia::render('academic/Subjects');
+    }
+
+    // =========================================================================
+    // Finance Module
+    // =========================================================================
+
+    /**
+     * Display fee types (jenis biaya) master data page.
+     */
+    public function feeTypes(): Response
+    {
+        return Inertia::render('finance/FeeTypes');
+    }
+
+    /**
+     * Display payment methods (metode pembayaran) master data page.
+     */
+    public function paymentMethods(): Response
+    {
+        return Inertia::render('finance/PaymentMethods');
+    }
+
+    /**
+     * Display discounts (potongan) master data page.
+     */
+    public function discounts(): Response
+    {
+        return Inertia::render('finance/Discounts');
+    }
+
+    /**
+     * Display fee structures (struktur biaya) master data page.
+     */
+    public function feeStructures(): Response
+    {
+        return Inertia::render('finance/FeeStructures');
+    }
+
+    /**
+     * Display student fees (tagihan) page.
+     */
+    public function studentFees(): Response
+    {
+        return Inertia::render('finance/StudentFees');
+    }
+
+    /**
+     * Display payments (pembayaran) page.
+     */
+    public function payments(): Response
+    {
+        return Inertia::render('finance/Payments');
+    }
+
+    // =========================================================================
+    // Payroll Module
+    // =========================================================================
+
+    /**
+     * Display salary grades (golongan gaji) master data page.
+     */
+    public function salaryGrades(): Response
+    {
+        return Inertia::render('payroll/SalaryGrades');
+    }
+
+    /**
+     * Display salary components (komponen gaji) master data page.
+     */
+    public function salaryComponents(): Response
+    {
+        return Inertia::render('payroll/SalaryComponents');
+    }
+
+    /**
+     * Display BPJS rates (tarif BPJS) master data page.
+     */
+    public function bpjsRates(): Response
+    {
+        return Inertia::render('payroll/BpjsRates');
+    }
+
+    /**
+     * Display tax brackets (tarif pajak PPh 21) master data page.
+     */
+    public function taxBrackets(): Response
+    {
+        return Inertia::render('payroll/TaxBrackets');
+    }
+
+    /**
+     * Display tax settings (pengaturan pajak / PTKP) master data page.
+     */
+    public function taxSettings(): Response
+    {
+        return Inertia::render('payroll/TaxSettings');
+    }
+
+    /**
+     * Display employee salaries (gaji karyawan) management page.
+     */
+    public function employeeSalaries(): Response
+    {
+        return Inertia::render('payroll/EmployeeSalaries');
+    }
+
+    /**
+     * Display payroll periods management page.
+     */
+    public function payrollPeriods(): Response
+    {
+        return Inertia::render('payroll/PayrollPeriods');
+    }
+
+    /**
+     * Display payroll slips for a period.
+     */
+    public function payrollSlips(string $periodId): Response
+    {
+        return Inertia::render('payroll/PayrollSlips', [
+            'periodId' => $periodId,
+        ]);
+    }
+
+    /**
+     * Display payroll reports page.
+     */
+    public function payrollReports(): Response
+    {
+        return Inertia::render('payroll/Reports');
+    }
+
+    /**
+     * Display finance reports page.
+     */
+    public function financeReports(): Response
+    {
+        return Inertia::render('finance/Reports');
     }
 }

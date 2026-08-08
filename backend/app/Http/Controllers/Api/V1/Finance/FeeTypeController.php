@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\V1\Finance;
 
 use App\Http\Controllers\Api\ApiController;
-use App\Http\Resources\FeeTypeResource;
-use App\Models\Finance\FeeType;
+use App\Http\Resources\Finance\FeeTypeResource;
+use App\Infrastructure\Persistence\Eloquent\Finance\FeeType;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,9 +20,9 @@ class FeeTypeController extends ApiController
                 $q->where('name', 'ilike', "%{$search}%")
                     ->orWhere('code', 'ilike', "%{$search}%");
             })
-            ->when($request->category, fn($q, $category) => $q->where('category', $category))
+            ->when($request->frequency, fn($q, $frequency) => $q->where('frequency', $frequency))
             ->when($request->has('is_active'), fn($q) => $q->where('is_active', $request->boolean('is_active')))
-            ->when($request->has('is_recurring'), fn($q) => $q->where('is_recurring', $request->boolean('is_recurring')));
+            ->when($request->has('is_mandatory'), fn($q) => $q->where('is_mandatory', $request->boolean('is_mandatory')));
 
         $sortField = $request->get('sort', 'name');
         $sortDirection = $request->get('direction', 'asc');
@@ -43,12 +43,12 @@ class FeeTypeController extends ApiController
             'code' => ['required', 'string', 'max:20', 'unique:fee_types,code'],
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:500'],
-            'amount' => ['required', 'numeric', 'min:0'],
-            'category' => ['required', 'in:tuition,registration,development,activity,other'],
-            'is_recurring' => ['boolean'],
-            'recurring_period' => ['required_if:is_recurring,true', 'nullable', 'in:monthly,semester,yearly'],
+            'frequency' => ['required', 'in:once,monthly,semester,yearly'],
+            'is_mandatory' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
+
+        $data['tenant_id'] = auth()->user()->tenant_id;
 
         $feeType = FeeType::create($data);
 
@@ -76,10 +76,8 @@ class FeeTypeController extends ApiController
             'code' => ['sometimes', 'string', 'max:20', 'unique:fee_types,code,' . $feeType->id],
             'name' => ['sometimes', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:500'],
-            'amount' => ['sometimes', 'numeric', 'min:0'],
-            'category' => ['sometimes', 'in:tuition,registration,development,activity,other'],
-            'is_recurring' => ['boolean'],
-            'recurring_period' => ['nullable', 'in:monthly,semester,yearly'],
+            'frequency' => ['sometimes', 'in:once,monthly,semester,yearly'],
+            'is_mandatory' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
 
@@ -93,8 +91,8 @@ class FeeTypeController extends ApiController
      */
     public function destroy(FeeType $feeType): JsonResponse
     {
-        if ($feeType->payments()->exists()) {
-            return $this->error('Jenis biaya tidak dapat dihapus karena sudah memiliki transaksi', 422);
+        if ($feeType->feeStructures()->exists()) {
+            return $this->error('Jenis biaya tidak dapat dihapus karena sudah digunakan di struktur biaya', 422);
         }
 
         $feeType->delete();

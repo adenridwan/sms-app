@@ -47,7 +47,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('/logout', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'logout'])->name('logout');
         Route::get('/me', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'me'])->name('me');
+        Route::get('/profile', [\App\Http\Controllers\Api\V1\Auth\ProfileController::class, 'show'])->name('profile.show');
+        // Frontend mengirim multipart (avatar) lewat POST + `_method=PUT` —
+        // PHP tidak mem-parse body multipart pada request PUT asli.
         Route::put('/profile', [\App\Http\Controllers\Api\V1\Auth\ProfileController::class, 'update'])->name('profile.update');
+        Route::delete('/profile/avatar', [\App\Http\Controllers\Api\V1\Auth\ProfileController::class, 'deleteAvatar'])->name('profile.avatar.destroy');
         // Nama method controller adalah `change` — route dulu salah rujuk ke `update` (selalu 500)
         Route::put('/password', [\App\Http\Controllers\Api\V1\Auth\PasswordController::class, 'change'])->name('password.update');
     });
@@ -280,29 +284,114 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Fee Types
         Route::apiResource('fee-types', \App\Http\Controllers\Api\V1\Finance\FeeTypeController::class);
 
-        // Fee Structures
+        // Fee Structures (static routes first)
+        Route::post('fee-structures/bulk', [\App\Http\Controllers\Api\V1\Finance\FeeStructureController::class, 'bulkStore'])->name('fee-structures.bulk');
         Route::apiResource('fee-structures', \App\Http\Controllers\Api\V1\Finance\FeeStructureController::class);
 
-        // Student Fees
-        Route::get('fees', [\App\Http\Controllers\Api\V1\Finance\StudentFeeController::class, 'index'])->name('fees.index');
+        // Student Fees (static routes first)
+        Route::get('fees/statuses', [\App\Http\Controllers\Api\V1\Finance\StudentFeeController::class, 'statuses'])->name('fees.statuses');
+        Route::get('fees/summary', [\App\Http\Controllers\Api\V1\Finance\StudentFeeController::class, 'summary'])->name('fees.summary');
         Route::post('fees/generate', [\App\Http\Controllers\Api\V1\Finance\StudentFeeController::class, 'generate'])->name('fees.generate');
-        Route::get('fees/{fee}', [\App\Http\Controllers\Api\V1\Finance\StudentFeeController::class, 'show'])->name('fees.show');
+        Route::get('fees/student/{student}', [\App\Http\Controllers\Api\V1\Finance\StudentFeeController::class, 'studentHistory'])->name('fees.student-history');
+        Route::post('fees/{studentFee}/waive', [\App\Http\Controllers\Api\V1\Finance\StudentFeeController::class, 'waive'])->name('fees.waive');
+        Route::apiResource('fees', \App\Http\Controllers\Api\V1\Finance\StudentFeeController::class)->parameter('fees', 'studentFee');
 
-        // Payments
-        Route::apiResource('payments', \App\Http\Controllers\Api\V1\Finance\PaymentController::class);
+        // Payments (static routes first)
+        Route::get('payments/statuses', [\App\Http\Controllers\Api\V1\Finance\PaymentController::class, 'statuses'])->name('payments.statuses');
+        Route::get('payments/summary', [\App\Http\Controllers\Api\V1\Finance\PaymentController::class, 'summary'])->name('payments.summary');
+        Route::post('payments/{payment}/complete', [\App\Http\Controllers\Api\V1\Finance\PaymentController::class, 'complete'])->name('payments.complete');
+        Route::post('payments/{payment}/upload-proof', [\App\Http\Controllers\Api\V1\Finance\PaymentController::class, 'uploadProof'])->name('payments.upload-proof');
         Route::post('payments/{payment}/verify', [\App\Http\Controllers\Api\V1\Finance\PaymentController::class, 'verify'])->name('payments.verify');
+        Route::post('payments/{payment}/cancel', [\App\Http\Controllers\Api\V1\Finance\PaymentController::class, 'cancel'])->name('payments.cancel');
         Route::get('payments/{payment}/receipt', [\App\Http\Controllers\Api\V1\Finance\PaymentController::class, 'receipt'])->name('payments.receipt');
+        Route::apiResource('payments', \App\Http\Controllers\Api\V1\Finance\PaymentController::class);
 
-        // Payment Methods
+        // Payment Methods (static routes first)
+        Route::get('payment-methods/types', [\App\Http\Controllers\Api\V1\Finance\PaymentMethodController::class, 'types'])->name('payment-methods.types');
         Route::apiResource('payment-methods', \App\Http\Controllers\Api\V1\Finance\PaymentMethodController::class);
 
-        // Discounts
+        // Discounts (static routes first)
+        Route::get('discounts/types', [\App\Http\Controllers\Api\V1\Finance\DiscountController::class, 'types'])->name('discounts.types');
         Route::apiResource('discounts', \App\Http\Controllers\Api\V1\Finance\DiscountController::class);
 
         // Reports
-        Route::get('reports/summary', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'summary'])->name('reports.summary');
-        Route::get('reports/monthly', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'monthly'])->name('reports.monthly');
+        Route::get('reports/dashboard', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'dashboard'])->name('reports.dashboard');
         Route::get('reports/outstanding', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'outstanding'])->name('reports.outstanding');
+        Route::get('reports/by-classroom', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'byClassroom'])->name('reports.by-classroom');
+        Route::get('reports/monthly', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'monthly'])->name('reports.monthly');
+        Route::get('reports/student/{student}/history', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'studentHistory'])->name('reports.student-history');
+        Route::get('reports/export/outstanding', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportOutstanding'])->name('reports.export.outstanding');
+        Route::get('reports/export/by-classroom', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportByClassroom'])->name('reports.export.by-classroom');
+        Route::get('reports/export/monthly', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportMonthly'])->name('reports.export.monthly');
+    });
+
+    // ===========================================
+    // Payroll Module
+    // ===========================================
+    Route::prefix('payroll')->name('payroll.')->group(function () {
+        // Salary Grades
+        Route::apiResource('salary-grades', \App\Http\Controllers\Api\V1\Payroll\SalaryGradeController::class);
+
+        // Salary Components (static routes first)
+        Route::get('salary-components/types', [\App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class, 'types'])->name('salary-components.types');
+        Route::get('salary-components/calculation-types', [\App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class, 'calculationTypes'])->name('salary-components.calculation-types');
+        Route::apiResource('salary-components', \App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class);
+
+        // BPJS Rates (static routes first)
+        Route::get('bpjs-rates/types', [\App\Http\Controllers\Api\V1\Payroll\BpjsRateController::class, 'types'])->name('bpjs-rates.types');
+        Route::get('bpjs-rates/current', [\App\Http\Controllers\Api\V1\Payroll\BpjsRateController::class, 'currentRates'])->name('bpjs-rates.current');
+        Route::apiResource('bpjs-rates', \App\Http\Controllers\Api\V1\Payroll\BpjsRateController::class);
+
+        // Tax Brackets (static routes first)
+        Route::get('tax-brackets/year/{year}', [\App\Http\Controllers\Api\V1\Payroll\TaxBracketController::class, 'forYear'])->name('tax-brackets.year');
+        Route::post('tax-brackets/calculate', [\App\Http\Controllers\Api\V1\Payroll\TaxBracketController::class, 'calculate'])->name('tax-brackets.calculate');
+        Route::apiResource('tax-brackets', \App\Http\Controllers\Api\V1\Payroll\TaxBracketController::class);
+
+        // Tax Settings (static routes first)
+        Route::get('tax-settings/categories', [\App\Http\Controllers\Api\V1\Payroll\TaxSettingController::class, 'categories'])->name('tax-settings.categories');
+        Route::get('tax-settings/ptkp-labels', [\App\Http\Controllers\Api\V1\Payroll\TaxSettingController::class, 'ptkpLabels'])->name('tax-settings.ptkp-labels');
+        Route::get('tax-settings/ptkp/year/{year}', [\App\Http\Controllers\Api\V1\Payroll\TaxSettingController::class, 'ptkpForYear'])->name('tax-settings.ptkp.year');
+        Route::post('tax-settings/ptkp/value', [\App\Http\Controllers\Api\V1\Payroll\TaxSettingController::class, 'getPtkpValue'])->name('tax-settings.ptkp.value');
+        Route::get('tax-settings/biaya-jabatan/year/{year}', [\App\Http\Controllers\Api\V1\Payroll\TaxSettingController::class, 'biayaJabatanForYear'])->name('tax-settings.biaya-jabatan.year');
+        Route::apiResource('tax-settings', \App\Http\Controllers\Api\V1\Payroll\TaxSettingController::class);
+
+        // Employee Salaries (static routes first)
+        Route::get('employee-salaries/available-employees', [\App\Http\Controllers\Api\V1\Payroll\EmployeeSalaryController::class, 'availableEmployees'])->name('employee-salaries.available-employees');
+        Route::get('employee-salaries/ptkp-statuses', [\App\Http\Controllers\Api\V1\Payroll\EmployeeSalaryController::class, 'ptkpStatuses'])->name('employee-salaries.ptkp-statuses');
+        Route::get('employee-salaries/summary', [\App\Http\Controllers\Api\V1\Payroll\EmployeeSalaryController::class, 'summary'])->name('employee-salaries.summary');
+        Route::get('employee-salaries/{employeeSalary}/history', [\App\Http\Controllers\Api\V1\Payroll\EmployeeSalaryController::class, 'history'])->name('employee-salaries.history');
+        Route::put('employee-salaries/{employeeSalary}/components', [\App\Http\Controllers\Api\V1\Payroll\EmployeeSalaryController::class, 'syncComponents'])->name('employee-salaries.sync-components');
+        Route::apiResource('employee-salaries', \App\Http\Controllers\Api\V1\Payroll\EmployeeSalaryController::class);
+
+        // Payroll Periods (static routes first)
+        Route::get('periods/statuses', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'statuses'])->name('periods.statuses');
+        Route::post('periods/{payrollPeriod}/generate-slips', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'generateSlips'])->name('periods.generate-slips');
+        Route::post('periods/{payrollPeriod}/calculate', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'calculate'])->name('periods.calculate');
+        Route::post('periods/{payrollPeriod}/submit-for-approval', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'submitForApproval'])->name('periods.submit-for-approval');
+        Route::post('periods/{payrollPeriod}/approve', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'approve'])->name('periods.approve');
+        Route::post('periods/{payrollPeriod}/mark-as-paid', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'markAsPaid'])->name('periods.mark-as-paid');
+        Route::post('periods/{payrollPeriod}/finalize', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'finalize'])->name('periods.finalize');
+        Route::get('periods/{payrollPeriod}/summary', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'summary'])->name('periods.summary');
+        Route::apiResource('periods', \App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class);
+
+        // Payroll Slips
+        Route::get('periods/{payrollPeriod}/slips', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'index'])->name('slips.index');
+        Route::get('slips/{payrollSlip}', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'show'])->name('slips.show');
+        Route::put('slips/{payrollSlip}/items', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateItems'])->name('slips.update-items');
+        Route::post('slips/{payrollSlip}/items', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'addItem'])->name('slips.add-item');
+        Route::delete('slips/{payrollSlip}/items/{item}', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'removeItem'])->name('slips.remove-item');
+        Route::put('slips/{payrollSlip}/notes', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateNotes'])->name('slips.update-notes');
+        Route::get('slips/{payrollSlip}/print', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'printData'])->name('slips.print');
+
+        // Reports
+        Route::get('reports/dashboard', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'dashboard'])->name('reports.dashboard');
+        Route::get('reports/monthly-recap', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'monthlyRecap'])->name('reports.monthly-recap');
+        Route::get('reports/pph21', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'pph21'])->name('reports.pph21');
+        Route::get('reports/bpjs', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'bpjs'])->name('reports.bpjs');
+        Route::get('reports/employee/{employee}/history', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'employeeHistory'])->name('reports.employee-history');
+        Route::get('reports/export/monthly-recap', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'exportMonthlyRecap'])->name('reports.export.monthly-recap');
+        Route::get('reports/export/pph21', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'exportPph21'])->name('reports.export.pph21');
+        Route::get('reports/export/bpjs', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'exportBpjs'])->name('reports.export.bpjs');
     });
 
     // ===========================================

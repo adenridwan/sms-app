@@ -136,6 +136,23 @@ class PermissionSeeder extends Seeder
             'finance.report' => 'Lihat Laporan Keuangan',
         ],
 
+        // Payroll
+        'payroll' => [
+            'payroll.view' => 'Lihat Penggajian',
+            'payroll.manage' => 'Kelola Penggajian',
+            'payroll.process' => 'Proses Penggajian',
+            'payroll.approve' => 'Approve Penggajian',
+            'payroll.report' => 'Lihat Laporan Penggajian',
+            'salary-grades.view' => 'Lihat Golongan Gaji',
+            'salary-grades.manage' => 'Kelola Golongan Gaji',
+            'salary-components.view' => 'Lihat Komponen Gaji',
+            'salary-components.manage' => 'Kelola Komponen Gaji',
+            'bpjs-rates.view' => 'Lihat Tarif BPJS',
+            'bpjs-rates.manage' => 'Kelola Tarif BPJS',
+            'tax-settings.view' => 'Lihat Pengaturan Pajak',
+            'tax-settings.manage' => 'Kelola Pengaturan Pajak',
+        ],
+
         // Library
         'library' => [
             'library.view' => 'Lihat Perpustakaan',

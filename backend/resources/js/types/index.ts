@@ -434,6 +434,77 @@ export interface Schedule {
 }
 
 // Finance Types
+export interface StudentFee {
+    id: string;
+    student_id: string;
+    student?: {
+        id: string;
+        nis: string;
+        name: string;
+        classroom?: {
+            id: string;
+            name: string;
+        } | null;
+    };
+    fee_structure_id: string;
+    fee_structure?: {
+        id: string;
+        fee_type?: {
+            id: string;
+            code: string;
+            name: string;
+            frequency: string;
+        } | null;
+        grade_level?: {
+            id: string;
+            name: string;
+        } | null;
+    };
+    academic_year_id: string;
+    academic_year?: {
+        id: string;
+        name: string;
+        is_active: boolean;
+    };
+    month: number | null;
+    year: number | null;
+    period_label: string;
+    amount: number;
+    amount_formatted: string;
+    discount: number;
+    discount_formatted: string;
+    fine: number;
+    fine_formatted: string;
+    total_amount: number;
+    total_amount_formatted: string;
+    paid_amount: number;
+    paid_amount_formatted: string;
+    remaining_amount: number;
+    remaining_amount_formatted: string;
+    due_date: string | null;
+    status: 'unpaid' | 'partial' | 'paid' | 'overdue' | 'waived';
+    status_label: string;
+    is_overdue: boolean;
+    notes: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PaymentItem {
+    id: string;
+    student_fee_id: string;
+    amount: number;
+    amount_formatted: string;
+    student_fee?: {
+        id: string;
+        period_label: string;
+        fee_type?: {
+            id: string;
+            name: string;
+        } | null;
+    } | null;
+}
+
 export interface Payment {
     id: string;
     invoice_number: string;
@@ -442,25 +513,46 @@ export interface Payment {
         id: string;
         nis: string;
         name: string;
+        classroom?: {
+            id: string;
+            name: string;
+        } | null;
     };
-    fee_type_id: string;
-    fee_type?: {
+    payment_method_id: string | null;
+    payment_method?: {
+        id: string;
+        code: string;
+        name: string;
+        type: string;
+    } | null;
+    total_amount: number;
+    total_amount_formatted: string;
+    admin_fee: number;
+    admin_fee_formatted: string;
+    grand_total: number;
+    grand_total_formatted: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'refunded' | 'cancelled';
+    status_label: string;
+    paid_at: string | null;
+    transaction_id: string | null;
+    payment_proof: string | null;
+    notes: string | null;
+    received_by: string | null;
+    received_by_user?: {
         id: string;
         name: string;
-    };
-    amount: number;
-    amount_formatted: string;
-    discount: number | null;
-    final_amount: number;
-    due_date: string;
-    paid_at: string | null;
-    status: 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled';
-    status_label: string;
-    payment_method: string | null;
-    payment_reference: string | null;
-    notes: string | null;
-    academic_year_id: string;
-    semester_id: string | null;
+    } | null;
+    verified_by: string | null;
+    verified_by_user?: {
+        id: string;
+        name: string;
+    } | null;
+    verified_at: string | null;
+    payment_details: Record<string, unknown> | null;
+    items?: PaymentItem[];
+    items_count?: number;
+    can_be_verified: boolean;
+    can_be_cancelled: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -470,13 +562,351 @@ export interface FeeType {
     code: string;
     name: string;
     description: string | null;
+    frequency: 'once' | 'monthly' | 'semester' | 'yearly';
+    frequency_label: string;
+    is_mandatory: boolean;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface FeeStructure {
+    id: string;
+    academic_year_id: string;
+    academic_year?: {
+        id: string;
+        name: string;
+        is_active: boolean;
+    };
+    fee_type_id: string;
+    fee_type?: {
+        id: string;
+        code: string;
+        name: string;
+        frequency: string;
+    };
+    grade_level_id: string;
+    grade_level?: {
+        id: string;
+        name: string;
+        level: number;
+    };
+    major_id: string | null;
+    major?: {
+        id: string;
+        code: string;
+        name: string;
+    } | null;
     amount: number;
     amount_formatted: string;
-    category: 'tuition' | 'registration' | 'development' | 'activity' | 'other';
-    category_label: string;
-    is_recurring: boolean;
-    recurring_period: 'monthly' | 'semester' | 'yearly' | null;
+    discount_amount: number;
+    discount_amount_formatted: string;
+    effective_amount: number;
+    effective_amount_formatted: string;
+    due_date: string | null;
+    due_day: number | null;
     is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PaymentMethod {
+    id: string;
+    code: string;
+    name: string;
+    type: 'cash' | 'bank_transfer' | 'virtual_account' | 'e_wallet' | 'credit_card' | 'other';
+    type_label: string;
+    provider: string | null;
+    configuration: Record<string, unknown> | null;
+    admin_fee: number;
+    admin_fee_formatted: string;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Discount {
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    type: 'percentage' | 'fixed';
+    type_label: string;
+    value: number;
+    value_formatted: string;
+    fee_type_id: string | null;
+    fee_type?: {
+        id: string;
+        name: string;
+        code: string;
+    } | null;
+    valid_from: string | null;
+    valid_until: string | null;
+    is_valid: boolean;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+// Payroll Types
+export interface SalaryGrade {
+    id: string;
+    code: string;
+    name: string;
+    base_salary: number;
+    base_salary_formatted: string;
+    description: string | null;
+    order: number;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SalaryComponent {
+    id: string;
+    code: string;
+    name: string;
+    type: 'earning' | 'deduction';
+    type_label: string;
+    calculation_type: 'fixed' | 'percentage' | 'per_day' | 'per_hour' | 'formula';
+    calculation_type_label: string;
+    default_value: number;
+    default_value_formatted: string;
+    percentage_of: string | null;
+    formula: string | null;
+    is_taxable: boolean;
+    is_mandatory: boolean;
+    is_active: boolean;
+    order: number;
+    description: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BpjsRate {
+    id: string;
+    type: 'kesehatan' | 'jht' | 'jkk' | 'jkm' | 'jp';
+    type_label: string;
+    name: string;
+    employee_rate: number;
+    employee_rate_formatted: string;
+    employer_rate: number;
+    employer_rate_formatted: string;
+    total_rate: number;
+    total_rate_formatted: string;
+    min_salary: number | null;
+    min_salary_formatted: string | null;
+    max_salary: number | null;
+    max_salary_formatted: string | null;
+    effective_from: string;
+    effective_until: string | null;
+    is_effective: boolean;
+    is_active: boolean;
+    notes: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TaxBracket {
+    id: string;
+    min_amount: number;
+    min_amount_formatted: string;
+    max_amount: number | null;
+    max_amount_formatted: string;
+    range_label: string;
+    rate: number;
+    rate_formatted: string;
+    effective_year: number;
+    effective_from: string | null;
+    effective_until: string | null;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TaxSetting {
+    id: string;
+    setting_key: string;
+    setting_name: string;
+    setting_value: number;
+    setting_value_formatted: string;
+    category: 'ptkp' | 'biaya_jabatan' | 'ter' | 'other';
+    category_label: string;
+    description: string | null;
+    effective_year: number;
+    effective_from: string | null;
+    effective_until: string | null;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface EmployeeSalaryComponent {
+    id: string;
+    salary_component_id: string;
+    salary_component?: {
+        id: string;
+        code: string;
+        name: string;
+        type: 'earning' | 'deduction';
+        type_label: string;
+        calculation_type: string;
+    };
+    value: number;
+    value_formatted: string;
+    is_active: boolean;
+}
+
+export interface EmployeeSalary {
+    id: string;
+    employee_type: 'teacher' | 'staff';
+    employee_type_label: string;
+    employee_id: string;
+    employee?: {
+        id: string;
+        nip?: string;
+        employee_id?: string;
+        name: string;
+        email?: string;
+        employment_status?: string;
+    };
+    salary_grade_id: string;
+    salary_grade?: {
+        id: string;
+        code: string;
+        name: string;
+        base_salary: number;
+        base_salary_formatted: string;
+    };
+    base_salary: number;
+    base_salary_formatted: string;
+    ptkp_status: string;
+    effective_date: string;
+    end_date?: string;
+    is_current: boolean;
+    notes?: string;
+    components?: EmployeeSalaryComponent[];
+    total_earnings?: number;
+    total_deductions?: number;
+    total_earnings_formatted?: string;
+    total_deductions_formatted?: string;
+    components_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PayrollPeriod {
+    id: string;
+    name: string;
+    year: number;
+    month: number;
+    period_label: string;
+    start_date: string;
+    end_date: string;
+    payment_date?: string;
+    status: 'draft' | 'processing' | 'pending_approval' | 'approved' | 'paid' | 'finalized';
+    status_label: string;
+    is_draft: boolean;
+    is_editable: boolean;
+    is_finalized: boolean;
+    can_generate_slips: boolean;
+    can_approve: boolean;
+    can_finalize: boolean;
+    approved_by?: { id: string; name: string };
+    approved_at?: string;
+    finalized_by?: { id: string; name: string };
+    finalized_at?: string;
+    notes?: string;
+    total_gross: number;
+    total_gross_formatted: string;
+    total_deductions: number;
+    total_deductions_formatted: string;
+    total_net: number;
+    total_net_formatted: string;
+    employee_count: number;
+    slips_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PayrollSlipItem {
+    id: string;
+    salary_component_id?: string;
+    component_code: string;
+    component_name: string;
+    type: 'earning' | 'deduction';
+    type_label: string;
+    category: string;
+    category_label: string;
+    amount: number;
+    amount_formatted: string;
+    quantity: number;
+    rate?: number;
+    rate_formatted?: string;
+    is_taxable: boolean;
+    is_auto_calculated: boolean;
+    notes?: string;
+}
+
+export interface PayrollSlip {
+    id: string;
+    payroll_period_id: string;
+    period?: {
+        id: string;
+        name: string;
+        year: number;
+        month: number;
+        period_label: string;
+        status: string;
+    };
+    employee_salary_id: string;
+    employee_type: 'teacher' | 'staff';
+    employee_type_label: string;
+    employee_id: string;
+    employee_name: string;
+    employee_identifier?: string;
+    salary_grade_code?: string;
+    ptkp_status: string;
+    base_salary: number;
+    base_salary_formatted: string;
+    total_allowances: number;
+    total_allowances_formatted: string;
+    total_overtime: number;
+    total_overtime_formatted: string;
+    total_other_income: number;
+    total_other_income_formatted: string;
+    gross_salary: number;
+    gross_salary_formatted: string;
+    bpjs_kesehatan: number;
+    bpjs_kesehatan_formatted: string;
+    bpjs_jht: number;
+    bpjs_jht_formatted: string;
+    bpjs_jp: number;
+    bpjs_jp_formatted: string;
+    pph21: number;
+    pph21_formatted: string;
+    total_other_deductions: number;
+    total_other_deductions_formatted: string;
+    total_deductions: number;
+    total_deductions_formatted: string;
+    net_salary: number;
+    net_salary_formatted: string;
+    working_days: number;
+    days_present: number;
+    days_absent: number;
+    days_late: number;
+    days_leave: number;
+    attendance_deduction: number;
+    attendance_deduction_formatted: string;
+    status: 'draft' | 'calculated' | 'approved' | 'paid';
+    status_label: string;
+    is_editable: boolean;
+    calculated_by?: { id: string; name: string };
+    calculated_at?: string;
+    notes?: string;
+    items?: PayrollSlipItem[];
+    earnings?: { id: string; code: string; name: string; amount: number; amount_formatted: string }[];
+    deductions?: { id: string; code: string; name: string; amount: number; amount_formatted: string }[];
     created_at: string;
     updated_at: string;
 }
@@ -517,6 +947,23 @@ export interface ApiResponse<T = unknown> {
     message: string;
     data: T;
     errors?: Record<string, string[]>;
+}
+
+/**
+ * Respons endpoint laporan (keuangan & penggajian).
+ *
+ * Berbeda dari [ApiResponse] biasa: selain `data`, endpoint laporan
+ * mengembalikan agregat di level atas — `summary` (total keseluruhan),
+ * `meta` (paginasi), dan pada beberapa laporan `monthly_breakdown`.
+ * Digenerikkan agar pemanggil bisa menyebut bentuk ringkasannya sendiri.
+ */
+export interface ReportResponse<TRow = unknown> extends ApiResponse<TRow[]> {
+    // `summary` & `monthly_breakdown` berbeda bentuk per laporan dan belum
+    // ditipekan di sisi server, jadi dibiarkan `unknown` — pemanggil yang
+    // menegaskan bentuknya. Baris datanya sendiri tetap bertipe lewat TRow.
+    summary?: unknown;
+    monthly_breakdown?: unknown;
+    meta?: PaginationMeta;
 }
 
 // Dashboard stats
