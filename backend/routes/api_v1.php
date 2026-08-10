@@ -107,6 +107,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Schedules (static routes must be registered before apiResource)
         Route::get('schedules/export-pdf', [\App\Http\Controllers\Api\V1\Academic\ScheduleController::class, 'exportPdf'])->name('schedules.export-pdf');
+        Route::post('schedules/copy-from-classroom', [\App\Http\Controllers\Api\V1\Academic\ScheduleController::class, 'copyFromClassroom'])->name('schedules.copy-from-classroom');
+        Route::post('schedules/copy-from-day', [\App\Http\Controllers\Api\V1\Academic\ScheduleController::class, 'copyFromDay'])->name('schedules.copy-from-day');
         Route::apiResource('schedules', \App\Http\Controllers\Api\V1\Academic\ScheduleController::class);
 
         // Time Slots

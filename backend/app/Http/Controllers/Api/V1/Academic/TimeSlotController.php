@@ -35,7 +35,7 @@ class TimeSlotController extends ApiController
         }
 
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:150'],
             'start_time' => ['required', 'date_format:H:i'],
             'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
             'order' => ['required', 'integer', 'min:0'],
@@ -63,7 +63,7 @@ class TimeSlotController extends ApiController
         abort_unless($request->user()->can('schedules.manage'), 403);
 
         $data = $request->validate([
-            'name' => ['sometimes', 'string', 'max:50'],
+            'name' => ['sometimes', 'string', 'max:150'],
             'start_time' => ['sometimes', 'date_format:H:i'],
             'end_time' => ['sometimes', 'date_format:H:i', 'after:start_time'],
             'order' => ['sometimes', 'integer', 'min:0'],

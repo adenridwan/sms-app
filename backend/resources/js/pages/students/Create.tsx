@@ -24,6 +24,7 @@ const emptyForm = {
     first_name: '',
     last_name: '',
     email: '',
+    contact_email: '',
     username: '',
     password: '',
 
@@ -154,16 +155,41 @@ export default function CreateStudent() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="email">Email *</Label>
+                                    <Label htmlFor="email">Email Login</Label>
                                     <Input
                                         id="email"
                                         type="email"
                                         value={data.email}
                                         onChange={(e) => setData('email', e.target.value)}
                                         className={errors.email ? 'border-destructive' : ''}
+                                        placeholder="Kosongkan untuk dibuatkan otomatis"
                                     />
+                                    <p className="text-xs text-muted-foreground">
+                                        Dikosongkan = dibuat otomatis dari nama depan + NIS, memakai
+                                        domain di Pengaturan → Umum. Alamat ini hanya untuk masuk
+                                        aplikasi, tidak dikirimi surat.
+                                    </p>
                                     {errors.email && (
                                         <p className="text-sm text-destructive">{errors.email}</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="contact_email">Email Kontak</Label>
+                                    <Input
+                                        id="contact_email"
+                                        type="email"
+                                        value={data.contact_email}
+                                        onChange={(e) => setData('contact_email', e.target.value)}
+                                        className={errors.contact_email ? 'border-destructive' : ''}
+                                        placeholder="Mis. email orang tua"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Alamat sungguhan tujuan OTP &amp; notifikasi. Boleh sama untuk
+                                        beberapa anak dari orang tua yang sama.
+                                    </p>
+                                    {errors.contact_email && (
+                                        <p className="text-sm text-destructive">{errors.contact_email}</p>
                                     )}
                                 </div>
 

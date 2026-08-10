@@ -34,6 +34,9 @@ class UpdateStudentRequest extends FormRequest
                 'max:255',
                 Rule::unique('users', 'email')->ignore($userId),
             ],
+            // Alamat surat (OTP/notifikasi). SENGAJA tanpa aturan unique —
+            // satu orang tua memakai satu alamat untuk beberapa anak.
+            'contact_email' => ['nullable', 'string', 'email', 'max:255'],
             'first_name' => ['sometimes', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
 

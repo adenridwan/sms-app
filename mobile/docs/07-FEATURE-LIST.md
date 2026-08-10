@@ -236,12 +236,27 @@ Ringkasan:
 
 ## F8 — Antrean & Sinkron Offline
 
+> **Status: terimplementasi & diuji (2026-08-09).** Rinciannya di
+> [09-ERROR-HANDLING.md §6a](../../docs/09-ERROR-HANDLING.md).
+
 - **Actor:** Admin, Guru, Staf.
 - **Preconditions:** Fitur scan aktif; koneksi tidak stabil/putus.
 - **User flow:**
-  1. Saat submit gagal karena jaringan → simpan scan ke antrean lokal (persisten) dengan `scanned_at` waktu perangkat.
-  2. Indikator "Offline · N menunggu" tampil.
-  3. Saat online kembali (otomatis/tap "Sinkron") → kirim batch; tampilkan ringkasan berhasil/gagal; buang yang sukses, tandai yang gagal untuk ditinjau.
+  1. Saat submit gagal karena jaringan → simpan ke antrean lokal (persisten) dengan waktu perangkat.
+  2. Indikator "N data menunggu sinkron" tampil di Beranda.
+  3. Saat online kembali → **dikirim otomatis di belakang layar**; tersedia juga tombol "Sinkron" manual di layar Antrean.
+
+**Dua jenis entri, dua antrean terpisah:**
+
+| Jenis | Kunci penyimpanan | Endpoint sinkron |
+|---|---|---|
+| Scan tunggal (kamera & input manual) | `offline_scans` | `POST /scan/sync-offline` (batch) |
+| Sesi absen kelas (seisi kelas sekaligus) | `offline_class_attendance` | `POST /attendance/students/bulk`, diputar ulang per entri |
+
+Absen kelas tidak dipaksa masuk bentuk scan tunggal karena satu entrinya memuat
+kelas + tanggal + status tiap siswa. Pengulangan aman: endpoint bulk memperbarui
+baris yang sudah ada untuk tanggal itu, bukan menambah duplikat.
+
 - **API endpoint:** `POST /api/v1/scan/sync-offline`.
 - **Request:**
   ```json

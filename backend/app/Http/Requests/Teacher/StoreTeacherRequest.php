@@ -29,7 +29,12 @@ class StoreTeacherRequest extends FormRequest
             // Akun & Pribadi (Tab 1)
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            // Dikosongkan = dibuatkan otomatis dari username
+            // (docs/EMAIL-OTOMATIS-AKUN.md). Guru yang punya alamat asli
+            // sebaiknya tetap mengisinya: notifikasi kehadiran guru dikirim ke
+            // contact_email, yang otomatis diisi dari sini bila dibiarkan kosong.
+            'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
+            'contact_email' => ['nullable', 'string', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:20'],
             'gender' => ['required', 'in:male,female'],
             'birth_place' => ['nullable', 'string', 'max:100'],
@@ -72,8 +77,8 @@ class StoreTeacherRequest extends FormRequest
     {
         return [
             'first_name.required' => 'Nama depan wajib diisi.',
-            'email.required' => 'Email wajib diisi.',
             'email.email' => 'Format email tidak valid.',
+            'contact_email.email' => 'Format email kontak tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
             'gender.required' => 'Jenis kelamin wajib diisi.',
             'gender.in' => 'Jenis kelamin tidak valid.',

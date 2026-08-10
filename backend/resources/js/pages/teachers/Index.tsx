@@ -45,6 +45,7 @@ import {
     Upload,
     FileSpreadsheet,
     Loader2,
+    RefreshCw,
 } from 'lucide-react';
 import type { Teacher, PaginatedResponse } from '@/types';
 
@@ -80,6 +81,7 @@ export default function TeachersIndex({ teachers, filters }: Props) {
     const { tenant, auth } = usePage<PageProps>().props;
     const [search, setSearch] = useState(filters.search || '');
     const [printingId, setPrintingId] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
 
     // Import/export hanya untuk yang memang berizin — guru hanya punya
     // teachers.view-own, siswa & orang tua tidak punya keduanya, jadi
@@ -188,6 +190,16 @@ export default function TeachersIndex({ teachers, filters }: Props) {
         router.get('/teachers', { search }, { preserveState: true });
     };
 
+    // Ambil ulang hanya prop `teachers` dari server — filter, pencarian, dan
+    // halaman yang sedang aktif tetap seperti apa adanya.
+    const handleRefresh = () => {
+        setRefreshing(true);
+        router.reload({
+            only: ['teachers'],
+            onFinish: () => setRefreshing(false),
+        });
+    };
+
     const getStatusBadge = (teacher: Teacher) => {
         const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
             active: 'default',
@@ -216,6 +228,10 @@ export default function TeachersIndex({ teachers, filters }: Props) {
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+                            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </Button>
                         {canExport && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>

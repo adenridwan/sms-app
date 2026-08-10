@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1\Setting;
 
 use App\Http\Controllers\Api\ApiController;
+use App\Infrastructure\Persistence\Eloquent\System\Setting;
 use App\Models\Tenant;
+use App\Services\EmailGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,6 +20,8 @@ class SchoolProfileController extends ApiController
 {
     /** Jenjang sekolah yang valid (samakan dengan CHECK constraint tabel tenants). */
     private const LEVELS = ['tk', 'sd', 'smp', 'sma', 'smk', 'university'];
+
+    public function __construct(private EmailGenerator $emailGenerator) {}
 
     /**
      * Tampilkan profil sekolah yang sedang aktif.
@@ -54,6 +58,9 @@ class SchoolProfileController extends ApiController
             'address' => ['nullable', 'string', 'max:500'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,svg', 'max:2048'],
             'remove_logo' => ['nullable', 'boolean'],
+            // Domain email otomatis siswa/guru (docs/EMAIL-OTOMATIS-AKUN.md).
+            // Nama host saja — tanpa "@", tanpa skema, tanpa spasi.
+            'email_domain' => ['nullable', 'string', 'max:100', 'regex:/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i'],
         ]);
 
         $payload = collect($data)
@@ -67,6 +74,27 @@ class SchoolProfileController extends ApiController
         } elseif ($request->boolean('remove_logo')) {
             $this->deleteLogo($tenant);
             $payload['logo'] = null;
+        }
+
+        if (array_key_exists('email_domain', $data)) {
+            $domain = strtolower(trim((string) $data['email_domain']));
+
+            // Domain wajib unik lintas sekolah: keunikan email siswa
+            // ({nama}.{nis}@{domain}) bersandar pada NIS yang hanya unik dalam
+            // satu tenant, jadi dua sekolah berdomain sama bisa bentrok.
+            if ($domain !== '' && $this->domainTakenByOtherTenant($domain, $tenant->id)) {
+                return $this->error('Domain email itu sudah dipakai sekolah lain.', 422, [
+                    'email_domain' => ['Domain email itu sudah dipakai sekolah lain.'],
+                ]);
+            }
+
+            Setting::setForTenant(
+                $tenant->id,
+                EmailGenerator::SETTING_GROUP,
+                EmailGenerator::SETTING_KEY,
+                $domain !== '' ? $domain : null,
+                'Domain email otomatis untuk akun siswa & guru',
+            );
         }
 
         $tenant->update($payload);
@@ -88,7 +116,20 @@ class SchoolProfileController extends ApiController
             'phone' => $tenant->phone,
             'address' => $tenant->address,
             'logo_url' => $tenant->logo ? $this->logoUrl($tenant->logo) : null,
+            'email_domain' => $this->emailGenerator->domainFor($tenant->id),
         ];
+    }
+
+    /**
+     * Apakah domain ini sudah dipakai sekolah lain?
+     */
+    private function domainTakenByOtherTenant(string $domain, string $tenantId): bool
+    {
+        return Setting::where('group', EmailGenerator::SETTING_GROUP)
+            ->where('key', EmailGenerator::SETTING_KEY)
+            ->whereRaw('lower(value) = ?', [$domain])
+            ->where('tenant_id', '!=', $tenantId)
+            ->exists();
     }
 
     /**

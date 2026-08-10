@@ -9,9 +9,13 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 
 /**
- * Export data siswa. Kolomnya sama persis dengan template import
- * (StudentsTemplateExport) supaya file hasil export bisa disunting lalu
- * diimport balik tanpa menyusun ulang kolom.
+ * Export data siswa. File hasilnya tetap bisa disunting lalu diimport balik.
+ *
+ * Kolomnya TIDAK lagi identik dengan template import: export memuat kolom
+ * `email` (identitas login hasil generate) karena justru itulah yang perlu
+ * dibagikan admin ke siswa, sedangkan template tidak memuatnya karena email
+ * login tidak boleh diisi dari file. Import siswa mengabaikan kolom `email`,
+ * jadi round-trip tetap aman. Lihat docs/EMAIL-OTOMATIS-AKUN.md.
  *
  * Data berkode/daftar tetap (agama, status siswa) sengaja tidak ikut:
  * pengisiannya lewat form, bukan lewat file.
@@ -23,6 +27,7 @@ class StudentsExport implements FromCollection, WithHeadings, WithMapping
         'nama_depan',
         'nama_belakang',
         'email',
+        'email_kontak',
         'jenis_kelamin',
         'tanggal_lahir',
         'nisn',
@@ -56,6 +61,7 @@ class StudentsExport implements FromCollection, WithHeadings, WithMapping
             $profile?->first_name,
             $profile?->last_name,
             $student->user?->email,
+            $student->user?->contact_email,
             match ($profile?->gender) {
                 'male' => 'L',
                 'female' => 'P',
@@ -68,8 +74,10 @@ class StudentsExport implements FromCollection, WithHeadings, WithMapping
             $profile?->birth_place,
             $profile?->address,
             $student->previous_school,
-            // Kode kelas pada tahun ajaran aktif (kolom opsional saat import)
-            $student->currentClass?->code,
+            // NAMA kelas pada tahun ajaran aktif, bukan kodenya: kode dibuat
+            // otomatis (`KLS01`) dan tidak dikenali admin. Import menerima
+            // keduanya, jadi file ini tetap bisa diimpor balik.
+            $student->currentClass?->name,
         ];
     }
 }

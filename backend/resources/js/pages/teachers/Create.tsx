@@ -36,6 +36,7 @@ const emptyForm: TeacherFormData = {
     first_name: '',
     last_name: '',
     email: '',
+    contact_email: '',
     phone: '',
     gender: '',
     birth_place: '',
@@ -95,7 +96,8 @@ const EDUCATION_OTHER = 'other';
  */
 const requiredFields: Array<{ field: keyof TeacherFormData; label: string; tab: string }> = [
     { field: 'first_name', label: 'Nama Depan', tab: 'akun' },
-    { field: 'email', label: 'Email', tab: 'akun' },
+    // `email` tidak lagi wajib: dikosongkan berarti dibuatkan otomatis dari
+    // username + domain sekolah (docs/EMAIL-OTOMATIS-AKUN.md).
     { field: 'gender', label: 'Jenis Kelamin', tab: 'akun' },
     { field: 'birth_date', label: 'Tanggal Lahir', tab: 'akun' },
 ];
@@ -268,17 +270,36 @@ export default function CreateTeacher() {
 
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
-                                            <Label htmlFor="email">Email *</Label>
+                                            <Label htmlFor="email">Email Login</Label>
                                             <Input
                                                 id="email"
                                                 type="email"
-                                                placeholder="nama@sekolah.sch.id"
+                                                placeholder="Kosongkan untuk dibuatkan otomatis"
                                                 value={data.email}
                                                 onChange={(e) => update('email', e.target.value)}
                                                 className={errors.email ? 'border-destructive' : ''}
                                             />
+                                            <p className="text-xs text-muted-foreground">
+                                                Diisi = dipakai untuk login sekaligus tujuan notifikasi.
+                                                Dikosongkan = dibuat otomatis dari nama, dan notifikasi
+                                                dikirim ke Email Kontak.
+                                            </p>
                                             {errors.email && (
                                                 <p className="text-sm text-destructive">{errors.email}</p>
+                                            )}
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="contact_email">Email Kontak</Label>
+                                            <Input
+                                                id="contact_email"
+                                                type="email"
+                                                placeholder="Alamat asli untuk notifikasi"
+                                                value={data.contact_email}
+                                                onChange={(e) => update('contact_email', e.target.value)}
+                                                className={errors.contact_email ? 'border-destructive' : ''}
+                                            />
+                                            {errors.contact_email && (
+                                                <p className="text-sm text-destructive">{errors.contact_email}</p>
                                             )}
                                         </div>
                                         <div className="space-y-2">

@@ -31,6 +31,7 @@ function toFormData(student: Student) {
         first_name: firstName ?? '',
         last_name: rest.join(' '),
         email: student.email ?? '',
+        contact_email: student.contact_email ?? '',
         nis: student.nis ?? '',
         nisn: student.nisn ?? '',
         nik: student.nik ?? '',
@@ -282,7 +283,7 @@ export default function EditStudent({ student }: EditStudentProps) {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="email">Email *</Label>
+                                    <Label htmlFor="email">Email Login</Label>
                                     <Input
                                         id="email"
                                         type="email"
@@ -290,7 +291,29 @@ export default function EditStudent({ student }: EditStudentProps) {
                                         onChange={(e) => setData('email', e.target.value)}
                                         className={errors.email ? 'border-destructive' : ''}
                                     />
+                                    <p className="text-xs text-muted-foreground">
+                                        Alamat untuk masuk aplikasi. Mengubahnya berarti mengubah cara
+                                        siswa login — beri tahu yang bersangkutan.
+                                    </p>
                                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="contact_email">Email Kontak</Label>
+                                    <Input
+                                        id="contact_email"
+                                        type="email"
+                                        value={data.contact_email}
+                                        onChange={(e) => setData('contact_email', e.target.value)}
+                                        className={errors.contact_email ? 'border-destructive' : ''}
+                                        placeholder="Mis. email orang tua"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Alamat sungguhan tujuan OTP &amp; notifikasi.
+                                    </p>
+                                    {errors.contact_email && (
+                                        <p className="text-sm text-destructive">{errors.contact_email}</p>
+                                    )}
                                 </div>
 
                                 <div className="space-y-2">

@@ -40,9 +40,17 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { TimeInput24 } from '@/components/ui/time-input-24';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, RefreshCw, Settings, ArrowLeft, Coffee, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, RefreshCw, Settings, ArrowLeft, Coffee, Download, Copy, ChevronDown, AlertTriangle } from 'lucide-react';
 import {
     scheduleApi,
     timeSlotsApi,
@@ -53,7 +61,7 @@ import {
     teachersApi,
 } from '@/services/api';
 import { subjectColorClasses } from '@/lib/subjectColors';
-import type { Schedule, TimeSlot, AcademicYear, Semester, Classroom, Subject, Teacher } from '@/types';
+import type { Schedule, TimeSlot, AcademicYear, Semester, Classroom, Subject, Teacher, ScheduleCopyResult } from '@/types';
 
 function downloadBlob(data: Blob, filename: string) {
     const url = URL.createObjectURL(data);
@@ -154,6 +162,25 @@ export default function AcademicSchedules() {
     const [tsForm, setTsForm] = useState<TimeSlotForm>(emptyTimeSlotForm);
     const [tsSaving, setTsSaving] = useState(false);
     const [tsDeleting, setTsDeleting] = useState<TimeSlot | null>(null);
+
+    // Salin dari Kelas Lain
+    const [copyClassroomOpen, setCopyClassroomOpen] = useState(false);
+    const [copySourceYearId, setCopySourceYearId] = useState('');
+    const [copySourceSemesters, setCopySourceSemesters] = useState<Semester[]>([]);
+    const [copySourceSemesterId, setCopySourceSemesterId] = useState('');
+    const [copySourceClassrooms, setCopySourceClassrooms] = useState<Classroom[]>([]);
+    const [copySourceClassroomId, setCopySourceClassroomId] = useState('');
+    const [copyClassroomOverwrite, setCopyClassroomOverwrite] = useState(false);
+    const [copyingClassroom, setCopyingClassroom] = useState(false);
+    const [copyClassroomResult, setCopyClassroomResult] = useState<ScheduleCopyResult | null>(null);
+
+    // Salin dari Hari Lain
+    const [copyDayOpen, setCopyDayOpen] = useState(false);
+    const [copyDaySource, setCopyDaySource] = useState<number | null>(null);
+    const [copyDayTargets, setCopyDayTargets] = useState<number[]>([]);
+    const [copyDayOverwrite, setCopyDayOverwrite] = useState(false);
+    const [copyingDay, setCopyingDay] = useState(false);
+    const [copyDayResult, setCopyDayResult] = useState<ScheduleCopyResult | null>(null);
 
     // ---------- reference data ----------
 
@@ -330,6 +357,107 @@ export default function AcademicSchedules() {
         }
     };
 
+    // ---------- salin dari kelas lain ----------
+
+    const openCopyClassroom = () => {
+        setCopySourceYearId(yearId);
+        setCopySourceSemesterId('');
+        setCopySourceClassroomId('');
+        setCopySourceSemesters(semesters);
+        setCopySourceClassrooms(classrooms.filter((c) => c.id !== classroomId));
+        setCopyClassroomOverwrite(false);
+        setCopyClassroomResult(null);
+        setCopyClassroomOpen(true);
+    };
+
+    useEffect(() => {
+        if (!copyClassroomOpen || !copySourceYearId) return;
+        setCopySourceSemesterId('');
+        setCopySourceClassroomId('');
+        (async () => {
+            try {
+                const [semRes, classRes] = await Promise.all([
+                    semestersApi.list({ academic_year_id: copySourceYearId, per_page: 100 }),
+                    classroomsApi.list({ academic_year_id: copySourceYearId, per_page: 100, is_active: true }),
+                ]);
+                setCopySourceSemesters(semRes.data.data.data ?? []);
+                setCopySourceClassrooms((classRes.data.data.data ?? []).filter((c) => c.id !== classroomId));
+            } catch {
+                toast.error('Gagal memuat semester/kelas sumber');
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [copyClassroomOpen, copySourceYearId]);
+
+    const handleCopyFromClassroom = async () => {
+        if (!copySourceClassroomId || !copySourceSemesterId) {
+            toast.error('Pilih kelas & semester sumber');
+            return;
+        }
+        setCopyingClassroom(true);
+        setCopyClassroomResult(null);
+        try {
+            const response = await scheduleApi.copyFromClassroom({
+                source_classroom_id: copySourceClassroomId,
+                source_semester_id: copySourceSemesterId,
+                target_classroom_id: classroomId,
+                target_semester_id: semesterId,
+                target_academic_year_id: yearId,
+                overwrite: copyClassroomOverwrite,
+            });
+            setCopyClassroomResult(response.data.data);
+            fetchSchedules();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Gagal menyalin jadwal'));
+        } finally {
+            setCopyingClassroom(false);
+        }
+    };
+
+    // ---------- salin dari hari lain ----------
+
+    const openCopyDay = () => {
+        setCopyDaySource(null);
+        setCopyDayTargets([]);
+        setCopyDayOverwrite(false);
+        setCopyDayResult(null);
+        setCopyDayOpen(true);
+    };
+
+    const daysWithSchedule = useMemo(
+        () => new Set(schedules.map((s) => s.day_of_week)),
+        [schedules],
+    );
+
+    const toggleCopyDayTarget = (day: number) => {
+        setCopyDayTargets((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
+    };
+
+    const handleCopyFromDay = async () => {
+        if (!copyDaySource || copyDayTargets.length === 0) {
+            toast.error('Pilih hari sumber dan minimal satu hari tujuan');
+            return;
+        }
+        setCopyingDay(true);
+        setCopyDayResult(null);
+        try {
+            const response = await scheduleApi.copyFromDay({
+                academic_year_id: yearId,
+                classroom_id: classroomId,
+                semester_id: semesterId,
+                source_day_of_week: copyDaySource,
+                target_days: copyDayTargets,
+                overwrite: copyDayOverwrite,
+            });
+            setCopyDayResult(response.data.data);
+            fetchSchedules();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Gagal menyalin jadwal'));
+        } finally {
+            setCopyingDay(false);
+        }
+    };
+
     // ---------- kelola jam pelajaran ----------
 
     const openTsManager = () => {
@@ -429,6 +557,23 @@ export default function AcademicSchedules() {
                             <Settings className="mr-2 h-4 w-4" />
                             Kelola Jam Pelajaran
                         </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button disabled={!classroomId || !semesterId}>
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Salin Jadwal
+                                    <ChevronDown className="ml-2 h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={openCopyClassroom}>
+                                    Salin dari Kelas Lain...
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={openCopyDay} disabled={!schedules.length}>
+                                    Salin dari Hari Lain...
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 
@@ -770,6 +915,7 @@ export default function AcademicSchedules() {
                                         placeholder="Contoh: Jam 1"
                                         value={tsForm.name}
                                         onChange={(e) => setTsForm({ ...tsForm, name: e.target.value })}
+                                        maxLength={150}
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -843,6 +989,219 @@ export default function AcademicSchedules() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Salin dari Kelas Lain */}
+            <Dialog open={copyClassroomOpen} onOpenChange={(open) => !copyingClassroom && setCopyClassroomOpen(open)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Salin dari Kelas Lain</DialogTitle>
+                        <DialogDescription>
+                            Menyalin semua jadwal dari kelas sumber ke{' '}
+                            <strong>{selectedClassroom?.name ?? 'kelas ini'}</strong>
+                            {semesters.find((s) => s.id === semesterId) ? ` · ${semesters.find((s) => s.id === semesterId)?.name}` : ''}.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {!copyClassroomResult ? (
+                        <>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Tahun Ajaran Sumber</Label>
+                                    <Select value={copySourceYearId} onValueChange={setCopySourceYearId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Pilih tahun ajaran" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {academicYears.map((year) => (
+                                                <SelectItem key={year.id} value={year.id}>
+                                                    {year.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Semester Sumber</Label>
+                                        <Select
+                                            value={copySourceSemesterId}
+                                            onValueChange={setCopySourceSemesterId}
+                                            disabled={!copySourceSemesters.length}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih semester" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {copySourceSemesters.map((semester) => (
+                                                    <SelectItem key={semester.id} value={semester.id}>
+                                                        {semester.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Kelas Sumber</Label>
+                                        <Select
+                                            value={copySourceClassroomId}
+                                            onValueChange={setCopySourceClassroomId}
+                                            disabled={!copySourceClassrooms.length}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih kelas" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {copySourceClassrooms.map((classroom) => (
+                                                    <SelectItem key={classroom.id} value={classroom.id}>
+                                                        {classroom.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <Checkbox
+                                        checked={copyClassroomOverwrite}
+                                        onCheckedChange={(checked) => setCopyClassroomOverwrite(checked === true)}
+                                    />
+                                    Timpa jadwal yang sudah ada di kelas tujuan
+                                </label>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setCopyClassroomOpen(false)} disabled={copyingClassroom}>
+                                    Batal
+                                </Button>
+                                <Button onClick={handleCopyFromClassroom} disabled={copyingClassroom}>
+                                    {copyingClassroom && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                                    Salin
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    ) : (
+                        <>
+                            <div className="space-y-3">
+                                <Alert className="border-green-300 dark:border-green-800">
+                                    <Copy className="h-4 w-4" />
+                                    <AlertTitle>{copyClassroomResult.copied} jadwal berhasil disalin</AlertTitle>
+                                </Alert>
+                                {copyClassroomResult.skipped.length > 0 && (
+                                    <Alert className="border-amber-300 dark:border-amber-800">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <AlertTitle>{copyClassroomResult.skipped.length} dilewati</AlertTitle>
+                                        <AlertDescription>
+                                            <ul className="max-h-40 list-disc space-y-1 overflow-y-auto pl-4">
+                                                {copyClassroomResult.skipped.map((reason, i) => (
+                                                    <li key={i}>{reason}</li>
+                                                ))}
+                                            </ul>
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+                            </div>
+                            <DialogFooter>
+                                <Button onClick={() => setCopyClassroomOpen(false)}>Tutup</Button>
+                            </DialogFooter>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Salin dari Hari Lain */}
+            <Dialog open={copyDayOpen} onOpenChange={(open) => !copyingDay && setCopyDayOpen(open)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Salin dari Hari Lain</DialogTitle>
+                        <DialogDescription>
+                            Menyalin jadwal satu hari ke hari lain dalam <strong>{selectedClassroom?.name ?? 'kelas ini'}</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {!copyDayResult ? (
+                        <>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Hari Sumber</Label>
+                                    <Select
+                                        value={copyDaySource ? String(copyDaySource) : undefined}
+                                        onValueChange={(value) => {
+                                            const day = Number(value);
+                                            setCopyDaySource(day);
+                                            setCopyDayTargets((prev) => prev.filter((d) => d !== day));
+                                        }}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Pilih hari yang sudah ada jadwalnya" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {DAYS.filter((day) => daysWithSchedule.has(day.value)).map((day) => (
+                                                <SelectItem key={day.value} value={String(day.value)}>
+                                                    {day.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Hari Tujuan</Label>
+                                    <div className="grid grid-cols-2 gap-2 rounded-md border p-3">
+                                        {DAYS.filter((day) => day.value !== copyDaySource).map((day) => (
+                                            <label key={day.value} className="flex items-center gap-2 text-sm">
+                                                <Checkbox
+                                                    checked={copyDayTargets.includes(day.value)}
+                                                    onCheckedChange={() => toggleCopyDayTarget(day.value)}
+                                                />
+                                                {day.label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <Checkbox
+                                        checked={copyDayOverwrite}
+                                        onCheckedChange={(checked) => setCopyDayOverwrite(checked === true)}
+                                    />
+                                    Timpa jadwal yang sudah ada di hari tujuan
+                                </label>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setCopyDayOpen(false)} disabled={copyingDay}>
+                                    Batal
+                                </Button>
+                                <Button onClick={handleCopyFromDay} disabled={copyingDay}>
+                                    {copyingDay && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                                    Salin
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    ) : (
+                        <>
+                            <div className="space-y-3">
+                                <Alert className="border-green-300 dark:border-green-800">
+                                    <Copy className="h-4 w-4" />
+                                    <AlertTitle>{copyDayResult.copied} jadwal berhasil disalin</AlertTitle>
+                                </Alert>
+                                {copyDayResult.skipped.length > 0 && (
+                                    <Alert className="border-amber-300 dark:border-amber-800">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <AlertTitle>{copyDayResult.skipped.length} dilewati</AlertTitle>
+                                        <AlertDescription>
+                                            <ul className="max-h-40 list-disc space-y-1 overflow-y-auto pl-4">
+                                                {copyDayResult.skipped.map((reason, i) => (
+                                                    <li key={i}>{reason}</li>
+                                                ))}
+                                            </ul>
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+                            </div>
+                            <DialogFooter>
+                                <Button onClick={() => setCopyDayOpen(false)}>Tutup</Button>
+                            </DialogFooter>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
         </MainLayout>
     );
 }

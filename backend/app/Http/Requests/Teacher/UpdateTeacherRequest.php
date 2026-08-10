@@ -35,6 +35,9 @@ class UpdateTeacherRequest extends FormRequest
                 'sometimes', 'string', 'email', 'max:255',
                 Rule::unique('users', 'email')->ignore($userId),
             ],
+            // Alamat surat (OTP/notifikasi). SENGAJA tanpa aturan unique —
+            // lihat docs/EMAIL-OTOMATIS-AKUN.md.
+            'contact_email' => ['nullable', 'string', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:20'],
             'gender' => ['sometimes', 'in:male,female'],
             'birth_place' => ['nullable', 'string', 'max:100'],

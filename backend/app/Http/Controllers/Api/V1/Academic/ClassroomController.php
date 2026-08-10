@@ -72,6 +72,8 @@ class ClassroomController extends ApiController
      */
     public function store(Request $request): JsonResponse
     {
+        abort_unless($request->user()->can('classrooms.manage'), 403);
+
         if (! $this->currentTenantId($request)) {
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }
@@ -122,6 +124,8 @@ class ClassroomController extends ApiController
      */
     public function update(Request $request, Classroom $classroom): JsonResponse
     {
+        abort_unless($request->user()->can('classrooms.manage'), 403);
+
         $effectiveYearId = $request->input('academic_year_id', $classroom->academic_year_id);
 
         $data = $request->validate([
@@ -168,6 +172,8 @@ class ClassroomController extends ApiController
      */
     public function destroy(Classroom $classroom): JsonResponse
     {
+        abort_unless(request()->user()->can('classrooms.manage'), 403);
+
         if ($classroom->enrollments()->exists()) {
             return $this->error('Kelas tidak dapat dihapus karena masih memiliki siswa', 422);
         }
@@ -330,6 +336,8 @@ class ClassroomController extends ApiController
      */
     public function import(Request $request): JsonResponse
     {
+        abort_unless($request->user()->can('classrooms.manage'), 403);
+
         if (! $this->currentTenantId($request)) {
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }

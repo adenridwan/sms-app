@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/class_attendance_repository.dart';
 import '../models/class_attendance.dart';
+import '../models/queued_class_attendance.dart';
+import 'class_attendance_queue_controller.dart';
 
 class ClassAttendanceState {
   const ClassAttendanceState({
@@ -68,12 +70,13 @@ class ClassAttendanceState {
 }
 
 class ClassAttendanceController extends StateNotifier<ClassAttendanceState> {
-  ClassAttendanceController(this._repo, this._initialClassroomId)
+  ClassAttendanceController(this._repo, this._queue, this._initialClassroomId)
       : super(ClassAttendanceState(date: DateTime.now())) {
     _loadClasses();
   }
 
   final ClassAttendanceRepository _repo;
+  final ClassAttendanceQueueController _queue;
   final String? _initialClassroomId;
 
   Future<void> _loadClasses() async {
@@ -127,26 +130,76 @@ class ClassAttendanceController extends StateNotifier<ClassAttendanceState> {
 
   void setDate(DateTime date) => state = state.copyWith(date: date);
 
-  /// Mengembalikan null bila sukses, atau pesan error bila gagal.
-  Future<String?> save() async {
+  /// Simpan absensi kelas.
+  ///
+  /// Mengembalikan [SaveOutcome]: terkirim ke server, atau **masuk antrean**
+  /// bila jaringan mati. Mengantre itu penting — tanpa itu, guru yang sudah
+  /// menandai puluhan siswa kehilangan seluruh pekerjaannya begitu sinyal
+  /// hilang.
+  Future<SaveOutcome> save() async {
     final classId = state.selectedClassId;
-    if (classId == null || state.marks.isEmpty) return 'Belum ada data absensi.';
+    if (classId == null || state.marks.isEmpty) {
+      return const SaveOutcome.failure('Belum ada data absensi.');
+    }
 
+    final date = state.date ?? DateTime.now();
     state = state.copyWith(saving: true);
+
     try {
       await _repo.submit(
         classroomId: classId,
-        date: state.date ?? DateTime.now(),
+        date: date,
         marks: state.marks,
       );
       state = state.copyWith(saving: false);
-      return null;
+      return const SaveOutcome.sent();
     } on ApiException catch (e) {
+      if (e.isNetwork) {
+        await _queue.enqueue(QueuedClassAttendance(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          classroomId: classId,
+          classroomName: state.classes
+              .where((c) => c.id == classId)
+              .map((c) => c.name)
+              .firstOrNull ??
+              '',
+          date: date,
+          marks: state.marks,
+          savedAt: DateTime.now(),
+        ));
+        state = state.copyWith(saving: false);
+        return const SaveOutcome.queued();
+      }
       state = state.copyWith(saving: false, error: e.message);
-      return e.message;
+      return SaveOutcome.failure(e.message);
     }
   }
 }
+
+/// Hasil penyimpanan absen kelas.
+class SaveOutcome {
+  const SaveOutcome._(this.kind, [this.message]);
+
+  const SaveOutcome.sent() : this._(SaveOutcomeKind.sent);
+  const SaveOutcome.queued() : this._(SaveOutcomeKind.queued);
+  const SaveOutcome.failure(String message)
+      : this._(SaveOutcomeKind.failure, message);
+
+  final SaveOutcomeKind kind;
+  final String? message;
+
+  bool get isFailure => kind == SaveOutcomeKind.failure;
+
+  String get label => switch (kind) {
+        SaveOutcomeKind.sent => 'Absensi tersimpan.',
+        SaveOutcomeKind.queued =>
+          'Tidak ada koneksi — absensi disimpan di antrean '
+              'dan akan dikirim otomatis saat server kembali.',
+        SaveOutcomeKind.failure => message ?? 'Gagal menyimpan absensi.',
+      };
+}
+
+enum SaveOutcomeKind { sent, queued, failure }
 
 /// Dibuat per-kelas-awal agar membuka layar dari kartu kelas tertentu di
 /// Beranda langsung memilih kelas itu.
@@ -154,6 +207,7 @@ final classAttendanceControllerProvider = StateNotifierProvider.family<
     ClassAttendanceController, ClassAttendanceState, String?>(
   (ref, initialClassroomId) => ClassAttendanceController(
     ref.watch(classAttendanceRepositoryProvider),
+    ref.watch(classAttendanceQueueProvider.notifier),
     initialClassroomId,
   ),
 );

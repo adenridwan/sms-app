@@ -167,6 +167,168 @@ class ScheduleController extends ApiController
     }
 
     /**
+     * Salin seluruh jadwal dari kelas+semester lain ke kelas+semester yang
+     * sedang dibuka — supaya kelas paralel atau semester baru tidak perlu
+     * input ulang manual. Default melewati sel yang di tujuan sudah terisi
+     * (aman); centang overwrite untuk menimpa.
+     */
+    public function copyFromClassroom(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->can('schedules.manage'), 403);
+
+        $data = $request->validate([
+            'source_classroom_id' => ['required', 'uuid', Rule::exists('classrooms', 'id')],
+            'source_semester_id' => ['required', 'uuid', Rule::exists('semesters', 'id')],
+            'target_classroom_id' => ['required', 'uuid', Rule::exists('classrooms', 'id')],
+            'target_semester_id' => ['required', 'uuid', Rule::exists('semesters', 'id')],
+            'target_academic_year_id' => ['required', 'uuid', Rule::exists('academic_years', 'id')],
+            'overwrite' => ['boolean'],
+        ]);
+
+        if ($data['source_classroom_id'] === $data['target_classroom_id']
+            && $data['source_semester_id'] === $data['target_semester_id']) {
+            return $this->error('Kelas & semester sumber tidak boleh sama dengan tujuan.', 422);
+        }
+
+        $sourceSchedules = Schedule::with('timeSlot')
+            ->where('classroom_id', $data['source_classroom_id'])
+            ->where('semester_id', $data['source_semester_id'])
+            ->get();
+
+        if ($sourceSchedules->isEmpty()) {
+            return $this->error('Kelas sumber belum punya jadwal pada semester tersebut.', 422);
+        }
+
+        [$copied, $skipped] = $this->copySchedules($sourceSchedules, [
+            'academic_year_id' => $data['target_academic_year_id'],
+            'semester_id' => $data['target_semester_id'],
+            'classroom_id' => $data['target_classroom_id'],
+        ], $data['overwrite'] ?? false);
+
+        return $this->success(
+            ['copied' => $copied, 'skipped' => $skipped],
+            $this->copyResultMessage($copied, $skipped),
+        );
+    }
+
+    /**
+     * Salin jadwal satu hari ke satu/lebih hari lain dalam kelas+semester
+     * yang sama — untuk pola jadwal yang berulang di beberapa hari.
+     */
+    public function copyFromDay(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->can('schedules.manage'), 403);
+
+        $data = $request->validate([
+            'academic_year_id' => ['required', 'uuid', Rule::exists('academic_years', 'id')],
+            'classroom_id' => ['required', 'uuid', Rule::exists('classrooms', 'id')],
+            'semester_id' => ['required', 'uuid', Rule::exists('semesters', 'id')],
+            'source_day_of_week' => ['required', 'integer', 'between:1,6'],
+            'target_days' => ['required', 'array', 'min:1'],
+            'target_days.*' => ['integer', 'between:1,6', 'different:source_day_of_week'],
+            'overwrite' => ['boolean'],
+        ]);
+
+        $sourceSchedules = Schedule::with('timeSlot')
+            ->where('classroom_id', $data['classroom_id'])
+            ->where('semester_id', $data['semester_id'])
+            ->where('day_of_week', $data['source_day_of_week'])
+            ->get();
+
+        if ($sourceSchedules->isEmpty()) {
+            return $this->error('Hari sumber belum punya jadwal.', 422);
+        }
+
+        $copied = 0;
+        $skipped = [];
+
+        foreach (array_unique($data['target_days']) as $targetDay) {
+            [$c, $s] = $this->copySchedules($sourceSchedules, [
+                'academic_year_id' => $data['academic_year_id'],
+                'semester_id' => $data['semester_id'],
+                'classroom_id' => $data['classroom_id'],
+            ], $data['overwrite'] ?? false, overrideDay: (int) $targetDay);
+            $copied += $c;
+            $skipped = array_merge($skipped, $s);
+        }
+
+        return $this->success(
+            ['copied' => $copied, 'skipped' => $skipped],
+            $this->copyResultMessage($copied, $skipped),
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Schedule>  $sourceSchedules
+     * @return array{0: int, 1: string[]}
+     */
+    private function copySchedules($sourceSchedules, array $targetContext, bool $overwrite, ?int $overrideDay = null): array
+    {
+        $copied = 0;
+        $skipped = [];
+
+        foreach ($sourceSchedules as $source) {
+            $dayOfWeek = $overrideDay ?? (int) $source->day_of_week;
+            $label = ($source->timeSlot->name ?? 'Jam') . ' · ' . (Schedule::DAY_NAMES[$dayOfWeek] ?? '');
+
+            $candidate = array_merge($targetContext, [
+                'subject_id' => $source->subject_id,
+                'teacher_id' => $source->teacher_id,
+                'time_slot_id' => $source->time_slot_id,
+                'day_of_week' => $dayOfWeek,
+                'room' => $source->room,
+                'is_active' => $source->is_active,
+            ]);
+
+            $existing = Schedule::where('classroom_id', $candidate['classroom_id'])
+                ->where('semester_id', $candidate['semester_id'])
+                ->where('day_of_week', $dayOfWeek)
+                ->where('time_slot_id', $candidate['time_slot_id'])
+                ->first();
+
+            if ($existing) {
+                if (! $overwrite) {
+                    $skipped[] = "{$label}: kelas tujuan sudah ada jadwal";
+                    continue;
+                }
+                // Soft delete biasa — `schedule_unique` sekarang partial index
+                // (`WHERE deleted_at IS NULL`, lihat migrasi
+                // 2026_08_09_000001), jadi baris yang di-soft-delete tidak
+                // lagi dihitung menempati slotnya dan insert di bawah aman.
+                $existing->delete();
+            }
+
+            // $source->id dikecualikan: kalau tidak, baris sumber sendiri
+            // (guru yang sama, hari+jam yang sama) selalu terdeteksi
+            // "bentrok" pada pengecekan guru lintas-kelas, padahal itu
+            // memang baris yang sedang kita salin.
+            $conflict = $this->findConflict($candidate, $source->id);
+            if ($conflict) {
+                $skipped[] = "{$label}: {$conflict}";
+                continue;
+            }
+
+            Schedule::create($candidate);
+            $copied++;
+        }
+
+        return [$copied, $skipped];
+    }
+
+    /**
+     * @param  string[]  $skipped
+     */
+    private function copyResultMessage(int $copied, array $skipped): string
+    {
+        $message = "{$copied} jadwal berhasil disalin.";
+        if (count($skipped) > 0) {
+            $message .= ' ' . count($skipped) . ' dilewati karena bentrok.';
+        }
+
+        return $message;
+    }
+
+    /**
      * Remove the specified resource from storage.
      */
     public function destroy(Schedule $schedule): JsonResponse

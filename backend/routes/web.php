@@ -53,9 +53,17 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     // Postgres (bukan 404) karena query langsung mencoba cast string ke uuid.
     Route::prefix('students')->name('students.')->group(function () {
         Route::get('/', [PageController::class, 'students'])->name('index');
-        Route::get('/create', [PageController::class, 'createStudent'])->name('create');
+        // Halaman form ikut digerbangi izin, bukan hanya endpoint API-nya.
+        // Tanpa ini guru masih bisa membuka form Tambah/Edit Siswa dan baru
+        // ditolak 403 setelah menekan Simpan — terbaca seolah ia berwenang.
+        Route::get('/create', [PageController::class, 'createStudent'])
+            ->middleware('permission:students.create')
+            ->name('create');
         Route::get('/{student}', [PageController::class, 'showStudent'])->whereUuid('student')->name('show');
-        Route::get('/{student}/edit', [PageController::class, 'editStudent'])->whereUuid('student')->name('edit');
+        Route::get('/{student}/edit', [PageController::class, 'editStudent'])
+            ->whereUuid('student')
+            ->middleware('permission:students.update')
+            ->name('edit');
     });
 
     // Teachers Module

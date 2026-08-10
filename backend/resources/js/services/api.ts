@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse, ReportResponse, PaginatedResponse, Student, Teacher, TeacherFormData, TeacherAssignment, TeacherDocumentCollection, TeacherDocuments, ClassRoom, Subject, Curriculum, AcademicYear, Semester, StudentFee, Payment, FeeType, FeeStructure, PaymentMethod, Discount, SalaryGrade, SalaryComponent, BpjsRate, TaxBracket, TaxSetting, EmployeeSalary, PayrollPeriod, PayrollSlip, Attendance, DashboardStats, User, Major, GradeLevel, Classroom, TimeSlot, Schedule, BackupFile, DbConnectionInfo } from '@/types';
+import type { ApiResponse, ReportResponse, PaginatedResponse, Student, Teacher, TeacherFormData, TeacherAssignment, TeacherDocumentCollection, TeacherDocuments, ClassRoom, Subject, Curriculum, AcademicYear, Semester, StudentFee, Payment, FeeType, FeeStructure, PaymentMethod, Discount, SalaryGrade, SalaryComponent, BpjsRate, TaxBracket, TaxSetting, EmployeeSalary, PayrollPeriod, PayrollSlip, Attendance, DashboardStats, User, Major, GradeLevel, Classroom, TimeSlot, Schedule, ScheduleCopyResult, BackupFile, DbConnectionInfo } from '@/types';
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -493,6 +493,24 @@ export const scheduleApi = {
 
     exportPdf: (params: { classroom_id: string; semester_id: string }) =>
         api.get('/academic/schedules/export-pdf', { params, responseType: 'blob' }),
+
+    copyFromClassroom: (data: {
+        source_classroom_id: string;
+        source_semester_id: string;
+        target_classroom_id: string;
+        target_semester_id: string;
+        target_academic_year_id: string;
+        overwrite: boolean;
+    }) => api.post<ApiResponse<ScheduleCopyResult>>('/academic/schedules/copy-from-classroom', data),
+
+    copyFromDay: (data: {
+        academic_year_id: string;
+        classroom_id: string;
+        semester_id: string;
+        source_day_of_week: number;
+        target_days: number[];
+        overwrite: boolean;
+    }) => api.post<ApiResponse<ScheduleCopyResult>>('/academic/schedules/copy-from-day', data),
 };
 
 // Student Fees

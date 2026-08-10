@@ -88,6 +88,39 @@ test('username dibuat otomatis dan unik saat bentrok', function () {
     expect($r1->json('data.initial_username'))->not->toBe($r2->json('data.initial_username'));
 });
 
+test('TeacherRegistrar coba ulang otomatis kalau username bentrok tepat saat insert (race condition)', function () {
+    // uniqueUsername() cek dulu baru insert — tidak atomik. Simulasikan
+    // proses lain "menyerobot" username persis di antara pengecekan dan
+    // insert kita: mock supaya panggilan pertama tetap mengembalikan
+    // username yang SUDAH ada di DB (baris di bawah), memaksa insert
+    // pertama gagal unique violation, lalu verifikasi create() menangkapnya
+    // dan otomatis coba lagi dengan username baru alih-alih melempar SQL
+    // mentah ke pemanggil.
+    User::create([
+        'tenant_id' => $this->tenantId,
+        'username' => 'diserobot.proses.lain',
+        'email' => 'lain@sekolah.test',
+        'password' => bcrypt('x'),
+        'status' => 'active',
+        'user_type' => 'staff',
+    ]);
+
+    $registrar = Mockery::mock(App\Services\TeacherRegistrar::class)->makePartial();
+    $registrar->shouldReceive('uniqueUsername')
+        ->twice()
+        ->andReturn('diserobot.proses.lain', 'diserobot.proses.lain2');
+
+    $result = $registrar->create([
+        'first_name' => 'Budi',
+        'last_name' => 'Santoso',
+        'email' => 'budi.race.' . uniqid() . '@sekolah.test',
+        'gender' => 'male',
+        'birth_date' => '1990-01-01',
+    ], $this->tenantId);
+
+    expect($result['username'])->toBe('diserobot.proses.lain2');
+});
+
 test('tanggal lahir wajib diisi', function () {
     $payload = teacherPayload();
     unset($payload['birth_date']);

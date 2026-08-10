@@ -25,7 +25,11 @@ class StudentResource extends JsonResource
             'nik' => $profile?->id_number,
             'user' => new UserResource($this->whenLoaded('user')),
             'full_name' => $this->user?->full_name,
+            // `email` = identitas login (bisa hasil generate), `contact_email`
+            // = alamat surat sungguhan. Lihat docs/EMAIL-OTOMATIS-AKUN.md.
             'email' => $this->user?->email,
+            'contact_email' => $this->user?->contact_email,
+            'email_is_generated' => (bool) $this->user?->email_is_generated,
             'gender' => $profile?->gender,
             'gender_label' => match ($profile?->gender) {
                 'male' => 'Laki-laki',

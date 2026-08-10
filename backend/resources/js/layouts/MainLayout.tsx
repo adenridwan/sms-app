@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import { PageProps } from '@/types';
 import { cn } from '@/lib/utils';
+import { roleLabel, roleSummary } from '@/lib/roles';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -365,6 +367,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
 
     const schoolName = tenant?.name || activeTenant?.name || app.name;
     const userName = auth.user?.full_name || 'User';
+    const userRoles = auth.user?.roles ?? [];
 
     return (
         <SidebarProvider>
@@ -537,11 +540,29 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-60">
-                            <DropdownMenuLabel className="flex flex-col">
-                                <span className="truncate">{userName}</span>
-                                <span className="truncate text-xs font-normal text-muted-foreground">
-                                    {auth.user?.email}
-                                </span>
+                            <DropdownMenuLabel className="flex flex-col gap-1.5">
+                                <div className="flex flex-col">
+                                    <span className="truncate">{userName}</span>
+                                    <span className="truncate text-xs font-normal text-muted-foreground">
+                                        {auth.user?.email}
+                                    </span>
+                                </div>
+                                {/* Peran yang sedang dipakai — satu akun bisa memegang
+                                    beberapa peran sekaligus (mis. guru + wali kelas),
+                                    jadi ditampilkan semua, bukan yang pertama saja. */}
+                                <div className="flex flex-wrap gap-1">
+                                    {userRoles.length > 0 ? (
+                                        userRoles.map((role) => (
+                                            <Badge key={role} variant="secondary" className="font-normal">
+                                                {roleLabel(role)}
+                                            </Badge>
+                                        ))
+                                    ) : (
+                                        <Badge variant="outline" className="font-normal">
+                                            {roleSummary([], auth.user?.user_type)}
+                                        </Badge>
+                                    )}
+                                </div>
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem asChild>

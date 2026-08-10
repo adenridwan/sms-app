@@ -147,8 +147,11 @@ class NotificationDispatcher
             $this->sendWhatsApp($teacher->no_hp, $template, $replacements);
         }
 
-        if ($teacher->user?->email && $settings->notify_email) {
-            $this->sendEmail($teacher->user->email, 'Notifikasi Kehadiran', $template, $replacements);
+        // contact_email, BUKAN email: sejak email login boleh dibuat otomatis
+        // (docs/EMAIL-OTOMATIS-AKUN.md), `users.email` bisa berisi alamat
+        // sintetis yang tidak menerima surat apa pun.
+        if ($teacher->user?->contact_email && $settings->notify_email) {
+            $this->sendEmail($teacher->user->contact_email, 'Notifikasi Kehadiran', $template, $replacements);
         }
 
         $this->sendToTelegramDefault($template, $replacements);
@@ -179,8 +182,9 @@ class NotificationDispatcher
             $this->sendWhatsApp($teacher->no_hp, $template, $replacements);
         }
 
-        if ($teacher->user?->email && $settings->notify_email) {
-            $this->sendEmail($teacher->user->email, 'Notifikasi Kepulangan', $template, $replacements);
+        // contact_email, bukan email — lihat catatan di teacherCheckIn().
+        if ($teacher->user?->contact_email && $settings->notify_email) {
+            $this->sendEmail($teacher->user->contact_email, 'Notifikasi Kepulangan', $template, $replacements);
         }
 
         $this->sendToTelegramDefault($template, $replacements);

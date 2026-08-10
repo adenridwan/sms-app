@@ -37,6 +37,7 @@ import {
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, RefreshCw, Search } from 'lucide-react';
 import { gradeLevelsApi } from '@/services/api';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { GradeLevel, PaginationMeta } from '@/types';
 
 interface GradeLevelForm {
@@ -62,6 +63,11 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function AcademicGradeLevels() {
+    // Guru hanya punya grade-levels.view; tombol kelola disembunyikan agar
+    // konsisten dengan penjagaan `grade-levels.manage` di GradeLevelController.
+    const { can } = usePermissions();
+    const canManage = can('grade-levels.manage');
+
     const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -172,10 +178,12 @@ export default function AcademicGradeLevels() {
                             Kelola master data tingkat/peringkat kelas (mis. Kelas 10, 11, 12)
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Tambah Tingkat
-                    </Button>
+                    {canManage && (
+                        <Button onClick={openCreate}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Tambah Tingkat
+                        </Button>
+                    )}
                 </div>
 
                 {/* Table */}
@@ -240,21 +248,27 @@ export default function AcademicGradeLevels() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => openEdit(level)}
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="text-muted-foreground hover:text-red-600"
-                                                            onClick={() => setDeletingGradeLevel(level)}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        {canManage ? (
+                                                            <>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    onClick={() => openEdit(level)}
+                                                                >
+                                                                    <Pencil className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="text-muted-foreground hover:text-red-600"
+                                                                    onClick={() => setDeletingGradeLevel(level)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-sm text-muted-foreground">-</span>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

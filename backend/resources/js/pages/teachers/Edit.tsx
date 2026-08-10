@@ -242,7 +242,7 @@ function getSingleErrorMessage(error: unknown, fallback: string): string {
  */
 const requiredFields: Array<{ field: keyof TeacherFormData; label: string; tab: string }> = [
     { field: 'first_name', label: 'Nama Depan', tab: 'akun' },
-    { field: 'email', label: 'Email', tab: 'akun' },
+    // `email` tidak lagi wajib — lihat docs/EMAIL-OTOMATIS-AKUN.md.
     { field: 'gender', label: 'Jenis Kelamin', tab: 'akun' },
 ];
 
@@ -281,6 +281,7 @@ function toFormData(teacher: Teacher): TeacherFormData {
         first_name: teacher.first_name ?? '',
         last_name: teacher.last_name ?? '',
         email: teacher.email ?? '',
+        contact_email: teacher.contact_email ?? '',
         phone: teacher.phone ?? '',
         gender: teacher.gender ?? '',
         birth_place: teacher.birth_place ?? '',
@@ -587,7 +588,7 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
 
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
-                                            <Label htmlFor="email">Email *</Label>
+                                            <Label htmlFor="email">Email Login</Label>
                                             <Input
                                                 id="email"
                                                 type="email"
@@ -595,8 +596,26 @@ export default function EditTeacher({ teacher }: EditTeacherProps) {
                                                 onChange={(e) => update('email', e.target.value)}
                                                 className={errors.email ? 'border-destructive' : ''}
                                             />
+                                            <p className="text-xs text-muted-foreground">
+                                                Alamat untuk masuk aplikasi — mengubahnya mengubah cara
+                                                guru login.
+                                            </p>
                                             {errors.email && (
                                                 <p className="text-sm text-destructive">{errors.email}</p>
+                                            )}
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="contact_email">Email Kontak</Label>
+                                            <Input
+                                                id="contact_email"
+                                                type="email"
+                                                placeholder="Alamat asli untuk notifikasi"
+                                                value={data.contact_email}
+                                                onChange={(e) => update('contact_email', e.target.value)}
+                                                className={errors.contact_email ? 'border-destructive' : ''}
+                                            />
+                                            {errors.contact_email && (
+                                                <p className="text-sm text-destructive">{errors.contact_email}</p>
                                             )}
                                         </div>
                                         <div className="space-y-2">

@@ -51,4 +51,24 @@ class Setting extends Model
             ['value' => $value, 'type' => 'string', 'description' => $description, 'is_public' => false],
         );
     }
+
+    /**
+     * Varian per-sekolah. Dipakai `account.email_domain` (domain email otomatis
+     * siswa/guru) — tiap tenant punya domainnya sendiri.
+     */
+    public static function getForTenant(string $tenantId, string $group, string $key): ?string
+    {
+        return static::where('tenant_id', $tenantId)
+            ->where('group', $group)
+            ->where('key', $key)
+            ->value('value');
+    }
+
+    public static function setForTenant(string $tenantId, string $group, string $key, ?string $value, string $description = ''): void
+    {
+        static::updateOrCreate(
+            ['tenant_id' => $tenantId, 'group' => $group, 'key' => $key],
+            ['value' => $value, 'type' => 'string', 'description' => $description, 'is_public' => false],
+        );
+    }
 }

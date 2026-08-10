@@ -39,13 +39,19 @@ class ClassAttendanceScreen extends ConsumerWidget {
             _SaveBar(
               state: state,
               onSave: () async {
-                final err = await controller.save();
+                final outcome = await controller.save();
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context)
                   ..hideCurrentSnackBar()
                   ..showSnackBar(SnackBar(
-                    content: Text(err ?? 'Absensi tersimpan.'),
-                    backgroundColor: err == null ? null : scheme.error,
+                    content: Text(outcome.label),
+                    // Masuk antrean bukan kegagalan — jangan diwarnai merah,
+                    // supaya guru tidak merasa pekerjaannya hilang.
+                    backgroundColor:
+                        outcome.isFailure ? scheme.error : null,
+                    duration: outcome.kind == SaveOutcomeKind.queued
+                        ? const Duration(seconds: 5)
+                        : const Duration(seconds: 3),
                   ));
               },
             ),

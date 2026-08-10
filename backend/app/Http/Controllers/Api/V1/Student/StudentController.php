@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Student;
 use App\Exports\Student\StudentsExport;
 use App\Exports\Student\StudentsTemplateExport;
 use App\Http\Controllers\Api\ApiController;
+use App\Http\Controllers\Api\V1\Concerns\HandlesSafeImport;
 use App\Http\Requests\Student\StoreStudentRequest;
 use App\Http\Requests\Student\UpdateStudentRequest;
 use App\Http\Resources\StudentCollection;
@@ -13,6 +14,7 @@ use App\Imports\Student\StudentsImport;
 use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Models\User;
+use App\Services\EmailGenerator;
 use App\Services\StudentRegistrar;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +28,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StudentController extends ApiController
 {
+    use HandlesSafeImport;
+
     /**
      * Display a listing of the resource.
      */
@@ -72,9 +76,28 @@ class StudentController extends ApiController
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreStudentRequest $request): JsonResponse
+    public function store(StoreStudentRequest $request, EmailGenerator $emailGenerator): JsonResponse
     {
         $data = $request->validated();
+
+        // Email dikosongkan → dibuatkan otomatis dari nama depan + NIS.
+        // Jalur ini belum memakai StudentRegistrar (lihat catatan di bawah),
+        // jadi generatornya dipanggil langsung di sini.
+        $emailIsGenerated = trim((string) ($data['email'] ?? '')) === '';
+
+        if ($emailIsGenerated) {
+            $tenantId = $this->currentTenantId($request);
+
+            if (! $tenantId) {
+                return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
+            }
+
+            if (! $emailGenerator->hasDomain($tenantId)) {
+                return $this->error(EmailGenerator::domainMissingMessage(), 422);
+            }
+
+            $data['email'] = $emailGenerator->forStudent($tenantId, $data['first_name'], (string) $data['nis']);
+        }
 
         try {
             DB::beginTransaction();
@@ -88,6 +111,8 @@ class StudentController extends ApiController
             $user = User::create([
                 'username' => $data['username'] ?? Str::slug($data['first_name'] . '-' . Str::random(4)),
                 'email' => $data['email'],
+                'contact_email' => $data['contact_email'] ?? null,
+                'email_is_generated' => $emailIsGenerated,
                 'password' => Hash::make($data['password'] ?? 'password123'),
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'] ?? null,
@@ -155,9 +180,10 @@ class StudentController extends ApiController
         try {
             DB::beginTransaction();
 
-            // Update users.* (email only — first_name/last_name/phone/etc.
-            // below all live on user_profiles, not users or students).
-            $userFields = array_intersect_key($data, array_flip(['email']));
+            // Update users.* (email & contact_email only — first_name/
+            // last_name/phone/etc. below all live on user_profiles, not users
+            // or students).
+            $userFields = array_intersect_key($data, array_flip(['email', 'contact_email']));
             if ($userFields !== []) {
                 $student->user->update($userFields);
             }
@@ -181,7 +207,7 @@ class StudentController extends ApiController
 
             // Remove fields that aren't real students.* columns
             unset(
-                $data['first_name'], $data['last_name'], $data['email'], $data['username'], $data['password'],
+                $data['first_name'], $data['last_name'], $data['email'], $data['contact_email'], $data['username'], $data['password'],
                 $data['gender'], $data['birth_place'], $data['birth_date'], $data['religion'], $data['address'], $data['nik'],
                 $data['phone'], $data['entry_year'], $data['entry_class'], $data['entry_semester']
             );
@@ -228,7 +254,7 @@ class StudentController extends ApiController
     /**
      * Import siswa dari file CSV/Excel (upsert berdasarkan NIS).
      */
-    public function import(Request $request, StudentRegistrar $registrar): JsonResponse
+    public function import(Request $request, StudentRegistrar $registrar, EmailGenerator $emailGenerator): JsonResponse
     {
         abort_unless($request->user()->can('students.import'), 403);
 
@@ -241,14 +267,16 @@ class StudentController extends ApiController
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:5120'],
         ]);
 
-        $import = new StudentsImport($tenantId, $registrar);
-        Excel::import($import, $request->file('file'));
+        return $this->runImport(function () use ($request, $tenantId, $registrar, $emailGenerator) {
+            $import = new StudentsImport($tenantId, $registrar, $emailGenerator);
+            Excel::import($import, $request->file('file'));
 
-        return $this->success([
-            'created' => $import->created,
-            'updated' => $import->updated,
-            'errors' => $import->errors,
-        ], "Import siswa selesai: {$import->created} ditambahkan, {$import->updated} diperbarui.");
+            return $this->success([
+                'created' => $import->created,
+                'updated' => $import->updated,
+                'errors' => $import->errors,
+            ], "Import siswa selesai: {$import->created} ditambahkan, {$import->updated} diperbarui.");
+        }, 'Import siswa gagal diproses. Periksa kembali isi file, atau coba lagi.');
     }
 
     /**

@@ -41,6 +41,13 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -58,6 +65,9 @@ import {
     Camera,
     FileSpreadsheet,
     Loader2,
+    RefreshCw,
+    GraduationCap,
+    X,
 } from 'lucide-react';
 import type { Student, PaginatedResponse } from '@/types';
 
@@ -80,21 +90,34 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return fallback;
 }
 
+/** Nilai sentinel untuk "Semua Kelas" — Radix Select melarang value string kosong. */
+const ALL_CLASSROOMS = 'all';
+
 interface Props {
     students: PaginatedResponse<Student>;
     filters: {
         search?: string;
         status?: string;
         gender?: string;
+        classroom_id?: string;
     };
+    /**
+     * Kelas yang boleh dipakai memfilter. Untuk guru/wali kelas server hanya
+     * mengirim kelas yang ia ampu atau ia walikan (lihat
+     * PageController::filterableClassrooms), jadi daftar ini tidak pernah
+     * membocorkan kelas lain.
+     */
+    classrooms?: Array<{ id: string; name: string }>;
 }
 
-export default function StudentsIndex({ students, filters }: Props) {
+export default function StudentsIndex({ students, filters, classrooms = [] }: Props) {
     const { tenant, auth } = usePage<PageProps>().props;
     const [search, setSearch] = useState(filters.search || '');
+    const [classroomId, setClassroomId] = useState(filters.classroom_id || ALL_CLASSROOMS);
     const [printingId, setPrintingId] = useState<string | null>(null);
     const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
 
     // Import/export hanya untuk yang memang berizin (admin & tata usaha pada
     // seeder bawaan) — guru, wali kelas, siswa, dan orang tua tidak punya
@@ -104,6 +127,11 @@ export default function StudentsIndex({ students, filters }: Props) {
     const permissions = auth?.user?.permissions ?? [];
     const canExport = isSuperAdmin || permissions.includes('students.export');
     const canImport = isSuperAdmin || permissions.includes('students.import');
+    // Guru punya students.view tapi TIDAK students.create/update/delete —
+    // tombolnya harus ikut hilang, bukan hanya ditolak server saat disimpan.
+    const canCreate = isSuperAdmin || permissions.includes('students.create');
+    const canUpdate = isSuperAdmin || permissions.includes('students.update');
+    const canDelete = isSuperAdmin || permissions.includes('students.delete');
 
     const [exporting, setExporting] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
@@ -184,9 +212,43 @@ export default function StudentsIndex({ students, filters }: Props) {
         }
     };
 
+    // Semua filter dikirim bersama supaya memilih kelas tidak menghapus kata
+    // kunci pencarian yang sedang aktif, dan sebaliknya.
+    const applyFilters = (override: { search?: string; classroom_id?: string }) => {
+        const next = {
+            search: override.search ?? search,
+            classroom_id: override.classroom_id ?? classroomId,
+        };
+
+        router.get(
+            '/students',
+            {
+                ...(next.search ? { search: next.search } : {}),
+                ...(next.classroom_id !== ALL_CLASSROOMS ? { classroom_id: next.classroom_id } : {}),
+            },
+            { preserveState: true, preserveScroll: true },
+        );
+    };
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        router.get('/students', { search }, { preserveState: true });
+        applyFilters({});
+    };
+
+    const handleClassroomChange = (value: string) => {
+        setClassroomId(value);
+        applyFilters({ classroom_id: value });
+    };
+
+    // Ambil ulang hanya prop `students` dari server — filter, pencarian, dan
+    // halaman yang sedang aktif tetap seperti apa adanya (pola yang sama
+    // dipakai setelah hapus/impor di halaman ini).
+    const handleRefresh = () => {
+        setRefreshing(true);
+        router.reload({
+            only: ['students'],
+            onFinish: () => setRefreshing(false),
+        });
     };
 
     const getStatusBadge = (status: string) => {
@@ -290,6 +352,10 @@ export default function StudentsIndex({ students, filters }: Props) {
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+                            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </Button>
                         {canExport && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -314,12 +380,14 @@ export default function StudentsIndex({ students, filters }: Props) {
                                 Import
                             </Button>
                         )}
-                        <Button asChild>
-                            <Link href="/students/create">
-                                <Plus className="mr-2 h-4 w-4" />
-                                Tambah Siswa
-                            </Link>
-                        </Button>
+                        {canCreate && (
+                            <Button asChild>
+                                <Link href="/students/create">
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Tambah Siswa
+                                </Link>
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -332,8 +400,8 @@ export default function StudentsIndex({ students, filters }: Props) {
                     </CardHeader>
                     <CardContent>
                         <div className="mb-4">
-                            <form onSubmit={handleSearch} className="flex gap-2">
-                                <div className="relative flex-1 max-w-sm">
+                            <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-2">
+                                <div className="relative flex-1 min-w-[200px] max-w-sm">
                                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         type="search"
@@ -346,6 +414,38 @@ export default function StudentsIndex({ students, filters }: Props) {
                                 <Button type="submit" variant="secondary">
                                     Cari
                                 </Button>
+
+                                {/* Disembunyikan bila tidak ada kelas yang bisa dipilih —
+                                    mis. guru tanpa penugasan, atau peran yang memang hanya
+                                    melihat satu siswa (siswa/orang tua). */}
+                                {classrooms.length > 0 && (
+                                    <Select value={classroomId} onValueChange={handleClassroomChange}>
+                                        <SelectTrigger className="w-[190px]">
+                                            <GraduationCap className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <SelectValue placeholder="Semua Kelas" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value={ALL_CLASSROOMS}>Semua Kelas</SelectItem>
+                                            {classrooms.map((classroom) => (
+                                                <SelectItem key={classroom.id} value={classroom.id}>
+                                                    {classroom.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+
+                                {classroomId !== ALL_CLASSROOMS && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleClassroomChange(ALL_CLASSROOMS)}
+                                    >
+                                        <X className="mr-1 h-4 w-4" />
+                                        Reset filter
+                                    </Button>
+                                )}
                             </form>
                         </div>
 
@@ -353,6 +453,7 @@ export default function StudentsIndex({ students, filters }: Props) {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <TableHead className="w-[60px]">No</TableHead>
                                         <TableHead>NIS</TableHead>
                                         <TableHead>Nama Lengkap</TableHead>
                                         <TableHead>Kelas</TableHead>
@@ -364,13 +465,18 @@ export default function StudentsIndex({ students, filters }: Props) {
                                 <TableBody>
                                     {students.data.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                                                 Tidak ada data siswa
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        students.data.map((student) => (
+                                        students.data.map((student, index) => (
                                             <TableRow key={student.id}>
+                                                {/* Nomor melanjutkan antar halaman: `meta.from` adalah nomor
+                                                    baris pertama halaman ini, bukan selalu 1. */}
+                                                <TableCell className="text-muted-foreground tabular-nums">
+                                                    {(students.meta?.from ?? 1) + index}
+                                                </TableCell>
                                                 <TableCell className="font-medium">{student.nis}</TableCell>
                                                 <TableCell>
                                                     <div>
@@ -395,12 +501,14 @@ export default function StudentsIndex({ students, filters }: Props) {
                                                                     Lihat Detail
                                                                 </Link>
                                                             </DropdownMenuItem>
-                                                            <DropdownMenuItem asChild>
-                                                                <Link href={`/students/${student.id}/edit`}>
-                                                                    <Pencil className="mr-2 h-4 w-4" />
-                                                                    Edit
-                                                                </Link>
-                                                            </DropdownMenuItem>
+                                                            {canUpdate && (
+                                                                <DropdownMenuItem asChild>
+                                                                    <Link href={`/students/${student.id}/edit`}>
+                                                                        <Pencil className="mr-2 h-4 w-4" />
+                                                                        Edit
+                                                                    </Link>
+                                                                </DropdownMenuItem>
+                                                            )}
                                                             <DropdownMenuItem
                                                                 disabled={printingId === student.id}
                                                                 onClick={() => handlePrintCard(student)}
@@ -408,17 +516,22 @@ export default function StudentsIndex({ students, filters }: Props) {
                                                                 <Printer className="mr-2 h-4 w-4" />
                                                                 Cetak Kartu
                                                             </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => openPhotoDialog(student)}>
-                                                                <Camera className="mr-2 h-4 w-4" />
-                                                                Foto Profil
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                className="text-destructive"
-                                                                onClick={() => setDeletingStudent(student)}
-                                                            >
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Hapus
-                                                            </DropdownMenuItem>
+                                                            {/* Unggah/hapus foto memakai izin students.update di server. */}
+                                                            {canUpdate && (
+                                                                <DropdownMenuItem onClick={() => openPhotoDialog(student)}>
+                                                                    <Camera className="mr-2 h-4 w-4" />
+                                                                    Foto Profil
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {canDelete && (
+                                                                <DropdownMenuItem
+                                                                    className="text-destructive"
+                                                                    onClick={() => setDeletingStudent(student)}
+                                                                >
+                                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                                    Hapus
+                                                                </DropdownMenuItem>
+                                                            )}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </TableCell>
@@ -429,32 +542,37 @@ export default function StudentsIndex({ students, filters }: Props) {
                             </Table>
                         </div>
 
-                        {/* Pagination */}
-                        {students.meta && students.meta.last_page > 1 && (
-                            <div className="mt-4 flex items-center justify-between">
+                        {/* Pagination — baris keterangan sengaja selalu tampil (dulu hanya
+                            muncul saat data lebih dari satu halaman), supaya jelas bahwa
+                            tabel ini memang dipenggal per halaman dan posisinya di mana. */}
+                        {students.meta && students.data.length > 0 && (
+                            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                                 <p className="text-sm text-muted-foreground">
                                     Menampilkan {students.meta.from} - {students.meta.to} dari {students.meta.total} data
+                                    {students.meta.last_page > 1 && (
+                                        <> &middot; halaman {students.meta.current_page} dari {students.meta.last_page}</>
+                                    )}
                                 </p>
-                                <div className="flex gap-2">
-                                    {students.links?.prev && (
+                                {students.meta.last_page > 1 && (
+                                    <div className="flex gap-2">
                                         <Button
                                             variant="outline"
                                             size="sm"
+                                            disabled={!students.links?.prev}
                                             onClick={() => router.get(students.links!.prev!)}
                                         >
                                             Sebelumnya
                                         </Button>
-                                    )}
-                                    {students.links?.next && (
                                         <Button
                                             variant="outline"
                                             size="sm"
+                                            disabled={!students.links?.next}
                                             onClick={() => router.get(students.links!.next!)}
                                         >
                                             Selanjutnya
                                         </Button>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </CardContent>

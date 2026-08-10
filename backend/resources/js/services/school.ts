@@ -10,6 +10,8 @@ export interface SchoolProfile {
     phone: string | null;
     address: string | null;
     logo_url: string | null;
+    /** Domain email otomatis siswa & guru (docs/EMAIL-OTOMATIS-AKUN.md). */
+    email_domain: string | null;
 }
 
 export interface SchoolListItem {

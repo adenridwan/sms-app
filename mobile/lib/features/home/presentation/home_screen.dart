@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../attendance/presentation/class_attendance_queue_controller.dart';
 import '../../attendance/presentation/scan_controller.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/dashboard_repository.dart';
@@ -32,6 +33,9 @@ class HomeScreen extends ConsumerWidget {
     final data = stats.valueOrNull;
     final isTeacher = data?.isTeacher ?? false;
     final actions = visibleActionsFor(user);
+
+    final pendingSync =
+        scan.queueCount + ref.watch(classAttendanceQueueProvider).count;
 
     return Scaffold(
       body: RefreshIndicator(
@@ -74,14 +78,17 @@ class HomeScreen extends ConsumerWidget {
                           'Hubungi administrator sekolah.',
                     ),
 
-                  if (scan.queueCount > 0)
+                  // Antrean = scan tunggal + sesi absen kelas. Keduanya harus
+                  // ikut terhitung, kalau tidak absen kelas yang tertahan
+                  // offline jadi tak terlihat sama sekali di Beranda.
+                  if (pendingSync > 0)
                     InkWell(
                       onTap: () => context.push('/queue'),
                       borderRadius: BorderRadius.circular(12),
                       child: _Strip(
                         icon: Icons.cloud_upload_rounded,
                         color: scheme.primary,
-                        text: '${scan.queueCount} scan menunggu sinkron',
+                        text: '$pendingSync data menunggu sinkron',
                       ),
                     ),
 

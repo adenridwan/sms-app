@@ -4,10 +4,10 @@ namespace App\Imports\Student;
 
 use App\Infrastructure\Persistence\Eloquent\Academic\AcademicYear;
 use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
-use App\Infrastructure\Persistence\Eloquent\Auth\User;
 use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Student\StudentEnrollment;
+use App\Services\EmailGenerator;
 use App\Services\StudentRegistrar;
 use DateTimeInterface;
 use Illuminate\Support\Carbon;
@@ -26,6 +26,16 @@ use Throwable;
  * dan wajib diganti saat login pertama. Karena itu tanggal_lahir termasuk
  * kolom wajib.
  *
+ * Email login SELALU dibuat otomatis di sini (nama depan + NIS + domain
+ * sekolah) — tidak ada kolom untuk memasukkannya dari file, karena mengisi
+ * email satu per satu untuk ratusan siswa adalah masalah yang justru sedang
+ * diselesaikan. Lihat docs/EMAIL-OTOMATIS-AKUN.md.
+ *
+ * Kolom `email` pada file hasil export SENGAJA diabaikan: isinya email login
+ * (informasi untuk dibagikan ke siswa). Kalau ia dibaca sebagai `email_kontak`,
+ * setiap re-import file export akan mengisi contact_email seluruh siswa dengan
+ * alamat sintetis. Alamat surat sungguhan diisi lewat kolom `email_kontak`.
+ *
  * Kolom `kelas` opsional: bila diisi kode kelas yang ada pada tahun ajaran
  * aktif, siswa sekaligus ditempatkan (student_enrollments). Dikosongkan pun
  * tidak apa — data siswanya tetap masuk.
@@ -35,7 +45,6 @@ class StudentsImport implements ToCollection, WithHeadingRow
     private const REQUIRED_COLUMNS = [
         'nis' => 'nis',
         'nama_depan' => 'nama_depan',
-        'email' => 'email',
         'jenis_kelamin' => 'jenis_kelamin',
         'tanggal_lahir' => 'tanggal_lahir',
     ];
@@ -54,10 +63,20 @@ class StudentsImport implements ToCollection, WithHeadingRow
     public function __construct(
         private string $tenantId,
         private StudentRegistrar $registrar,
+        private EmailGenerator $emailGenerator,
     ) {}
 
     public function collection(Collection $rows): void
     {
+        // Preflight: tanpa domain sekolah, tidak satu pun siswa baru bisa
+        // dibuatkan email. Gagalkan sekali dengan pesan yang mengarahkan admin,
+        // bukan ratusan error per baris yang menutupi penyebab aslinya.
+        if (! $this->emailGenerator->hasDomain($this->tenantId)) {
+            $this->errors[] = EmailGenerator::domainMissingMessage();
+
+            return;
+        }
+
         foreach ($rows as $index => $row) {
             // +2: baris judul + indeks mulai dari 1
             $rowNumber = $index + 2;
@@ -80,7 +99,7 @@ class StudentsImport implements ToCollection, WithHeadingRow
             'nis' => $this->text($row['nis'] ?? null),
             'nama_depan' => $this->text($row['nama_depan'] ?? null),
             'nama_belakang' => $this->text($row['nama_belakang'] ?? null),
-            'email' => strtolower($this->text($row['email'] ?? null)),
+            'email_kontak' => strtolower($this->text($row['email_kontak'] ?? null)),
             'jenis_kelamin' => $this->text($row['jenis_kelamin'] ?? null),
             'tanggal_lahir' => $row['tanggal_lahir'] ?? null,
             'nisn' => $this->text($row['nisn'] ?? null),
@@ -110,8 +129,10 @@ class StudentsImport implements ToCollection, WithHeadingRow
             return;
         }
 
-        if (! filter_var($values['email'], FILTER_VALIDATE_EMAIL)) {
-            $this->errors[] = "Baris {$rowNumber}: format email '{$values['email']}' tidak valid.";
+        // Email kontak opsional — tapi kalau diisi, formatnya harus benar,
+        // karena ke sanalah OTP/notifikasi dikirim.
+        if ($values['email_kontak'] !== '' && ! filter_var($values['email_kontak'], FILTER_VALIDATE_EMAIL)) {
+            $this->errors[] = "Baris {$rowNumber}: format email_kontak '{$values['email_kontak']}' tidak valid.";
 
             return;
         }
@@ -136,17 +157,21 @@ class StudentsImport implements ToCollection, WithHeadingRow
             return;
         }
 
-        $existing = Student::where('tenant_id', $this->tenantId)
+        // withTrashed(): `students` unik pada (tenant_id, nis) dan index itu
+        // ikut menghitung baris yang ter-soft-delete. Tanpa ini, siswa yang
+        // pernah dihapus lalu diimpor ulang dianggap baru, dan insert-nya
+        // ditolak "students_tenant_id_nis_unique" sebagai error SQL mentah.
+        // Perlakuannya sama dengan enrollment di placeInClassroom(): baris
+        // lama dipulihkan, bukan digandakan — NIS yang sama berarti orang
+        // yang sama kembali terdaftar.
+        $existing = Student::withTrashed()
+            ->where('tenant_id', $this->tenantId)
             ->where('nis', $values['nis'])
             ->first();
 
-        // Email unik lintas sekolah (kolom users.email), jadi pengecekannya
-        // harus tanpa scope tenant.
-        $emailOwner = User::withoutTenant()->where('email', $values['email'])->first();
-        if ($emailOwner && $emailOwner->id !== $existing?->user_id) {
-            $this->errors[] = "Baris {$rowNumber}: email '{$values['email']}' sudah dipakai akun lain.";
-
-            return;
+        if ($existing?->trashed()) {
+            $existing->restore();
+            $existing->user()->withTrashed()->first()?->restore();
         }
 
         if ($values['nisn'] !== '') {
@@ -167,7 +192,9 @@ class StudentsImport implements ToCollection, WithHeadingRow
             'nisn' => $values['nisn'] ?: null,
             'first_name' => $values['nama_depan'],
             'last_name' => $values['nama_belakang'] ?: null,
-            'email' => $values['email'],
+            // Kosong = StudentRegistrar yang membuatkan email loginnya.
+            'email' => null,
+            'contact_email' => $values['email_kontak'] ?: null,
             'gender' => $gender,
             'birth_date' => $birthDate->toDateString(),
             'birth_place' => $values['tempat_lahir'] ?: null,
@@ -195,12 +222,19 @@ class StudentsImport implements ToCollection, WithHeadingRow
      * Perbarui siswa yang sudah ada. Password TIDAK pernah disentuh dari
      * import — reset password adalah aksi terpisah.
      *
+     * Email login juga tidak pernah disentuh: itu kredensial siswa, dan
+     * mengubahnya dari file akan mengunci siswa yang bersangkutan tanpa ia
+     * tahu. Hanya email kontak yang bisa diperbarui, dan hanya bila diisi —
+     * kolom yang dikosongkan tidak menghapus alamat yang sudah ada.
+     *
      * @param  array<string, mixed>  $payload
      */
     private function updateExisting(Student $student, array $payload): void
     {
         DB::transaction(function () use ($student, $payload) {
-            $student->user?->update(['email' => $payload['email']]);
+            if ($payload['contact_email'] !== null) {
+                $student->user?->update(['contact_email' => $payload['contact_email']]);
+            }
 
             UserProfile::updateOrCreate(['user_id' => $student->user_id], [
                 'first_name' => $payload['first_name'],
@@ -235,6 +269,12 @@ class StudentsImport implements ToCollection, WithHeadingRow
      * Tempatkan siswa pada kelas (tahun ajaran aktif). Baris enrollment yang
      * pernah dihapus dipakai ulang: pasangan (student_id, academic_year_id)
      * unik di DB termasuk untuk baris yang ter-soft-delete.
+     *
+     * Kolom `kelas` dicocokkan ke NAMA maupun KODE kelas. Dulu hanya kode —
+     * padahal `classrooms.code` dibuat otomatis (`KLS01`, `KLS02`, lihat
+     * ClassroomController::generateNextCode()) dan tidak pernah ditampilkan di
+     * menu Kelas, sehingga admin mustahil menebaknya dan penempatan kelas dari
+     * import tidak pernah berhasil.
      */
     private function placeInClassroom(Student $student, string $classCode, int $rowNumber): void
     {
@@ -246,13 +286,38 @@ class StudentsImport implements ToCollection, WithHeadingRow
             return;
         }
 
-        $classroom = Classroom::where('tenant_id', $this->tenantId)
+        $needle = strtolower(trim($classCode));
+
+        $candidates = Classroom::where('tenant_id', $this->tenantId)
             ->where('academic_year_id', $year->id)
-            ->whereRaw('lower(code) = ?', [strtolower($classCode)])
-            ->first();
+            ->where(function ($q) use ($needle) {
+                $q->whereRaw('lower(code) = ?', [$needle])
+                    ->orWhereRaw('lower(name) = ?', [$needle]);
+            })
+            ->get();
+
+        // Kode dijamin unik per tahun ajaran, nama tidak — kalau ada dua kelas
+        // bernama sama, lebih baik berhenti dan minta kodenya daripada menebak.
+        if ($candidates->count() > 1) {
+            $codes = $candidates->pluck('code')->implode(', ');
+            $this->errors[] = "Baris {$rowNumber}: ada lebih dari satu kelas bernama '{$classCode}'. Tulis kodenya saja ({$codes}).";
+
+            return;
+        }
+
+        $classroom = $candidates->first();
 
         if (! $classroom) {
-            $this->errors[] = "Baris {$rowNumber}: kelas '{$classCode}' tidak ditemukan pada tahun ajaran aktif.";
+            // Sebutkan pilihan yang sah supaya admin bisa langsung membetulkan
+            // filenya tanpa menebak-nebak.
+            $available = Classroom::where('tenant_id', $this->tenantId)
+                ->where('academic_year_id', $year->id)
+                ->orderBy('name')
+                ->pluck('name')
+                ->implode(', ');
+
+            $hint = $available !== '' ? " Kelas yang tersedia: {$available}." : ' Belum ada kelas pada tahun ajaran aktif.';
+            $this->errors[] = "Baris {$rowNumber}: kelas '{$classCode}' tidak ditemukan pada tahun ajaran aktif.{$hint}";
 
             return;
         }

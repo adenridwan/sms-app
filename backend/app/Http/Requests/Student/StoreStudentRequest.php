@@ -24,7 +24,12 @@ class StoreStudentRequest extends FormRequest
         return [
             // User data
             'username' => ['nullable', 'string', 'min:3', 'max:50', 'unique:users,username', 'alpha_dash'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            // Dikosongkan = dibuatkan otomatis dari nama depan + NIS
+            // (docs/EMAIL-OTOMATIS-AKUN.md). Ini identitas login, bukan alamat
+            // surat — alamat surat ada di contact_email dan sengaja TIDAK unik
+            // supaya satu orang tua bisa memakainya untuk beberapa anak.
+            'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
+            'contact_email' => ['nullable', 'string', 'email', 'max:255'],
             'password' => ['nullable', 'string', 'min:8'],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
@@ -54,8 +59,8 @@ class StoreStudentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.required' => 'Email wajib diisi.',
             'email.email' => 'Format email tidak valid.',
+            'contact_email.email' => 'Format email kontak tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
             'first_name.required' => 'Nama depan wajib diisi.',
             'nis.required' => 'NIS wajib diisi.',

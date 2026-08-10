@@ -105,7 +105,11 @@ export interface Student {
     rfid_code?: string | null;
     user?: User;
     full_name: string;
+    /** Identitas login — bisa hasil generate (docs/EMAIL-OTOMATIS-AKUN.md). */
     email: string;
+    /** Alamat surat sungguhan: tujuan OTP & notifikasi. */
+    contact_email?: string | null;
+    email_is_generated?: boolean;
     gender: 'male' | 'female';
     gender_label: string;
     birth_place: string | null;
@@ -161,7 +165,11 @@ export interface Teacher {
     full_name: string;
     first_name?: string | null;
     last_name?: string | null;
+    /** Identitas login — bisa hasil generate (docs/EMAIL-OTOMATIS-AKUN.md). */
     email: string;
+    /** Alamat surat sungguhan: tujuan OTP & notifikasi kehadiran. */
+    contact_email?: string | null;
+    email_is_generated?: boolean;
     phone: string | null;
     avatar_url?: string | null;
     gender: 'male' | 'female' | null;
@@ -195,7 +203,10 @@ export interface Teacher {
 export interface TeacherFormData {
     first_name: string;
     last_name: string;
+    /** Identitas login — boleh kosong, dibuatkan otomatis (docs/EMAIL-OTOMATIS-AKUN.md). */
     email: string;
+    /** Alamat surat sungguhan: tujuan OTP & notifikasi. */
+    contact_email: string;
     phone: string;
     gender: string;
     birth_place: string;
@@ -431,6 +442,11 @@ export interface Schedule {
     is_active: boolean;
     created_at: string;
     updated_at: string;
+}
+
+export interface ScheduleCopyResult {
+    copied: number;
+    skipped: string[];
 }
 
 // Finance Types

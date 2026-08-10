@@ -5,6 +5,7 @@ namespace App\Imports\Teacher;
 use App\Infrastructure\Persistence\Eloquent\Auth\User;
 use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
+use App\Services\EmailGenerator;
 use App\Services\TeacherRegistrar;
 use DateTimeInterface;
 use Illuminate\Support\Carbon;
@@ -24,12 +25,16 @@ use Throwable;
  *
  * Kolom wajib (nip & no_hp termasuk) hanya berlaku di jalur import ini;
  * struktur tabel tidak berubah.
+ *
+ * Kolom `email` kini OPSIONAL: dikosongkan berarti email login dibuatkan
+ * otomatis dari username + domain sekolah (docs/EMAIL-OTOMATIS-AKUN.md).
+ * Berbeda dari siswa yang kolomnya dihapus sama sekali — guru sering punya
+ * alamat asli dan wajar ingin login dengannya.
  */
 class TeachersImport implements ToCollection, WithHeadingRow
 {
     private const REQUIRED_COLUMNS = [
         'nama_depan' => 'nama_depan',
-        'email' => 'email',
         'no_hp' => 'no_hp',
         'nip' => 'nip',
         'jenis_kelamin' => 'jenis_kelamin',
@@ -46,10 +51,24 @@ class TeachersImport implements ToCollection, WithHeadingRow
     public function __construct(
         private string $tenantId,
         private TeacherRegistrar $registrar,
+        private EmailGenerator $emailGenerator,
     ) {}
 
     public function collection(Collection $rows): void
     {
+        // Baris tanpa kolom email butuh domain sekolah. Kalau belum diatur,
+        // gagalkan sekali dengan pesan yang mengarahkan admin — kecuali semua
+        // baris memang mengisi emailnya sendiri.
+        $needsDomain = ! $this->emailGenerator->hasDomain($this->tenantId)
+            && $rows->contains(fn ($row) => $this->text($row['email'] ?? null) === ''
+                && $this->text($row['nama_depan'] ?? null) !== '');
+
+        if ($needsDomain) {
+            $this->errors[] = EmailGenerator::domainMissingMessage();
+
+            return;
+        }
+
         foreach ($rows as $index => $row) {
             // +2: baris judul + indeks mulai dari 1
             $rowNumber = $index + 2;
@@ -72,6 +91,7 @@ class TeachersImport implements ToCollection, WithHeadingRow
             'nama_depan' => $this->text($row['nama_depan'] ?? null),
             'nama_belakang' => $this->text($row['nama_belakang'] ?? null),
             'email' => strtolower($this->text($row['email'] ?? null)),
+            'email_kontak' => strtolower($this->text($row['email_kontak'] ?? null)),
             'no_hp' => $this->text($row['no_hp'] ?? null),
             'nip' => $this->text($row['nip'] ?? null),
             'nuptk' => $this->text($row['nuptk'] ?? null),
@@ -101,8 +121,15 @@ class TeachersImport implements ToCollection, WithHeadingRow
             return;
         }
 
-        if (! filter_var($values['email'], FILTER_VALIDATE_EMAIL)) {
+        // Kedua kolom email opsional, tapi kalau diisi formatnya harus benar.
+        if ($values['email'] !== '' && ! filter_var($values['email'], FILTER_VALIDATE_EMAIL)) {
             $this->errors[] = "Baris {$rowNumber}: format email '{$values['email']}' tidak valid.";
+
+            return;
+        }
+
+        if ($values['email_kontak'] !== '' && ! filter_var($values['email_kontak'], FILTER_VALIDATE_EMAIL)) {
+            $this->errors[] = "Baris {$rowNumber}: format email_kontak '{$values['email_kontak']}' tidak valid.";
 
             return;
         }
@@ -129,17 +156,31 @@ class TeachersImport implements ToCollection, WithHeadingRow
 
         $joinDate = $this->date($values['tanggal_masuk']);
 
-        $existing = Teacher::where('tenant_id', $this->tenantId)
+        // withTrashed() + restore: alasannya sama persis dengan StudentsImport —
+        // `teachers` unik pada (tenant_id, nip) dan index itu ikut menghitung
+        // baris yang ter-soft-delete.
+        $existing = Teacher::withTrashed()
+            ->where('tenant_id', $this->tenantId)
             ->where('nip', $values['nip'])
             ->first();
 
-        // Email unik lintas sekolah (kolom users.email), jadi pengecekannya
-        // harus tanpa scope tenant.
-        $emailOwner = User::withoutTenant()->where('email', $values['email'])->first();
-        if ($emailOwner && $emailOwner->id !== $existing?->user_id) {
-            $this->errors[] = "Baris {$rowNumber}: email '{$values['email']}' sudah dipakai akun lain.";
+        if ($existing?->trashed()) {
+            $existing->restore();
+            $existing->user()->withTrashed()->first()?->restore();
+        }
 
-            return;
+        // Email unik lintas sekolah (kolom users.email), jadi pengecekannya
+        // harus tanpa scope tenant. Hanya berlaku untuk email yang diketik di
+        // file — yang hasil generate sudah dijamin unik oleh EmailGenerator.
+        if ($values['email'] !== '') {
+            // withTrashed(): index UNIQUE ikut menghitung baris ter-soft-delete,
+            // jadi alamat milik guru yang pernah dihapus tetap "sudah dipakai".
+            $emailOwner = User::withoutTenant()->withTrashed()->where('email', $values['email'])->first();
+            if ($emailOwner && $emailOwner->id !== $existing?->user_id) {
+                $this->errors[] = "Baris {$rowNumber}: email '{$values['email']}' sudah dipakai akun lain.";
+
+                return;
+            }
         }
 
         if ($values['nuptk'] !== '') {
@@ -158,7 +199,9 @@ class TeachersImport implements ToCollection, WithHeadingRow
         $payload = [
             'first_name' => $values['nama_depan'],
             'last_name' => $values['nama_belakang'] ?: null,
-            'email' => $values['email'],
+            // Kosong = TeacherRegistrar yang membuatkan email loginnya.
+            'email' => $values['email'] ?: null,
+            'contact_email' => $values['email_kontak'] ?: null,
             'phone' => $values['no_hp'],
             'gender' => $gender,
             'birth_place' => $values['tempat_lahir'] ?: null,
@@ -182,15 +225,32 @@ class TeachersImport implements ToCollection, WithHeadingRow
     }
 
     /**
-     * Perbarui guru yang sudah ada. Email akun ikut diperbarui, tapi password
-     * TIDAK pernah disentuh dari import — reset password adalah aksi terpisah.
+     * Perbarui guru yang sudah ada. Password TIDAK pernah disentuh dari
+     * import — reset password adalah aksi terpisah.
+     *
+     * Kolom email yang dikosongkan di file tidak menghapus alamat yang sudah
+     * ada: email login adalah kredensial, dan menimpanya dari file akan
+     * mengunci guru yang bersangkutan.
      *
      * @param  array<string, mixed>  $payload
      */
     private function updateExisting(Teacher $teacher, array $payload): void
     {
         DB::transaction(function () use ($teacher, $payload) {
-            $teacher->user?->update(['email' => $payload['email']]);
+            $userFields = [];
+
+            if ($payload['email'] !== null) {
+                $userFields['email'] = $payload['email'];
+                $userFields['email_is_generated'] = false;
+            }
+
+            if ($payload['contact_email'] !== null) {
+                $userFields['contact_email'] = $payload['contact_email'];
+            }
+
+            if ($userFields !== []) {
+                $teacher->user?->update($userFields);
+            }
 
             UserProfile::updateOrCreate(['user_id' => $teacher->user_id], [
                 'first_name' => $payload['first_name'],

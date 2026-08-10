@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/location/location_service.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/network/backend_status.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/attendance_providers.dart';
 import '../data/attendance_repository.dart';
@@ -144,6 +145,21 @@ class ScanController extends StateNotifier<ScanState> {
           (items.length - doneIds.length),
     );
   }
+
+  /// Sinkron di belakang layar saat koneksi pulih.
+  ///
+  /// Kegagalan **sengaja ditelan**: ini bukan aksi yang diminta pengguna, jadi
+  /// tidak boleh memunculkan error di layar mana pun. Kalau gagal, antrean
+  /// tetap utuh dan dicoba lagi pada pemulihan koneksi berikutnya — atau lewat
+  /// tombol sinkron manual di layar Antrean.
+  Future<void> syncOfflineSilently() async {
+    if (state.queueCount == 0) return;
+    try {
+      await syncOffline();
+    } on ApiException {
+      // biarkan tetap di antrean
+    }
+  }
 }
 
 /// Bergantung pada id user: bootstrap absensi (hari libur, wajib lokasi,
@@ -151,9 +167,20 @@ class ScanController extends StateNotifier<ScanState> {
 final scanControllerProvider =
     StateNotifierProvider<ScanController, ScanState>((ref) {
   ref.watch(authControllerProvider.select((s) => s.user?.id));
-  return ScanController(
+  final controller = ScanController(
     ref.watch(attendanceRepositoryProvider),
     ref.watch(offlineQueueStoreProvider),
     ref.watch(locationServiceProvider),
   );
+
+  // Koneksi pulih → kirim antrean tanpa menunggu pengguna membuka layar
+  // Antrean. Sebelumnya sinkron hanya jalan bila tombolnya ditekan manual,
+  // sehingga hasil scan offline bisa tertinggal berhari-hari tanpa disadari.
+  ref.listen<BackendStatus>(backendStatusProvider, (previous, next) {
+    if (next == BackendStatus.online && previous != BackendStatus.online) {
+      controller.syncOfflineSilently();
+    }
+  });
+
+  return controller;
 });

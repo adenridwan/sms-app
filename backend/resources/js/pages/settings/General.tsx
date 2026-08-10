@@ -69,21 +69,30 @@ type SchoolForm = {
     email: string;
     phone: string;
     address: string;
+    email_domain: string;
 };
 
-const emptyForm: SchoolForm = { name: '', npsn: '', level: '', email: '', phone: '', address: '' };
+const emptyForm: SchoolForm = { name: '', npsn: '', level: '', email: '', phone: '', address: '', email_domain: '' };
 
-/** Field identitas sekolah, dipakai bersama oleh form edit & dialog tambah. */
+/**
+ * Field identitas sekolah, dipakai bersama oleh form edit & dialog tambah.
+ *
+ * `showEmailDomain` hanya dinyalakan pada form edit: domain email otomatis
+ * disimpan di tabel `settings` milik tenant yang sudah ada, sedangkan dialog
+ * tambah sekolah memakai endpoint lain yang tidak menerimanya.
+ */
 function SchoolFields({
     values,
     onChange,
     disabled,
     idPrefix,
+    showEmailDomain,
 }: {
     values: SchoolForm;
     onChange: (patch: Partial<SchoolForm>) => void;
     disabled?: boolean;
     idPrefix: string;
+    showEmailDomain?: boolean;
 }) {
     return (
         <div className="grid gap-4 md:grid-cols-2">
@@ -162,6 +171,25 @@ function SchoolFields({
                     rows={3}
                 />
             </div>
+            {showEmailDomain && (
+                <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor={`${idPrefix}-email-domain`}>Domain Email Otomatis</Label>
+                    <Input
+                        id={`${idPrefix}-email-domain`}
+                        value={values.email_domain}
+                        disabled={disabled}
+                        onChange={(e) => onChange({ email_domain: e.target.value })}
+                        placeholder="almuawanah.sch.id"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Dipakai membuat email login siswa &amp; guru saat kolom emailnya dikosongkan —
+                        misalnya <code>ahmad.2024001@almuawanah.sch.id</code> dari nama depan + NIS.
+                        Alamat ini hanya identitas untuk masuk aplikasi, tidak dikirimi surat; surat
+                        (OTP, notifikasi) dikirim ke <strong>Email Kontak</strong> masing-masing akun.
+                        Isi tanpa tanda <code>@</code>.
+                    </p>
+                </div>
+            )}
         </div>
     );
 }
@@ -282,6 +310,7 @@ export default function GeneralSettings() {
             email: p.email ?? '',
             phone: p.phone ?? '',
             address: p.address ?? '',
+            email_domain: p.email_domain ?? '',
         });
         setLogoUrl(p.logo_url);
         setLogoFile(null);
@@ -335,6 +364,7 @@ export default function GeneralSettings() {
             fd.append('email', form.email);
             fd.append('phone', form.phone);
             fd.append('address', form.address);
+            fd.append('email_domain', form.email_domain);
             if (logoFile) fd.append('logo', logoFile);
             if (removeLogo) fd.append('remove_logo', '1');
 
@@ -488,6 +518,7 @@ export default function GeneralSettings() {
                                             onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
                                             disabled={!canEdit}
                                             idPrefix="edit"
+                                            showEmailDomain
                                         />
                                         {canEdit && (
                                             <div className="flex justify-end">

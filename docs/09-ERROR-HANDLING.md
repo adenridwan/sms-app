@@ -86,6 +86,38 @@ These are cataloged in full in [07-FEATURE-LIST.md, F7](07-FEATURE-LIST.md) — 
 
 The one deliberate special case: **`NetworkFailure` during `POST /scan` is not presented as an error at all.** It's the trigger condition for `EnqueueOfflineScanUseCase` (see [04-MOBILE-ARCHITECTURE.md](04-MOBILE-ARCHITECTURE.md), [07-FEATURE-LIST.md F10](07-FEATURE-LIST.md)). Every other screen's `NetworkFailure` handling is a conventional "you're offline, try again" state.
 
+### 6a. Perilaku offline sebagaimana terimplementasi (2026-08-09)
+
+Diuji langsung dengan mematikan backend, lalu menutup & membuka ulang aplikasi.
+
+| Alur | Saat jaringan mati | Berkas |
+|---|---|---|
+| **Buka aplikasi (sesi tersimpan)** | Tetap masuk dari cache, tidak dilempar ke login; muncul pemberitahuan "memakai sesi tersimpan". Hanya `401` eksplisit yang mengakhiri sesi. | [auth_controller.dart](../mobile/lib/features/auth/presentation/auth_controller.dart) |
+| **Scan QR** | Langsung masuk antrean, ditampilkan sebagai keberhasilan bersyarat — bukan error. | [scan_controller.dart](../mobile/lib/features/attendance/presentation/scan_controller.dart) |
+| **Input manual** | Pratinjau identitas gagal (wajar, butuh server) tapi **penyimpanan tetap terbuka** dan masuk antrean. Kode yang benar-benar tak dikenal saat online tetap dicegah. | [manual_input_screen.dart](../mobile/lib/features/attendance/presentation/manual_input_screen.dart) |
+| **Absen kelas** | Seluruh sesi (kelas + tanggal + status tiap siswa) masuk antrean tersendiri. | [class_attendance_queue_controller.dart](../mobile/lib/features/attendance/presentation/class_attendance_queue_controller.dart) |
+| **Layar lain (Beranda, rekap)** | Tampil dari data terakhir bila ada, atau keadaan kosong yang jujur. | — |
+
+**Dua antrean, bukan satu.** Scan tunggal (`offline_scans`) dan sesi absen kelas
+(`offline_class_attendance`) disimpan terpisah di SharedPreferences karena
+bentuk datanya berbeda: satu entri absen kelas memuat seisi kelas, tak bisa
+dipaksa masuk bentuk scan tunggal. Keduanya bertahan setelah aplikasi ditutup
+dan ditampilkan berdampingan di layar Antrean.
+
+**Sinkronisasi berjalan otomatis.** Begitu `backendStatusProvider` berubah dari
+`offline` ke `online`, kedua antrean dikirim ulang di belakang layar tanpa
+menunggu pengguna membuka layar Antrean. Kegagalan pada jalur otomatis ini
+sengaja ditelan — ini bukan aksi yang diminta pengguna, jadi tidak boleh
+memunculkan error di layar mana pun; antrean tetap utuh dan dicoba lagi pada
+pemulihan berikutnya, atau lewat tombol sinkron manual.
+
+**Kenapa pengulangan aman.** `POST /attendance/students/bulk` memperbarui baris
+yang sudah ada untuk tanggal tersebut (diuji: "0 baru, 2 diperbarui"), jadi
+entri yang sempat terkirim sebagian tidak menghasilkan duplikat. Entri absen
+kelas untuk **kelas + tanggal yang sama** juga saling menimpa di antrean, bukan
+menumpuk — mengoreksi absen dua kali saat offline harus menyisakan satu entri
+terbaru, bukan dua yang bertentangan.
+
 ## 7. Retry policy
 
 | Call | Auto-retry on transient failure? | Rationale |

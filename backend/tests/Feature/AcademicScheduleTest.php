@@ -258,6 +258,40 @@ test('jadwal bisa dihapus', function () {
     expect(Schedule::find($schedule->id))->toBeNull();
 });
 
+test('setelah hapus, jadwal baru bisa dibuat lagi persis di slot yang sama (partial unique index)', function () {
+    // Regresi: `schedule_unique` sebelumnya unique index biasa (bukan
+    // partial `WHERE deleted_at IS NULL`), jadi baris yang di-soft-delete
+    // tetap dihitung menempati slotnya — insert baru di slot yang sama
+    // gagal dengan unique violation mentah dari Postgres. Lihat migrasi
+    // 2026_08_09_000001_make_schedule_unique_index_partial.
+    $schedule = Schedule::create([
+        'tenant_id' => $this->tenantId,
+        'academic_year_id' => $this->activeYearId,
+        'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA,
+        'subject_id' => $this->subject->id,
+        'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id,
+        'day_of_week' => 1,
+    ]);
+
+    $this->actingAs($this->admin, 'sanctum')
+        ->deleteJson("/api/v1/academic/schedules/{$schedule->id}")
+        ->assertOk();
+
+    $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules', [
+            'academic_year_id' => $this->activeYearId,
+            'semester_id' => $this->semesterId,
+            'classroom_id' => $this->classroomA,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->guru2->id,
+            'time_slot_id' => $this->timeSlot->id,
+            'day_of_week' => 1,
+        ])
+        ->assertCreated();
+});
+
 test('guru tanpa izin schedules.manage ditolak membuat jadwal', function () {
     $this->actingAs($this->guru1, 'sanctum')
         ->postJson('/api/v1/academic/schedules', [
@@ -291,4 +325,235 @@ test('endpoint classrooms/{id}/schedule mengembalikan jadwal semester aktif', fu
 
     $response->assertOk();
     expect($response->json('data'))->toHaveCount(1);
+});
+
+// ---------- salin dari kelas lain ----------
+
+test('salin dari kelas lain menyalin semua jadwal sumber ke kelas tujuan', function () {
+    $timeSlot2 = TimeSlot::create([
+        'tenant_id' => $this->tenantId, 'name' => 'Jam 2', 'start_time' => '07:45', 'end_time' => '08:30', 'order' => 2,
+    ]);
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru2->id,
+        'time_slot_id' => $timeSlot2->id, 'day_of_week' => 1,
+    ]);
+
+    $response = $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-classroom', [
+            'source_classroom_id' => $this->classroomA,
+            'source_semester_id' => $this->semesterId,
+            'target_classroom_id' => $this->classroomB,
+            'target_semester_id' => $this->semesterId,
+            'target_academic_year_id' => $this->activeYearId,
+            'overwrite' => false,
+        ]);
+
+    $response->assertOk()->assertJsonPath('data.copied', 2)->assertJsonPath('data.skipped', []);
+    expect(Schedule::where('classroom_id', $this->classroomB)->count())->toBe(2);
+});
+
+test('salin dari kelas lain melewati sel yang sudah terisi tanpa overwrite', function () {
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+    $existing = Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomB, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru2->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+
+    $response = $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-classroom', [
+            'source_classroom_id' => $this->classroomA,
+            'source_semester_id' => $this->semesterId,
+            'target_classroom_id' => $this->classroomB,
+            'target_semester_id' => $this->semesterId,
+            'target_academic_year_id' => $this->activeYearId,
+            'overwrite' => false,
+        ]);
+
+    $response->assertOk()->assertJsonPath('data.copied', 0);
+    expect($response->json('data.skipped'))->toHaveCount(1);
+    expect(Schedule::find($existing->id)->teacher_id)->toBe($this->guru2->id);
+});
+
+test('salin dari kelas lain menimpa sel yang sudah terisi ketika overwrite aktif', function () {
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomB, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru2->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+
+    $response = $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-classroom', [
+            'source_classroom_id' => $this->classroomA,
+            'source_semester_id' => $this->semesterId,
+            'target_classroom_id' => $this->classroomB,
+            'target_semester_id' => $this->semesterId,
+            'target_academic_year_id' => $this->activeYearId,
+            'overwrite' => true,
+        ]);
+
+    $response->assertOk()->assertJsonPath('data.copied', 1);
+    $copied = Schedule::where('classroom_id', $this->classroomB)->first();
+    expect($copied->teacher_id)->toBe($this->guru1->id);
+});
+
+test('salin dari kelas lain melewati baris yang bentrok guru di kelas lain', function () {
+    $classroomC = makeClassroom($this->gradeLevelId, 'X C', $this->activeYearId);
+
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+    // guru1 sudah mengajar kelas ketiga (bukan kelas tujuan) di hari & jam yang sama.
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $classroomC, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+
+    $response = $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-classroom', [
+            'source_classroom_id' => $this->classroomA,
+            'source_semester_id' => $this->semesterId,
+            'target_classroom_id' => $this->classroomB,
+            'target_semester_id' => $this->semesterId,
+            'target_academic_year_id' => $this->activeYearId,
+            'overwrite' => false,
+        ]);
+
+    $response->assertOk()->assertJsonPath('data.copied', 0);
+    expect($response->json('data.skipped.0'))->toContain('Guru sudah memiliki jadwal');
+});
+
+test('salin dari kelas lain ditolak 422 kalau kelas sumber belum punya jadwal', function () {
+    $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-classroom', [
+            'source_classroom_id' => $this->classroomA,
+            'source_semester_id' => $this->semesterId,
+            'target_classroom_id' => $this->classroomB,
+            'target_semester_id' => $this->semesterId,
+            'target_academic_year_id' => $this->activeYearId,
+        ])
+        ->assertStatus(422);
+});
+
+test('salin dari kelas lain ditolak 422 kalau sumber sama dengan tujuan', function () {
+    $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-classroom', [
+            'source_classroom_id' => $this->classroomA,
+            'source_semester_id' => $this->semesterId,
+            'target_classroom_id' => $this->classroomA,
+            'target_semester_id' => $this->semesterId,
+            'target_academic_year_id' => $this->activeYearId,
+        ])
+        ->assertStatus(422);
+});
+
+test('guru tanpa izin schedules.manage ditolak menyalin dari kelas lain', function () {
+    $this->actingAs($this->guru1, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-classroom', [
+            'source_classroom_id' => $this->classroomA,
+            'source_semester_id' => $this->semesterId,
+            'target_classroom_id' => $this->classroomB,
+            'target_semester_id' => $this->semesterId,
+            'target_academic_year_id' => $this->activeYearId,
+        ])
+        ->assertForbidden();
+});
+
+// ---------- salin dari hari lain ----------
+
+test('salin dari hari lain menyalin jadwal ke beberapa hari tujuan sekaligus', function () {
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+
+    $response = $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-day', [
+            'academic_year_id' => $this->activeYearId,
+            'classroom_id' => $this->classroomA,
+            'semester_id' => $this->semesterId,
+            'source_day_of_week' => 1,
+            'target_days' => [3, 5],
+            'overwrite' => false,
+        ]);
+
+    $response->assertOk()->assertJsonPath('data.copied', 2);
+    expect(Schedule::where('classroom_id', $this->classroomA)->count())->toBe(3);
+    expect(Schedule::where('classroom_id', $this->classroomA)->where('day_of_week', 3)->exists())->toBeTrue();
+    expect(Schedule::where('classroom_id', $this->classroomA)->where('day_of_week', 5)->exists())->toBeTrue();
+});
+
+test('salin dari hari lain melewati hari tujuan yang sudah terisi tanpa overwrite', function () {
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru2->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 3,
+    ]);
+
+    $response = $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-day', [
+            'academic_year_id' => $this->activeYearId,
+            'classroom_id' => $this->classroomA,
+            'semester_id' => $this->semesterId,
+            'source_day_of_week' => 1,
+            'target_days' => [3],
+            'overwrite' => false,
+        ]);
+
+    $response->assertOk()->assertJsonPath('data.copied', 0);
+    expect($response->json('data.skipped'))->toHaveCount(1);
+});
+
+test('salin dari hari lain ditolak 422 kalau hari sumber belum punya jadwal', function () {
+    $this->actingAs($this->admin, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-day', [
+            'academic_year_id' => $this->activeYearId,
+            'classroom_id' => $this->classroomA,
+            'semester_id' => $this->semesterId,
+            'source_day_of_week' => 1,
+            'target_days' => [2],
+        ])
+        ->assertStatus(422);
+});
+
+test('guru tanpa izin schedules.manage ditolak menyalin dari hari lain', function () {
+    Schedule::create([
+        'tenant_id' => $this->tenantId, 'academic_year_id' => $this->activeYearId, 'semester_id' => $this->semesterId,
+        'classroom_id' => $this->classroomA, 'subject_id' => $this->subject->id, 'teacher_id' => $this->guru1->id,
+        'time_slot_id' => $this->timeSlot->id, 'day_of_week' => 1,
+    ]);
+
+    $this->actingAs($this->guru1, 'sanctum')
+        ->postJson('/api/v1/academic/schedules/copy-from-day', [
+            'academic_year_id' => $this->activeYearId,
+            'classroom_id' => $this->classroomA,
+            'semester_id' => $this->semesterId,
+            'source_day_of_week' => 1,
+            'target_days' => [2],
+        ])
+        ->assertForbidden();
 });

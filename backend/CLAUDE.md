@@ -113,6 +113,42 @@ Test: `RegisterActivationTest` (11 kasus, termasuk kode salah/kedaluwarsa/sekali
 
 Bug lama yang ikut diperbaiki: `LoginLogService::paginate()` memakai `with('user:id,full_name,email')`, padahal `full_name` accessor (dirakit dari `user_profiles`) — bukan kolom. Akibatnya tabel riwayat login 500 begitu ada log dengan `user_id` terisi. Sekarang eager-load-nya mengambil `id,username,email` + relasi `profile` utuh (semua isi `User::$appends` membacanya saat serialisasi).
 
+## Otorisasi menulis: tiga lapis, jangan cuma satu (2026-08-09)
+
+Guru sempat bisa membuat/mengubah/menghapus **kelas** dan **jurusan** lewat API meski daftar izinnya benar — `ClassroomController` & `MajorController` punya `store/update/destroy/import` **tanpa penjagaan apa pun** (hanya `syncTeachers()` yang dijaga), padahal izin `classrooms.manage` & `majors.manage` sudah lama ada dan hanya dipegang admin.
+
+Setiap aksi tulis butuh **tiga** lapis, dan dua yang pertama wajib:
+
+1. **Endpoint API** — `abort_unless($request->user()->can('...'), 403)` atau `authorize()`/FormRequest. Ini satu-satunya penjagaan yang sungguhan.
+2. **Rute web halaman form** — `->middleware('permission:...')`. Tanpa ini pengguna bisa membuka form dan baru ditolak saat menekan Simpan, yang terbaca seolah ia berwenang.
+3. **Tombol di UI** — `usePermissions()` (`resources/js/hooks/usePermissions.ts`). Hanya kerapian; jangan pernah dijadikan satu-satunya penjagaan.
+
+Cek cepat controller mana yang masih bolong:
+
+```bash
+for f in app/Http/Controllers/Api/V1/**/*.php; do
+  for m in store update destroy import; do
+    grep -q "public function $m(" "$f" || continue
+    awk "/public function $m\(/,/^    }/" "$f" | grep -qE "abort_unless|authorize\(|->can\(" \
+      || echo "TANPA IZIN: $(basename $f) $m"
+  done
+done
+```
+
+Test: `AcademicWriteAuthorizationTest` (9 kasus, termasuk rute web `/students/create`).
+
+## Email otomatis akun siswa & guru (dibuat 2026-08-09)
+
+Kolom email tidak lagi wajib diisi saat menambah/mengimpor siswa & guru — rancangan lengkap dan alasan tiap keputusan ada di [docs/EMAIL-OTOMATIS-AKUN.md](docs/EMAIL-OTOMATIS-AKUN.md). Tiga aturan yang jangan dilanggar:
+
+1. **`users.email` = identitas login, `users.contact_email` = alamat surat.** Jangan pernah mengirim surat ke `users.email` — sejak fitur ini ia bisa berisi alamat sintetis (`ahmad.2024001@domain-sekolah`). Semua pengiriman email ke akun memakai `contact_email` (lihat `NotificationDispatcher`).
+2. **`contact_email` SENGAJA tidak unik** — satu orang tua memakai satu alamat untuk beberapa anak. Keamanannya dijaga aturan **"jangan pernah mencari user hanya dengan `contact_email`"**, bukan oleh index. Untuk alur OTP nanti, penunjuk akun harus berpasangan (NIS/email login **+** contact_email) dengan respons identik antara cocok & tidak cocok.
+3. **Import tidak pernah menetapkan/menimpa email login siswa.** Kolom `email` sudah dihapus dari template siswa dan diabaikan kalau muncul di file (kolom itu ada di file hasil *export* sebagai informasi). Menimpanya dari file = mengunci siswa dari akunnya.
+
+Domain per sekolah disimpan di tabel `settings` (`group=account`, `key=email_domain`), diatur lewat **Pengaturan → Umum**. Tanpa domain, penambahan akun tanpa email ditolak 422 dengan pesan yang mengarahkan ke sana (bukan 500).
+
+Test: `GeneratedEmailTest` (16 kasus) & `GeneratedEmailImportTest` (8 kasus).
+
 ## Ringkasan implementasi terkini (update 2026-08-02)
 
 Panduan cara pakai (bukan aturan wajib) ada di [docs/TUTORIAL-APLIKASI.md](docs/TUTORIAL-APLIKASI.md) — termasuk analisis kelayakan "pisah database per tenant".

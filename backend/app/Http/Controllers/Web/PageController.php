@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StudentResource;
 use App\Http\Resources\TeacherResource;
+use App\Infrastructure\Persistence\Eloquent\Academic\AcademicYear;
+use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use Inertia\Inertia;
@@ -27,7 +29,7 @@ class PageController extends Controller
      */
     public function students(): Response
     {
-        $filters = request()->only(['search', 'status', 'gender']);
+        $filters = request()->only(['search', 'status', 'gender', 'classroom_id']);
 
         $students = Student::visibleTo(request()->user())
             ->with(['user.profile', 'currentClass'])
@@ -47,6 +49,12 @@ class PageController extends Controller
             ->when($filters['gender'] ?? null, fn ($q, $gender) => $q->whereHas(
                 'user.profile',
                 fn ($p) => $p->where('gender', $gender)
+            ))
+            // Di-AND dengan visibleTo() di atas, jadi guru yang mengarang
+            // classroom_id kelas lain tetap tidak mendapat baris apa pun.
+            ->when($filters['classroom_id'] ?? null, fn ($q, $classroomId) => $q->whereHas(
+                'enrollments',
+                fn ($e) => $e->where('status', 'active')->where('classroom_id', $classroomId)
             ))
             ->orderBy('nis')
             ->paginate(15)
@@ -69,7 +77,65 @@ class PageController extends Controller
                 ],
             ],
             'filters' => $filters,
+            'classrooms' => $this->filterableClassrooms(request()->user()),
         ]);
+    }
+
+    /**
+     * Pilihan kelas untuk filter di halaman Data Siswa.
+     *
+     * Guru/wali kelas hanya boleh melihat kelas yang ia ampu atau ia walikan —
+     * daftarnya diambil dari `teachingClassroomIds()` yang juga dipakai
+     * `Student::scopeVisibleTo()`, sehingga isi dropdown selalu sejalan dengan
+     * siswa yang memang boleh ia lihat.
+     *
+     * Peran tanpa akses lintas kelas (siswa, orang tua) mendapat daftar kosong;
+     * halaman menyembunyikan dropdown-nya, karena memfilter satu-satunya kelas
+     * yang terlihat tidak ada gunanya.
+     *
+     * @return array<int, array{id: string, name: string}>
+     */
+    private function filterableClassrooms(?\App\Infrastructure\Persistence\Eloquent\Auth\User $user): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        $activeYearId = AcademicYear::query()
+            ->where('is_active', true)
+            ->when($user->tenant_id, fn ($q) => $q->where('tenant_id', $user->tenant_id))
+            ->value('id');
+
+        if (! $activeYearId) {
+            return [];
+        }
+
+        $query = Classroom::query()
+            ->where('academic_year_id', $activeYearId)
+            ->when($user->tenant_id, fn ($q) => $q->where('tenant_id', $user->tenant_id));
+
+        $roles = $user->getRoleNames();
+        $hasAllAccess = $user->user_type === 'super_admin'
+            || $roles->intersect(Student::ALL_ACCESS_ROLES)->isNotEmpty();
+
+        if (! $hasAllAccess) {
+            if ($roles->intersect(['guru', 'wali_kelas'])->isEmpty()) {
+                return [];
+            }
+
+            $classroomIds = $user->teachingClassroomIds();
+
+            if ($classroomIds === []) {
+                return [];
+            }
+
+            $query->whereIn('id', $classroomIds);
+        }
+
+        return $query->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Classroom $c) => ['id' => $c->id, 'name' => $c->name])
+            ->all();
     }
 
     /**

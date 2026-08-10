@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Teacher;
 use App\Exports\Teacher\TeachersExport;
 use App\Exports\Teacher\TeachersTemplateExport;
 use App\Http\Controllers\Api\ApiController;
+use App\Http\Controllers\Api\V1\Concerns\HandlesSafeImport;
 use App\Http\Requests\Teacher\StoreTeacherRequest;
 use App\Http\Requests\Teacher\UpdateTeacherRequest;
 use App\Http\Resources\TeacherResource;
@@ -12,6 +13,7 @@ use App\Imports\Teacher\TeachersImport;
 use App\Infrastructure\Persistence\Eloquent\Auth\UserProfile;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use App\Services\TeacherAssignmentService;
+use App\Services\EmailGenerator;
 use App\Services\TeacherRegistrar;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,9 +35,12 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 class TeacherController extends ApiController
 {
+    use HandlesSafeImport;
+
     public function __construct(
         private TeacherAssignmentService $assignments,
         private TeacherRegistrar $registrar,
+        private EmailGenerator $emailGenerator,
     ) {}
 
     /**
@@ -90,9 +95,16 @@ class TeacherController extends ApiController
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }
 
+        // Email dikosongkan → dibuatkan otomatis oleh registrar, tapi butuh
+        // domain sekolah. Dicek di sini supaya pesannya mengarahkan admin ke
+        // Pengaturan → Umum, bukan muncul sebagai exception 500.
+        if (trim((string) ($data['email'] ?? '')) === '' && ! $this->emailGenerator->hasDomain($tenantId)) {
+            return $this->error(EmailGenerator::domainMissingMessage(), 422);
+        }
+
         // Pembuatan akun ada di TeacherRegistrar supaya aturannya sama persis
         // dengan jalur import massal (TeachersImport).
-        ['teacher' => $teacher, 'username' => $username, 'password' => $initialPassword] =
+        ['teacher' => $teacher, 'username' => $username, 'password' => $initialPassword, 'email' => $email] =
             $this->registrar->create($data, $tenantId);
 
         return $this->success([
@@ -101,6 +113,7 @@ class TeacherController extends ApiController
             // menyampaikan kredensial ke guru; tidak pernah disimpan ulang.
             'initial_username' => $username,
             'initial_password' => $initialPassword,
+            'initial_email' => $email,
         ], 'Guru berhasil ditambahkan', 201);
     }
 
@@ -135,7 +148,7 @@ class TeacherController extends ApiController
         $data = $request->validated();
 
         DB::transaction(function () use ($data, $teacher) {
-            $userFields = array_intersect_key($data, array_flip(['email']));
+            $userFields = array_intersect_key($data, array_flip(['email', 'contact_email']));
             if ($userFields !== []) {
                 $teacher->user->update($userFields);
             }
@@ -226,14 +239,16 @@ class TeacherController extends ApiController
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:5120'],
         ]);
 
-        $import = new TeachersImport($tenantId, $this->registrar);
-        Excel::import($import, $request->file('file'));
+        return $this->runImport(function () use ($request, $tenantId) {
+            $import = new TeachersImport($tenantId, $this->registrar, $this->emailGenerator);
+            Excel::import($import, $request->file('file'));
 
-        return $this->success([
-            'created' => $import->created,
-            'updated' => $import->updated,
-            'errors' => $import->errors,
-        ], "Import guru selesai: {$import->created} ditambahkan, {$import->updated} diperbarui.");
+            return $this->success([
+                'created' => $import->created,
+                'updated' => $import->updated,
+                'errors' => $import->errors,
+            ], "Import guru selesai: {$import->created} ditambahkan, {$import->updated} diperbarui.");
+        }, 'Import guru gagal diproses. Periksa kembali isi file, atau coba lagi.');
     }
 
     /**

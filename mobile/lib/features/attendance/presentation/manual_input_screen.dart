@@ -8,6 +8,11 @@ import 'scan_controller.dart';
 import 'widgets/result_sheet.dart';
 
 /// Input kode Ref ID (unique_code / RFID) manual + pratinjau identitas.
+///
+/// Pratinjau bersifat **opsional**: ia hanya membantu memastikan kode yang
+/// diketik benar. Absensi tetap bisa dicatat tanpa pratinjau — kalau tidak,
+/// petugas mustahil mencatat apa pun saat server tak terjangkau, padahal
+/// antrean offline justru dibuat untuk keadaan itu.
 class ManualInputScreen extends ConsumerStatefulWidget {
   const ManualInputScreen({super.key});
 
@@ -22,6 +27,11 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
   bool _submitting = false;
   String? _error;
 
+  /// True bila pratinjau gagal karena **jaringan**, bukan karena kodenya salah.
+  /// Membedakan keduanya penting: offline tetap boleh menyimpan (masuk antrean),
+  /// sedangkan kode yang benar-benar tak dikenal sebaiknya dicegah lebih awal.
+  bool _offline = false;
+
   @override
   void dispose() {
     _ctrl.dispose();
@@ -30,12 +40,19 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
 
   String get _code => _ctrl.text.trim();
 
+  /// Boleh menyimpan bila ada kode dan pratinjau **tidak** menyatakan kodenya
+  /// tak dikenal. Saat offline `_error` sengaja dibiarkan null, sehingga
+  /// penyimpanan tetap terbuka dan hasilnya masuk antrean.
+  bool get _canSubmit =>
+      _code.isNotEmpty && !_submitting && !_looking && _error == null;
+
   Future<void> _lookup() async {
     if (_code.isEmpty) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _looking = true;
       _error = null;
+      _offline = false;
       _preview = null;
     });
     try {
@@ -45,7 +62,10 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
         if (res == null) _error = 'Kode tidak ditemukan.';
       });
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      setState(() {
+        _offline = e.isNetwork;
+        _error = e.isNetwork ? null : e.message;
+      });
     } finally {
       if (mounted) setState(() => _looking = false);
     }
@@ -61,6 +81,7 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
         _submitting = false;
         _preview = null;
         _error = null;
+        _offline = false;
         _ctrl.clear();
       });
     }
@@ -80,6 +101,8 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
             controller: _ctrl,
             autofocus: true,
             textInputAction: TextInputAction.search,
+            // Tombol simpan bergantung pada isi field, jadi perlu rebuild.
+            onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _lookup(),
             decoration: InputDecoration(
               labelText: 'Kode Ref ID / RFID',
@@ -106,10 +129,22 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
               icon: Icons.error_outline_rounded,
               text: _error!,
             ),
+
+          // Offline bukan kegagalan — beri tahu apa yang akan terjadi, dan
+          // biarkan tombol simpan tetap hidup.
+          if (_offline)
+            const _InfoBox(
+              color: Color(0xFFD97706),
+              icon: Icons.cloud_off_rounded,
+              text: 'Tidak terhubung ke server, jadi identitas tidak bisa '
+                  'dipratinjau. Absensi tetap bisa dicatat dan akan masuk '
+                  'antrean untuk disinkronkan nanti.',
+            ),
+
           if (_preview != null) _PreviewCard(preview: _preview!),
           const SizedBox(height: 20),
           FilledButton.icon(
-            onPressed: (_preview != null && !_submitting) ? _submit : null,
+            onPressed: _canSubmit ? _submit : null,
             icon: _submitting
                 ? const SizedBox(
                     width: 20,
@@ -169,7 +204,7 @@ class _InfoBox extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(

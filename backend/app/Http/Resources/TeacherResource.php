@@ -26,7 +26,11 @@ class TeacherResource extends JsonResource
 
             // Akun & Pribadi
             'username' => $this->user?->username,
+            // `email` = identitas login (bisa hasil generate), `contact_email`
+            // = alamat surat sungguhan. Lihat docs/EMAIL-OTOMATIS-AKUN.md.
             'email' => $this->user?->email,
+            'contact_email' => $this->user?->contact_email,
+            'email_is_generated' => (bool) $this->user?->email_is_generated,
             'first_name' => $profile?->first_name,
             'last_name' => $profile?->last_name,
             'full_name' => $this->user?->full_name,

@@ -44,6 +44,8 @@ class MajorController extends ApiController
      */
     public function store(Request $request): JsonResponse
     {
+        abort_unless($request->user()->can('majors.manage'), 403);
+
         if (! $this->currentTenantId($request)) {
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }
@@ -79,6 +81,8 @@ class MajorController extends ApiController
      */
     public function update(Request $request, Major $major): JsonResponse
     {
+        abort_unless($request->user()->can('majors.manage'), 403);
+
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:100'],
             'code' => ['sometimes', 'string', 'max:20'],
@@ -100,6 +104,8 @@ class MajorController extends ApiController
      */
     public function destroy(Major $major): JsonResponse
     {
+        abort_unless(request()->user()->can('majors.manage'), 403);
+
         if ($major->classrooms()->exists()) {
             return $this->error('Jurusan tidak dapat dihapus karena masih digunakan oleh kelas', 422);
         }
@@ -130,6 +136,8 @@ class MajorController extends ApiController
      */
     public function import(Request $request): JsonResponse
     {
+        abort_unless($request->user()->can('majors.manage'), 403);
+
         if (! $this->currentTenantId($request)) {
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }

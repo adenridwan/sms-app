@@ -48,6 +48,7 @@ import {
     AlertTriangle,
 } from 'lucide-react';
 import { majorsApi, type ImportResult } from '@/services/api';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { Major, PaginationMeta } from '@/types';
 
 interface MajorForm {
@@ -84,6 +85,11 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function AcademicMajors() {
+    // Guru hanya punya majors.view; tombol kelola disembunyikan agar konsisten
+    // dengan penjagaan `majors.manage` di MajorController.
+    const { can } = usePermissions();
+    const canManage = can('majors.manage');
+
     const [majors, setMajors] = useState<Major[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -259,14 +265,18 @@ export default function AcademicMajors() {
                             <Download className="mr-2 h-4 w-4" />
                             Export
                         </Button>
-                        <Button variant="outline" onClick={() => setImportOpen(true)}>
-                            <Upload className="mr-2 h-4 w-4" />
-                            Import
-                        </Button>
-                        <Button onClick={openCreate}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Tambah Jurusan
-                        </Button>
+                        {canManage && (
+                            <Button variant="outline" onClick={() => setImportOpen(true)}>
+                                <Upload className="mr-2 h-4 w-4" />
+                                Import
+                            </Button>
+                        )}
+                        {canManage && (
+                            <Button onClick={openCreate}>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Tambah Jurusan
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -330,21 +340,27 @@ export default function AcademicMajors() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => openEdit(major)}
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="text-muted-foreground hover:text-red-600"
-                                                            onClick={() => setDeletingMajor(major)}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        {canManage ? (
+                                                            <>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    onClick={() => openEdit(major)}
+                                                                >
+                                                                    <Pencil className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="text-muted-foreground hover:text-red-600"
+                                                                    onClick={() => setDeletingMajor(major)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-sm text-muted-foreground">-</span>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

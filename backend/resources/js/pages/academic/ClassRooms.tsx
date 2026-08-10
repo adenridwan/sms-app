@@ -63,6 +63,7 @@ import {
     Users,
 } from 'lucide-react';
 import { classroomsApi, majorsApi, gradeLevelsApi, academicYearsApi, teachersApi, type ImportResult } from '@/services/api';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { Classroom, Major, GradeLevel, AcademicYear, Teacher, PaginationMeta } from '@/types';
 
 interface ClassroomForm {
@@ -116,6 +117,11 @@ function getErrorStatus(error: unknown): number | null {
 }
 
 export default function AcademicClassRooms() {
+    // Guru hanya punya classrooms.view; tombol kelola disembunyikan agar
+    // konsisten dengan penjagaan `classrooms.manage` di ClassroomController.
+    const { can } = usePermissions();
+    const canManage = can('classrooms.manage');
+
     const [classrooms, setClassrooms] = useState<Classroom[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -422,14 +428,18 @@ export default function AcademicClassRooms() {
                             <Download className="mr-2 h-4 w-4" />
                             Export
                         </Button>
-                        <Button variant="outline" onClick={() => setImportOpen(true)}>
-                            <Upload className="mr-2 h-4 w-4" />
-                            Import
-                        </Button>
-                        <Button onClick={openCreate}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Tambah Kelas
-                        </Button>
+                        {canManage && (
+                            <Button variant="outline" onClick={() => setImportOpen(true)}>
+                                <Upload className="mr-2 h-4 w-4" />
+                                Import
+                            </Button>
+                        )}
+                        {canManage && (
+                            <Button onClick={openCreate}>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Tambah Kelas
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -506,21 +516,27 @@ export default function AcademicClassRooms() {
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => openEdit(classroom)}>
-                                                                <Pencil className="mr-2 h-4 w-4" />
-                                                                Edit
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => openPengampu(classroom)}>
-                                                                <Users className="mr-2 h-4 w-4" />
-                                                                Kelola Pengampu
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                                                onClick={() => setDeletingClassroom(classroom)}
-                                                            >
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Hapus
-                                                            </DropdownMenuItem>
+                                                            {canManage && (
+                                                                <DropdownMenuItem onClick={() => openEdit(classroom)}>
+                                                                    <Pencil className="mr-2 h-4 w-4" />
+                                                                    Edit
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {canManage && (
+                                                                <DropdownMenuItem onClick={() => openPengampu(classroom)}>
+                                                                    <Users className="mr-2 h-4 w-4" />
+                                                                    Kelola Pengampu
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {canManage && (
+                                                                <DropdownMenuItem
+                                                                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                                                    onClick={() => setDeletingClassroom(classroom)}
+                                                                >
+                                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                                    Hapus
+                                                                </DropdownMenuItem>
+                                                            )}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </TableCell>
