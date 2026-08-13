@@ -9,15 +9,13 @@
 .env.testing
 !.env.example
 
+# Aplikasi mobile (Flutter) — tidak diikutkan di repo ini
+mobile/
+
 # Dependencies
 backend/vendor/
 backend/node_modules/
 frontend/node_modules/
-mobile/.dart_tool/
-mobile/build/
-mobile/.packages
-mobile/.flutter-plugins
-mobile/.flutter-plugins-dependencies
 
 # Laravel
 backend/storage/*.key
