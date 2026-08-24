@@ -67,9 +67,19 @@ class AttendanceAuditLog extends Model
         string $tabel,
         ?string $recordId = null,
         ?array $dataLama = null,
-        ?array $dataBaru = null
+        ?array $dataBaru = null,
+        ?string $tenantId = null
     ): static {
         return static::create([
+            // BelongsToTenant hanya mengisi tenant_id otomatis dari
+            // auth()->user()->tenant_id / header X-Tenant-ID — keduanya
+            // KOSONG untuk super_admin (tenant-agnostic) tanpa tenant aktif
+            // dipilih, jadi INSERT gagal (kolom NOT NULL) dan seluruh aksi
+            // (scan absen, approve izin) ikut gagal walau datanya valid.
+            // Caller yang tahu tenant SUBJEK aksinya (bukan tenant si
+            // pelaku) wajib mengirim $tenantId di sini supaya tidak
+            // bergantung pada resolusi ambient itu sama sekali.
+            'tenant_id' => $tenantId,
             'user_id' => auth()->id(),
             'aksi' => $aksi,
             'tabel' => $tabel,

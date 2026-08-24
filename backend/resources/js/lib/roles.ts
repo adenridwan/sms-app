@@ -38,3 +38,25 @@ export function roleSummary(roles: string[] | undefined, userType?: string): str
     // user_type, jadi masih bisa diberi keterangan yang jujur.
     return userType ? roleLabel(userType) : 'Tanpa peran';
 }
+
+/**
+ * Role "akses penuh" lintas data (bisa lihat/kelola milik orang lain, bukan
+ * cuma dirinya sendiri) — harus SAMA PERSIS dengan
+ * Student::ALL_ACCESS_ROLES di backend (dipakai ulang di banyak modul
+ * absensi/perizinan sebagai kanonik R4). Ini hanya untuk tampilan (mis.
+ * menyembunyikan tombol Setujui/Tolak) — penjagaan sebenarnya tetap di
+ * server.
+ */
+const ALL_ACCESS_ROLES = [
+    'super_admin',
+    'admin',
+    'kepala_sekolah',
+    'wakil_kepala_sekolah',
+    'tata_usaha',
+    'bendahara',
+    'pustakawan',
+];
+
+export function isFullAccessRole(roles: string[] | undefined): boolean {
+    return (roles ?? []).some((r) => ALL_ACCESS_ROLES.includes(r));
+}

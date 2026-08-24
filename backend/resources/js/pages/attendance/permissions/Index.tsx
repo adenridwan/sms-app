@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,8 @@ import { toast } from 'sonner';
 import { Plus, RefreshCw, CheckCircle, XCircle, Eye, Image, Trash2 } from 'lucide-react';
 import { leavePermissionApi } from '@/services/attendance';
 import type { LeavePermission, LeaveStatus, LeaveType } from '@/types/attendance';
+import type { PageProps } from '@/types';
+import { isFullAccessRole } from '@/lib/roles';
 
 const getStatusBadge = (status: LeaveStatus) => {
     const config: Record<LeaveStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
@@ -64,6 +66,10 @@ const getTypeBadge = (type: LeaveType) => {
 };
 
 export default function LeavePermissionIndex() {
+    const { auth } = usePage<PageProps>().props;
+    // Guru/siswa hanya melihat pengajuannya sendiri (sudah discope di
+    // server) dan tidak boleh menyetujui/menolak — termasuk punya sendiri.
+    const isFullAccess = isFullAccessRole(auth.user?.roles);
     const [permissions, setPermissions] = useState<LeavePermission[]>([]);
     const [loading, setLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -82,9 +88,7 @@ export default function LeavePermissionIndex() {
             if (typeFilter !== 'all') params.tipe_izin = typeFilter;
 
             const response = await leavePermissionApi.list(params);
-            if (response.data.data) {
-                setPermissions(response.data.data);
-            }
+            setPermissions(response.data.data?.data ?? []);
         } catch (error) {
             toast.error('Gagal memuat data perizinan');
         } finally {
@@ -290,7 +294,7 @@ export default function LeavePermissionIndex() {
                                                         >
                                                             <Eye className="h-4 w-4" />
                                                         </Button>
-                                                        {permission.status === 'pending' && (
+                                                        {isFullAccess && permission.status === 'pending' && (
                                                             <>
                                                                 <Button
                                                                     variant="ghost"

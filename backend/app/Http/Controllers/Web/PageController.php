@@ -286,6 +286,17 @@ class PageController extends Controller
     }
 
     /**
+     * Display "Lupa Password" page. Aplikasi ini tidak punya alur reset
+     * password via email (lihat AuthController::loginWithOtp) — halaman ini
+     * memandu pengguna login pakai kode akses sekali-pakai yang dibuatkan
+     * admin lewat menu Pengaturan > Keamanan Login.
+     */
+    public function forgotPassword(): Response
+    {
+        return Inertia::render('auth/ForgotPassword');
+    }
+
+    /**
      * Display academic years list.
      */
     public function academicYears(): Response
@@ -348,6 +359,14 @@ class PageController extends Controller
     /**
      * Display daily student attendance page.
      */
+    /**
+     * Display self-service "Absensi Saya" page (guru & pegawai).
+     */
+    public function attendanceMe(): Response
+    {
+        return Inertia::render('attendance/me/Index');
+    }
+
     public function attendanceStudents(): Response
     {
         $classrooms = $this->activeClassroomsForAttendance(scopeToTeacher: true);
@@ -379,18 +398,24 @@ class PageController extends Controller
      */
     public function attendancePermissionsCreate(): Response
     {
-        $students = Student::visibleTo(request()->user())
-            ->with('user.profile')
-            ->orderBy('nis')
-            ->get(['id', 'user_id', 'nis']);
+        $user = request()->user();
+        // Guru/siswa (dan role tanpa akses penuh lainnya) mengajukan izin
+        // untuk dirinya sendiri saja — frontend tidak menampilkan pemilih
+        // siswa/guru untuk mereka, jadi daftar lengkap ini tidak perlu (dan
+        // sebaiknya tidak) ikut dikirim. Lihat
+        // LeavePermissionController::isFullAccess() untuk kanon yang sama.
+        $isFullAccess = $user->getRoleNames()->intersect(Student::ALL_ACCESS_ROLES)->isNotEmpty();
 
-        $teachers = Teacher::with('user.profile')
-            ->get()
-            ->map(fn ($teacher) => [
+        $students = $isFullAccess
+            ? Student::visibleTo($user)->with('user.profile')->orderBy('nis')->get(['id', 'user_id', 'nis'])
+            : [];
+
+        $teachers = $isFullAccess
+            ? Teacher::with('user.profile')->get()->map(fn ($teacher) => [
                 'id' => $teacher->id,
                 'full_name' => $teacher->user?->full_name,
-            ])
-            ->values();
+            ])->values()
+            : [];
 
         return Inertia::render('attendance/permissions/Create', [
             'students' => $students,

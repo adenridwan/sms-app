@@ -20,6 +20,7 @@ Route::get('/', function () {
 Route::middleware('guest')->group(function () {
     Route::get('/login', [PageController::class, 'login'])->name('login');
     Route::get('/register', [PageController::class, 'register'])->name('register');
+    Route::get('/forgot-password', [PageController::class, 'forgotPassword'])->name('forgot-password');
 });
 
 // Logout — sebelumnya hanya didefinisikan di routes/auth.php, sebuah file
@@ -122,16 +123,24 @@ Route::middleware(['auth', 'password.current'])->group(function () {
 
     // Attendance Module
     Route::get('/attendance', [PageController::class, 'attendance'])->name('attendance');
+    Route::get('/attendance/me', [PageController::class, 'attendanceMe'])->name('attendance.me');
     Route::get('/attendance/students', [PageController::class, 'attendanceStudents'])->name('attendance.students');
     Route::get('/attendance/teachers', [PageController::class, 'attendanceTeachers'])->name('attendance.teachers');
     Route::get('/attendance/permissions/create', [PageController::class, 'attendancePermissionsCreate'])->name('attendance.permissions.create');
     Route::get('/attendance/permissions', [PageController::class, 'attendancePermissions'])->name('attendance.permissions');
-    Route::get('/attendance/holidays', [PageController::class, 'attendanceHolidays'])->name('attendance.holidays');
-    Route::get('/attendance/qr-codes', [PageController::class, 'attendanceQrCodes'])->name('attendance.qr-codes');
+    // Perkakas back-office absensi (kalender libur, kredensial QR/RFID,
+    // desain kartu, pengaturan) — hanya admin/tata_usaha/super_admin, sama
+    // seperti settings.attendance yang sudah menjaga endpoint PUT-nya.
+    Route::middleware('permission:settings.attendance')->group(function () {
+        Route::get('/attendance/holidays', [PageController::class, 'attendanceHolidays'])->name('attendance.holidays');
+        Route::get('/attendance/qr-codes', [PageController::class, 'attendanceQrCodes'])->name('attendance.qr-codes');
+        Route::get('/attendance/settings', [PageController::class, 'attendanceSettings'])->name('attendance.settings');
+        Route::get('/attendance/card-templates', [PageController::class, 'attendanceCardTemplates'])->name('attendance.card-templates');
+    });
     Route::get('/attendance/reports', [PageController::class, 'attendanceReports'])->name('attendance.reports');
-    Route::get('/attendance/settings', [PageController::class, 'attendanceSettings'])->name('attendance.settings');
-    Route::get('/attendance/card-templates', [PageController::class, 'attendanceCardTemplates'])->name('attendance.card-templates');
-    Route::get('/scanner', [PageController::class, 'scanner'])->name('scanner');
+    Route::get('/scanner', [PageController::class, 'scanner'])
+        ->middleware('permission:attendance.scanner-operate')
+        ->name('scanner');
 
     // Settings Module
     Route::prefix('settings')->name('settings.')->group(function () {

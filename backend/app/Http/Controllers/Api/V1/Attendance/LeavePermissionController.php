@@ -7,12 +7,16 @@ use App\Domain\Attendance\Enums\LeaveType;
 use App\Domain\Attendance\Services\LeaveApprovalService;
 use App\Http\Controllers\Api\ApiController;
 use App\Infrastructure\Persistence\Eloquent\Attendance\LeavePermission;
+use App\Infrastructure\Persistence\Eloquent\Auth\User;
+use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class LeavePermissionController extends ApiController
 {
+    private const WITH_RELATIONS = ['student.user.profile', 'teacher.user.profile', 'approver.profile'];
+
     public function __construct(
         private LeaveApprovalService $approvalService
     ) {}
@@ -22,13 +26,31 @@ class LeavePermissionController extends ApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = LeavePermission::with(['student.user', 'teacher.user', 'approver'])
+        $query = LeavePermission::with(self::WITH_RELATIONS)
             ->when($request->status, fn($q, $status) => $q->where('status', $status))
             ->when($request->student_id, fn($q, $id) => $q->where('student_id', $id))
             ->when($request->teacher_id, fn($q, $id) => $q->where('teacher_id', $id))
             ->when($request->tipe_izin, fn($q, $type) => $q->where('tipe_izin', $type))
             ->when($request->from_date, fn($q, $date) => $q->where('tanggal_mulai', '>=', $date))
             ->when($request->to_date, fn($q, $date) => $q->where('tanggal_selesai', '<=', $date));
+
+        // R4: guru/siswa (dan role tanpa akses penuh lainnya) hanya melihat
+        // pengajuan izin miliknya sendiri, apa pun parameter student_id/
+        // teacher_id yang dikirim — pola yang sama dengan
+        // TeacherAttendanceController::isFullAccess().
+        if (!$this->isFullAccess($request->user())) {
+            [$selfStudentId, $selfTeacherId] = $this->resolveSelfIds($request->user());
+
+            $query->where(function ($q) use ($selfStudentId, $selfTeacherId) {
+                $q->whereRaw('1 = 0');
+                if ($selfStudentId) {
+                    $q->orWhere('student_id', $selfStudentId);
+                }
+                if ($selfTeacherId) {
+                    $q->orWhere('teacher_id', $selfTeacherId);
+                }
+            });
+        }
 
         $sortField = $request->get('sort', 'created_at');
         $sortDirection = $request->get('direction', 'desc');
@@ -45,9 +67,16 @@ class LeavePermissionController extends ApiController
      */
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $isFullAccess = $this->isFullAccess($user);
+
         $data = $request->validate([
-            'student_id' => ['nullable', 'uuid', 'exists:students,id', 'required_without:teacher_id'],
-            'teacher_id' => ['nullable', 'uuid', 'exists:teachers,id', 'required_without:student_id'],
+            // Untuk role tanpa akses penuh, student_id/teacher_id diabaikan
+            // dan identitasnya diambil dari akun login (lihat di bawah) —
+            // required_without HANYA berlaku untuk role akses-penuh yang
+            // memang wajib memilih siswa/guru secara eksplisit.
+            'student_id' => ['nullable', 'uuid', 'exists:students,id', $isFullAccess ? 'required_without:teacher_id' : 'sometimes'],
+            'teacher_id' => ['nullable', 'uuid', 'exists:teachers,id', $isFullAccess ? 'required_without:student_id' : 'sometimes'],
             'tanggal_mulai' => ['required', 'date', 'after_or_equal:today'],
             'tanggal_selesai' => ['required', 'date', 'after_or_equal:tanggal_mulai'],
             'tipe_izin' => ['required', 'in:sakit,izin'],
@@ -55,13 +84,23 @@ class LeavePermissionController extends ApiController
             'bukti' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ]);
 
+        if ($isFullAccess) {
+            $studentId = $data['student_id'] ?? null;
+            $teacherId = $data['teacher_id'] ?? null;
+        } else {
+            // Guru/siswa (dan role tanpa akses penuh lainnya) hanya boleh
+            // mengajukan izin untuk dirinya sendiri — student_id/teacher_id
+            // dari request DIABAIKAN dan diganti identitas user login,
+            // supaya tidak bisa dipakai mengajukan izin atas nama orang lain.
+            [$studentId, $teacherId] = $this->resolveSelfIds($user);
+
+            if (!$studentId && !$teacherId) {
+                return $this->forbidden('Akun Anda tidak terhubung ke data siswa/guru, tidak bisa mengajukan izin.');
+            }
+        }
+
         // Check for overlapping leave
-        if ($this->approvalService->hasOverlappingLeave(
-            $data['student_id'] ?? null,
-            $data['teacher_id'] ?? null,
-            $data['tanggal_mulai'],
-            $data['tanggal_selesai']
-        )) {
+        if ($this->approvalService->hasOverlappingLeave($studentId, $teacherId, $data['tanggal_mulai'], $data['tanggal_selesai'])) {
             return $this->error('Sudah ada izin yang tumpang tindih dengan rentang tanggal ini', 422);
         }
 
@@ -72,9 +111,9 @@ class LeavePermissionController extends ApiController
         }
 
         $permission = $this->approvalService->createLeavePermission([
-            'tenant_id' => $request->user()->tenant_id,
-            'student_id' => $data['student_id'] ?? null,
-            'teacher_id' => $data['teacher_id'] ?? null,
+            'tenant_id' => $user->tenant_id,
+            'student_id' => $studentId,
+            'teacher_id' => $teacherId,
             'tanggal_mulai' => $data['tanggal_mulai'],
             'tanggal_selesai' => $data['tanggal_selesai'],
             'tipe_izin' => $data['tipe_izin'],
@@ -82,7 +121,7 @@ class LeavePermissionController extends ApiController
             'bukti' => $buktiPath,
         ]);
 
-        $permission->load(['student.user', 'teacher.user']);
+        $permission->load(['student.user.profile', 'teacher.user.profile']);
 
         return $this->created($permission, 'Izin berhasil diajukan');
     }
@@ -90,9 +129,11 @@ class LeavePermissionController extends ApiController
     /**
      * Show a specific leave permission
      */
-    public function show(LeavePermission $permission): JsonResponse
+    public function show(Request $request, LeavePermission $permission): JsonResponse
     {
-        $permission->load(['student.user', 'teacher.user', 'approver']);
+        $this->authorizeOwnership($request->user(), $permission);
+
+        $permission->load(self::WITH_RELATIONS);
 
         return $this->success($permission);
     }
@@ -102,6 +143,8 @@ class LeavePermissionController extends ApiController
      */
     public function update(Request $request, LeavePermission $permission): JsonResponse
     {
+        $this->authorizeOwnership($request->user(), $permission);
+
         if (!$permission->status->isPending()) {
             return $this->error('Izin yang sudah diproses tidak dapat diubah', 422);
         }
@@ -124,7 +167,7 @@ class LeavePermissionController extends ApiController
         }
 
         $permission->update($data);
-        $permission->load(['student.user', 'teacher.user']);
+        $permission->load(['student.user.profile', 'teacher.user.profile']);
 
         return $this->success($permission, 'Izin berhasil diperbarui');
     }
@@ -132,8 +175,10 @@ class LeavePermissionController extends ApiController
     /**
      * Delete a leave permission (only pending)
      */
-    public function destroy(LeavePermission $permission): JsonResponse
+    public function destroy(Request $request, LeavePermission $permission): JsonResponse
     {
+        $this->authorizeOwnership($request->user(), $permission);
+
         if (!$permission->status->isPending()) {
             return $this->error('Izin yang sudah diproses tidak dapat dihapus', 422);
         }
@@ -149,10 +194,15 @@ class LeavePermissionController extends ApiController
     }
 
     /**
-     * Approve a leave permission
+     * Approve a leave permission — hanya role akses-penuh (bukan pemohon
+     * sendiri) yang boleh menyetujui, sama seperti reject().
      */
-    public function approve(LeavePermission $permission): JsonResponse
+    public function approve(Request $request, LeavePermission $permission): JsonResponse
     {
+        if (!$this->isFullAccess($request->user())) {
+            return $this->forbidden('Anda tidak memiliki akses untuk menyetujui perizinan.');
+        }
+
         $result = $this->approvalService->approve($permission, auth()->id());
 
         if ($result['success']) {
@@ -167,6 +217,10 @@ class LeavePermissionController extends ApiController
      */
     public function reject(Request $request, LeavePermission $permission): JsonResponse
     {
+        if (!$this->isFullAccess($request->user())) {
+            return $this->forbidden('Anda tidak memiliki akses untuk menolak perizinan.');
+        }
+
         $data = $request->validate([
             'reason' => ['required', 'string', 'max:500'],
         ]);
@@ -192,5 +246,47 @@ class LeavePermissionController extends ApiController
         $count = LeavePermission::pending()->count();
 
         return $this->success(['count' => $count]);
+    }
+
+    /**
+     * Role akses-penuh (dipakai bersama di seluruh modul absensi — lihat
+     * TeacherAttendanceController::isFullAccess) melihat & mengelola
+     * perizinan siapa saja; selain itu (guru/siswa/wali_kelas biasa) hanya
+     * miliknya sendiri.
+     */
+    private function isFullAccess(User $user): bool
+    {
+        return $user->getRoleNames()->intersect(Student::ALL_ACCESS_ROLES)->isNotEmpty();
+    }
+
+    /**
+     * Resolusi student_id/teacher_id milik user login sendiri.
+     *
+     * @return array{0: ?string, 1: ?string} [studentId, teacherId]
+     */
+    private function resolveSelfIds(User $user): array
+    {
+        $studentId = $user->student?->id;
+        $teacherId = $studentId ? null : $user->teacher?->id;
+
+        return [$studentId, $teacherId];
+    }
+
+    /**
+     * Guru/siswa (dan role tanpa akses penuh lainnya) hanya boleh
+     * melihat/mengubah/menghapus baris perizinan miliknya sendiri.
+     */
+    private function authorizeOwnership(User $user, LeavePermission $permission): void
+    {
+        if ($this->isFullAccess($user)) {
+            return;
+        }
+
+        [$selfStudentId, $selfTeacherId] = $this->resolveSelfIds($user);
+
+        $isOwner = ($permission->student_id && $permission->student_id === $selfStudentId)
+            || ($permission->teacher_id && $permission->teacher_id === $selfTeacherId);
+
+        abort_unless($isOwner, 403, 'Anda tidak memiliki akses ke perizinan ini.');
     }
 }

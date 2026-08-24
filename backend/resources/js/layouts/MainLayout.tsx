@@ -130,6 +130,7 @@ const menuItems: MenuItem[] = [
         icon: Calendar,
         permission: 'attendance.view',
         children: [
+            { key: 'attendance.me', title: 'Absensi Saya', href: '/attendance/me', permission: 'attendance.check-in' },
             { key: 'attendance.students', title: 'Absensi Siswa', href: '/attendance/students' },
             { key: 'attendance.teachers', title: 'Absensi Pegawai', href: '/attendance/teachers' },
             { key: 'attendance.reports', title: 'Rekap Absensi', href: '/attendance/reports' },

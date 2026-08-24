@@ -111,7 +111,13 @@ class AttendanceSetting extends Model
             return 0;
         }
 
-        return $checkInTime->diffInMinutes($deadline);
+        // absolute:true wajib — Carbon 3 mengubah default diffInMinutes()
+        // jadi signed, jadi tanpa ini nilainya NEGATIF untuk keterlambatan
+        // (checkInTime lebih baru dari deadline). menit_keterlambatan lalu
+        // gagal lolos semua pengecekan `> 0` di seluruh modul (isLate(),
+        // badge Keterlambatan di UI, kategori poin pelanggaran) sehingga
+        // siswa/guru yang scan telat dianggap tepat waktu.
+        return (int) round($checkInTime->diffInMinutes($deadline, true));
     }
 
     /**

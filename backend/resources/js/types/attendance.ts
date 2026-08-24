@@ -91,6 +91,49 @@ export interface TeacherDailyRecord {
     notes: string | null;
 }
 
+// Absensi Saya (self-service)
+export type MyAttendanceStatus = TeacherAttendanceStatus | 'libur';
+
+export interface MyAttendanceToday {
+    date: string;
+    date_label: string;
+    status: MyAttendanceStatus;
+    check_in_time: string | null;
+    check_out_time: string | null;
+    late_minutes: number;
+    identity_number: string | null;
+    qr: {
+        available: boolean;
+        teacher_id: string | null;
+    };
+    rfid_code: string | null;
+}
+
+export interface MyAttendanceHistoryRecord {
+    date: string;
+    date_short: string;
+    day: string;
+    status: MyAttendanceStatus;
+    check_in_time: string | null;
+    check_out_time: string | null;
+    late_minutes: number;
+    notes: string | null;
+}
+
+export interface MyAttendanceHistory {
+    month: string;
+    month_label: string;
+    total_working_days: number;
+    summary: {
+        hadir: number;
+        sakit: number;
+        izin: number;
+        alfa: number;
+        telat: number;
+    };
+    history: MyAttendanceHistoryRecord[];
+}
+
 // Leave Permission
 export interface LeavePermission {
     id: string;
@@ -462,6 +505,7 @@ export interface BulkAttendanceFormData {
     attendances: Array<{
         student_id: string;
         status: AttendanceStatus;
+        check_in_time?: string;
         notes?: string;
     }>;
 }

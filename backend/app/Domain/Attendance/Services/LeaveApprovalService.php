@@ -54,7 +54,8 @@ class LeaveApprovalService
                 'leave_permissions',
                 $permission->id,
                 $oldData,
-                $permission->fresh()->toArray()
+                $permission->fresh()->toArray(),
+                $permission->tenant_id
             );
 
             DB::commit();
@@ -103,7 +104,8 @@ class LeaveApprovalService
             'leave_permissions',
             $permission->id,
             $oldData,
-            $permission->fresh()->toArray()
+            $permission->fresh()->toArray(),
+            $permission->tenant_id
         );
 
         return [

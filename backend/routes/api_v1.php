@@ -29,14 +29,19 @@ Route::prefix('auth')->name('auth.')->group(function () {
         ->middleware('throttle:auth')
         ->name('activate');
 
-    Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Auth\PasswordController::class, 'forgot'])
-        ->middleware('throttle:auth')
-        ->name('password.forgot');
-
-    Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Auth\PasswordController::class, 'reset'])
-        ->middleware('throttle:auth')
-        ->name('password.reset');
+    // Tidak ada reset password via email — "lupa password" dipakaikan
+    // login-otp di atas (kode akses sekali-pakai dari admin). Dua route
+    // 'forgot-password'/'reset-password' yang dulu di sini menunjuk ke
+    // method PasswordController yang tidak pernah diimplementasikan
+    // (selalu 500 kalau kena hit) — dihapus, bukan didiamkan.
 });
+
+// Cek jangkauan server untuk aplikasi mobile: tanpa auth, tanpa sentuh
+// database, dan balasannya sekecil mungkin. Aplikasi memanggilnya berkala
+// selagi status backend belum `online`, supaya antrean absensi offline ikut
+// tersinkron begitu server hidup lagi — tanpa itu status hanya berubah kalau
+// pengguna kebetulan melakukan sesuatu yang memicu request.
+Route::get('/ping', fn () => response()->json(['ok' => true]))->name('ping');
 
 // ===========================================
 // Protected Routes (Auth Required)
@@ -189,6 +194,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('students/consecutive-absences', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'consecutiveAbsences'])->name('students.consecutive-absences');
         Route::get('students/top-late', [\App\Http\Controllers\Api\V1\Attendance\StudentAttendanceController::class, 'topLate'])->name('students.top-late');
 
+        // Absensi Saya (self-service, guru & pegawai) — selalu discope ke
+        // user login sendiri, harus didaftar SEBELUM 'teachers/{...}' di
+        // bawah supaya 'me' tidak ketangkap sebagai parameter route.
+        Route::get('me/today', [\App\Http\Controllers\Api\V1\Attendance\MyAttendanceController::class, 'today'])->name('me.today');
+        Route::get('me/history', [\App\Http\Controllers\Api\V1\Attendance\MyAttendanceController::class, 'history'])->name('me.history');
+
         // Teacher/Employee Attendance
         Route::get('teachers', [\App\Http\Controllers\Api\V1\Attendance\TeacherAttendanceController::class, 'index'])->name('teachers.index');
         Route::get('teachers/daily', [\App\Http\Controllers\Api\V1\Attendance\TeacherAttendanceController::class, 'daily'])->name('teachers.daily');
@@ -201,25 +212,40 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('permissions/{permission}/reject', [\App\Http\Controllers\Api\V1\Attendance\LeavePermissionController::class, 'reject'])->name('permissions.reject');
         Route::get('permissions-pending-count', [\App\Http\Controllers\Api\V1\Attendance\LeavePermissionController::class, 'pendingCount'])->name('permissions.pending-count');
 
-        // Holidays
-        Route::apiResource('holidays', \App\Http\Controllers\Api\V1\Attendance\HolidayController::class);
-        Route::post('holidays/generate-weekends', [\App\Http\Controllers\Api\V1\Attendance\HolidayController::class, 'generateWeekends'])->name('holidays.generate-weekends');
-        Route::post('holidays/bulk-delete', [\App\Http\Controllers\Api\V1\Attendance\HolidayController::class, 'bulkDelete'])->name('holidays.bulk-delete');
-        Route::post('holidays/check', [\App\Http\Controllers\Api\V1\Attendance\HolidayController::class, 'check'])->name('holidays.check');
+        // Holidays — halaman "Hari Libur" hanya admin/TU/super_admin.
+        Route::middleware('permission:settings.attendance')->group(function () {
+            Route::apiResource('holidays', \App\Http\Controllers\Api\V1\Attendance\HolidayController::class);
+            Route::post('holidays/generate-weekends', [\App\Http\Controllers\Api\V1\Attendance\HolidayController::class, 'generateWeekends'])->name('holidays.generate-weekends');
+            Route::post('holidays/bulk-delete', [\App\Http\Controllers\Api\V1\Attendance\HolidayController::class, 'bulkDelete'])->name('holidays.bulk-delete');
+            Route::post('holidays/check', [\App\Http\Controllers\Api\V1\Attendance\HolidayController::class, 'check'])->name('holidays.check');
+        });
 
-        // QR Codes
+        // QR Codes — lihat QR/RFID milik sendiri (dipakai halaman self-service
+        // Absensi Saya, semua role) TETAP terbuka; regenerate/bulk/download/
+        // export (halaman admin "QR Code") dibatasi admin/TU/super_admin.
+        //
+        // 'bulk' WAJIB didaftarkan sebelum '{student}'/'{teacher}' — kalau
+        // tidak, GET qr/teachers/bulk ketangkap route wildcard {teacher} lebih
+        // dulu ("bulk" dianggap id, lalu 500 saat dicocokkan sebagai UUID).
+        // Ini bug lama yang baru ketahuan lewat test permission ini.
+        Route::middleware('permission:settings.attendance')->group(function () {
+            Route::get('qr/students/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkStudents'])->name('qr.students.bulk');
+            Route::get('qr/teachers/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkTeachers'])->name('qr.teachers.bulk');
+        });
+
         Route::get('qr/students/{student}', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'student'])->name('qr.student');
-        Route::post('qr/students/{student}/regenerate', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'regenerateStudent'])->name('qr.student.regenerate');
-        Route::get('qr/students/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkStudents'])->name('qr.students.bulk');
-        Route::get('qr/students/{student}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadStudent'])->name('qr.student.download');
         Route::get('qr/teachers/{teacher}', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'teacher'])->name('qr.teacher');
-        Route::post('qr/teachers/{teacher}/regenerate', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'regenerateTeacher'])->name('qr.teacher.regenerate');
-        Route::get('qr/teachers/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkTeachers'])->name('qr.teachers.bulk');
-        Route::get('qr/teachers/{teacher}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadTeacher'])->name('qr.teacher.download');
 
-        // Export QR/RFID untuk pembuatan kartu (Excel / ZIP gambar / PDF)
-        Route::get('qr/export', [\App\Http\Controllers\Api\V1\Attendance\QrExportController::class, 'export'])->name('qr.export');
-        Route::post('qr/generate-rfid', [\App\Http\Controllers\Api\V1\Attendance\QrExportController::class, 'generateRfid'])->name('qr.generate-rfid');
+        Route::middleware('permission:settings.attendance')->group(function () {
+            Route::post('qr/students/{student}/regenerate', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'regenerateStudent'])->name('qr.student.regenerate');
+            Route::get('qr/students/{student}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadStudent'])->name('qr.student.download');
+            Route::post('qr/teachers/{teacher}/regenerate', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'regenerateTeacher'])->name('qr.teacher.regenerate');
+            Route::get('qr/teachers/{teacher}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadTeacher'])->name('qr.teacher.download');
+
+            // Export QR/RFID untuk pembuatan kartu (Excel / ZIP gambar / PDF)
+            Route::get('qr/export', [\App\Http\Controllers\Api\V1\Attendance\QrExportController::class, 'export'])->name('qr.export');
+            Route::post('qr/generate-rfid', [\App\Http\Controllers\Api\V1\Attendance\QrExportController::class, 'generateRfid'])->name('qr.generate-rfid');
+        });
 
         // RFID
         Route::put('rfid/students/{student}', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'updateStudent'])->name('rfid.students.update');
@@ -227,10 +253,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Kode RFID terbitan sistem (kartu writable) — lihat RfidCodeGenerator
         Route::post('rfid/teachers/{teacher}/generate', [\App\Http\Controllers\Api\V1\Attendance\RfidController::class, 'generateTeacher'])->name('rfid.teachers.generate');
 
-        // Card Templates (Fase 5 — editor kartu ID drag-and-drop)
-        Route::get('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'show'])->name('card-templates.show');
-        Route::put('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'update'])->name('card-templates.update');
-        Route::delete('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'reset'])->name('card-templates.reset');
+        // Card Templates (Fase 5 — editor kartu ID drag-and-drop) — halaman
+        // "Template Kartu" hanya admin/TU/super_admin.
+        Route::middleware('permission:settings.attendance')->group(function () {
+            Route::get('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'show'])->name('card-templates.show');
+            Route::put('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'update'])->name('card-templates.update');
+            Route::delete('card-templates/{type}', [\App\Http\Controllers\Api\V1\Attendance\CardTemplateController::class, 'reset'])->name('card-templates.reset');
+        });
 
         // Reports
         Route::get('reports/monthly', [\App\Http\Controllers\Api\V1\Attendance\AttendanceReportController::class, 'monthly'])->name('reports.monthly');
@@ -253,8 +282,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // ===========================================
     // Scanner Module (for QR/RFID scanning)
+    // Mengoperasikan mesin scan untuk memproses absen ORANG LAIN (bukan
+    // attendance.check-in punya diri sendiri) — hanya admin/TU/super_admin,
+    // lihat PermissionSeeder soal attendance.scanner-operate.
     // ===========================================
-    Route::prefix('scan')->name('scan.')->group(function () {
+    Route::prefix('scan')->name('scan.')->middleware('permission:attendance.scanner-operate')->group(function () {
         Route::get('bootstrap', [\App\Http\Controllers\Api\V1\Attendance\ScannerController::class, 'bootstrap'])->name('bootstrap');
         Route::post('/', [\App\Http\Controllers\Api\V1\Attendance\ScannerController::class, 'scan'])->name('process');
         Route::post('sync-offline', [\App\Http\Controllers\Api\V1\Attendance\ScannerController::class, 'syncOffline'])->name('sync-offline');

@@ -138,7 +138,8 @@ class AttendanceScanService
                 'student_attendances',
                 $attendance->id,
                 null,
-                $attendance->toArray()
+                $attendance->toArray(),
+                $student->tenant_id
             );
 
             DB::commit();
@@ -214,7 +215,8 @@ class AttendanceScanService
             'student_attendances',
             $attendance->id,
             $oldData,
-            $attendance->fresh()->toArray()
+            $attendance->fresh()->toArray(),
+            $student->tenant_id
         );
 
         // Dispatch event for notification
@@ -305,7 +307,8 @@ class AttendanceScanService
             'employee_attendances',
             $attendance->id,
             null,
-            $attendance->toArray()
+            $attendance->toArray(),
+            $teacher->tenant_id
         );
 
         try {
@@ -375,7 +378,8 @@ class AttendanceScanService
             'employee_attendances',
             $attendance->id,
             $oldData,
-            $attendance->fresh()->toArray()
+            $attendance->fresh()->toArray(),
+            $teacher->tenant_id
         );
 
         try {

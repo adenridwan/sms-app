@@ -66,6 +66,15 @@ export const authApi = {
         return api.post<ApiResponse<{ status: string }>>('/auth/activate', data);
     },
 
+    // "Lupa password": bukan reset password, tapi login pakai kode akses
+    // sekali-pakai yang dibuatkan admin lewat menu Keamanan Login (lihat
+    // AuthController::loginWithOtp — tidak ada alur reset password/email
+    // link di aplikasi ini).
+    loginWithOtp: async (data: { email: string; code: string }) => {
+        await getCsrfCookie();
+        return api.post<ApiResponse<{ user: User; token: string }>>('/auth/login-otp', data);
+    },
+
     logout: () => api.post<ApiResponse>('/auth/logout'),
 
     me: () => api.get<ApiResponse<User>>('/auth/me'),

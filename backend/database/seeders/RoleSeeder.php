@@ -45,6 +45,7 @@ class RoleSeeder extends Seeder
                 'staff.view', 'staff.create', 'staff.update', 'staff.delete', 'staff.manage',
                 // Attendance
                 'attendance.view', 'attendance.record', 'attendance.manage', 'attendance.report',
+                'attendance.scanner-operate',
                 // Exams & Grades
                 'exams.view', 'exams.create', 'exams.update', 'exams.delete', 'exams.manage',
                 'grades.view', 'grades.input', 'grades.update', 'grades.manage', 'grades.finalize', 'grades.export',
@@ -183,6 +184,7 @@ class RoleSeeder extends Seeder
                 'staff.view', 'staff.create', 'staff.update',
                 // Attendance
                 'attendance.view', 'attendance.check-in', 'attendance.check-out',
+                'attendance.scanner-operate',
                 // Attendance settings (TU boleh atur jam absen & notifikasi)
                 'settings.attendance',
                 // Reports

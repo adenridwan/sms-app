@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Api\V1\Attendance;
 use App\Domain\Attendance\Enums\AttendanceStatus;
 use App\Domain\Attendance\Jobs\SendClassAttendanceRecap;
 use App\Domain\Attendance\Services\AttendanceStatusResolver;
+use App\Domain\Attendance\Services\LateCalculationService;
 use App\Http\Controllers\Api\ApiController;
 use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
+use App\Infrastructure\Persistence\Eloquent\Attendance\AttendanceSetting;
 use App\Infrastructure\Persistence\Eloquent\Attendance\NotificationSetting;
 use App\Infrastructure\Persistence\Eloquent\Attendance\StudentAttendance;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Student\StudentEnrollment;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +21,8 @@ use Illuminate\Support\Facades\DB;
 class StudentAttendanceController extends ApiController
 {
     public function __construct(
-        private AttendanceStatusResolver $statusResolver
+        private AttendanceStatusResolver $statusResolver,
+        private LateCalculationService $lateCalculationService
     ) {}
 
     /**
@@ -61,7 +65,10 @@ class StudentAttendanceController extends ApiController
         $this->authorizeClassroomAccess($request->user(), $classroomId);
 
         // Get all active students in classroom
-        $enrollments = StudentEnrollment::with(['student.user'])
+        // Eager-load user.profile — User::full_name dirakit dari relasi profile,
+        // bukan kolom; tanpa ini lazy loading dilarang jadi endpoint 500 dan
+        // frontend menampilkan daftar siswa kosong (lihat CLAUDE.md soal LoginLogService).
+        $enrollments = StudentEnrollment::with(['student.user.profile'])
             ->where('classroom_id', $classroomId)
             ->where('status', 'active')
             ->get();
@@ -122,6 +129,7 @@ class StudentAttendanceController extends ApiController
             'attendances' => ['required', 'array', 'min:1'],
             'attendances.*.student_id' => ['required', 'uuid', 'exists:students,id'],
             'attendances.*.status' => ['required', 'in:' . self::storableStatusValues()],
+            'attendances.*.check_in_time' => ['nullable', 'date_format:H:i'],
             'attendances.*.notes' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -147,6 +155,21 @@ class StudentAttendanceController extends ApiController
             return $this->error('Kelas tidak memiliki sekolah (tenant) yang valid.', 422);
         }
 
+        $settings = AttendanceSetting::getForTenant($classroomTenantId);
+        $checkInStart = substr($settings->check_in_start, 0, 5); // "H:i:s" -> "H:i"
+
+        // Jam masuk manual tidak boleh lebih awal dari jam masuk resmi
+        // (master Pengaturan Absensi) — dicek sebelum transaksi supaya
+        // seluruh batch ditolak bersama, bukan tersimpan sebagian.
+        foreach ($data['attendances'] as $att) {
+            if (($att['check_in_time'] ?? null) && $att['check_in_time'] < $checkInStart) {
+                return $this->error(
+                    "Jam masuk tidak boleh kurang dari jam masuk resmi ({$checkInStart}).",
+                    422
+                );
+            }
+        }
+
         try {
             DB::beginTransaction();
 
@@ -156,6 +179,19 @@ class StudentAttendanceController extends ApiController
             foreach ($data['attendances'] as $att) {
                 $dbStatus = AttendanceStatus::fromSlug($att['status'])->value;
 
+                // Jam masuk hanya relevan untuk status Hadir. Kalau tidak
+                // diisi manual (mis. lewat "Ceklis Hadir Semua"), ambil dari
+                // jam masuk resmi di master Pengaturan Absensi (on-time by
+                // default) — bukan dibiarkan kosong.
+                $checkInTime = null;
+                $lateMinutes = 0;
+                if ($dbStatus === AttendanceStatus::Hadir->value) {
+                    $timeString = $att['check_in_time'] ?? $checkInStart;
+                    $checkInCarbon = Carbon::parse($data['date'] . ' ' . $timeString);
+                    $checkInTime = $checkInCarbon->format('H:i:s');
+                    $lateMinutes = $this->lateCalculationService->calculate($checkInCarbon, $classroomTenantId);
+                }
+
                 $existing = StudentAttendance::where('student_id', $att['student_id'])
                     ->forDate($data['date'])
                     ->first();
@@ -164,6 +200,10 @@ class StudentAttendanceController extends ApiController
                     $existing->update([
                         'status' => $dbStatus,
                         'notes' => $att['notes'] ?? $existing->notes,
+                        ...($dbStatus === AttendanceStatus::Hadir->value ? [
+                            'check_in_time' => $checkInTime,
+                            'menit_keterlambatan' => $lateMinutes,
+                        ] : []),
                     ]);
                     $updated++;
                 } else {
@@ -185,6 +225,8 @@ class StudentAttendanceController extends ApiController
                         'semester_id' => $studentEnrollment?->academicYear?->activeSemester?->id,
                         'attendance_date' => $data['date'],
                         'status' => $dbStatus,
+                        'check_in_time' => $checkInTime,
+                        'menit_keterlambatan' => $lateMinutes,
                         'notes' => $att['notes'] ?? null,
                         'recorded_by' => $request->user()->id,
                     ]);
@@ -451,21 +493,25 @@ class StudentAttendanceController extends ApiController
 
     private function calculateSummary(array $results): array
     {
-        $rawCounts = [];
-        $belumScan = 0;
+        // $result['status'] di sini adalah slug wire Indonesia (lihat daily(),
+        // diisi dari $status->slug()) — BUKAN nilai DB Inggris yang diharapkan
+        // AttendanceStatus::summaryFromRaw(). Memakainya sebagai key ke situ
+        // (bug lama) membuat hadir/sakit/izin/alfa selalu terhitung 0 karena
+        // key-nya tidak pernah cocok. Tally langsung dari slug di sini.
+        $summary = ['hadir' => 0, 'sakit' => 0, 'izin' => 0, 'alfa' => 0, 'belum_scan' => 0];
 
         foreach ($results as $result) {
-            $status = $result['status'];
-            if ($status === AttendanceStatus::BelumScan->value) {
-                $belumScan++;
-                continue;
+            $slug = $result['status'];
+            // tanpa_keterangan digabung ke bucket alfa, sama seperti summaryFromRaw()
+            // menggabungkan DB value absent+alpha ke satu key 'alfa'.
+            $bucket = $slug === AttendanceStatus::TanpaKeterangan->slug() ? 'alfa' : $slug;
+
+            if (array_key_exists($bucket, $summary)) {
+                $summary[$bucket]++;
             }
-            $rawCounts[$status] = ($rawCounts[$status] ?? 0) + 1;
         }
 
-        $summary = AttendanceStatus::summaryFromRaw($rawCounts);
         $summary['total'] = count($results);
-        $summary['belum_scan'] = $belumScan;
 
         return $summary;
     }

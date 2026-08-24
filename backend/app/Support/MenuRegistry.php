@@ -65,6 +65,10 @@ class MenuRegistry
             [
                 'key' => 'attendance', 'title' => 'Absensi', 'permission' => 'attendance.view',
                 'children' => [
+                    // Hanya guru & pegawai yang benar-benar presensi (punya
+                    // attendance.check-in) — bukan semua yang bisa lihat
+                    // grup Absensi (mis. bendahara/pustakawan/kepala sekolah).
+                    ['key' => 'attendance.me', 'title' => 'Absensi Saya', 'permission' => 'attendance.check-in'],
                     ['key' => 'attendance.students', 'title' => 'Absensi Siswa', 'permission' => null],
                     ['key' => 'attendance.teachers', 'title' => 'Absensi Pegawai', 'permission' => null],
                     ['key' => 'attendance.reports', 'title' => 'Rekap Absensi', 'permission' => null],

@@ -98,6 +98,14 @@ class PermissionSeeder extends Seeder
             'attendance.report' => 'Lihat Laporan Absensi',
             'attendance.check-in' => 'Check In',
             'attendance.check-out' => 'Check Out',
+            // Operasikan mesin/halaman Scanner untuk memproses absen ORANG
+            // LAIN (siswa/guru lain) lewat QR/RFID — beda dari
+            // attendance.check-in yang cuma untuk absen diri sendiri.
+            // Sengaja dipisah dari attendance.record supaya guru/wali_kelas
+            // (yang punya attendance.record untuk mengisi absensi kelasnya
+            // secara manual) tidak otomatis kebagian akses mengoperasikan
+            // scanner fisik di depan sekolah.
+            'attendance.scanner-operate' => 'Operasikan Scanner Absensi',
         ],
 
         // Exams & Grades

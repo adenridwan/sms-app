@@ -19,12 +19,20 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import type { DashboardAttendanceStats } from '@/types/attendance';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface Props {
     stats: DashboardAttendanceStats;
 }
 
 export default function AttendanceIndex({ stats }: Props) {
+    const { can } = usePermissions();
+    const canOperateScanner = can('attendance.scanner-operate');
+    // Perkakas back-office (kalender libur, kredensial QR/RFID, desain
+    // kartu, pengaturan) — sama seperti halaman & endpoint-nya sendiri,
+    // hanya admin/tata_usaha/super_admin (settings.attendance).
+    const canManageBackOffice = can('settings.attendance');
+
     const menuItems = [
         {
             title: 'Absensi Siswa',
@@ -50,22 +58,22 @@ export default function AttendanceIndex({ stats }: Props) {
             color: 'text-purple-600',
             bg: 'bg-purple-50',
         },
-        {
+        ...(canManageBackOffice ? [{
             title: 'Hari Libur',
             description: 'Kelola kalender hari libur',
             icon: Calendar,
             href: '/attendance/holidays',
             color: 'text-orange-600',
             bg: 'bg-orange-50',
-        },
-        {
+        }] : []),
+        ...(canManageBackOffice ? [{
             title: 'QR Code',
             description: 'Generate QR code untuk siswa dan guru',
             icon: QrCode,
             href: '/attendance/qr-codes',
             color: 'text-indigo-600',
             bg: 'bg-indigo-50',
-        },
+        }] : []),
         {
             title: 'Laporan',
             description: 'Lihat laporan dan statistik',
@@ -74,30 +82,30 @@ export default function AttendanceIndex({ stats }: Props) {
             color: 'text-cyan-600',
             bg: 'bg-cyan-50',
         },
-        {
+        ...(canManageBackOffice ? [{
             title: 'Template Kartu',
             description: 'Atur tata letak kartu ID drag-and-drop',
             icon: LayoutTemplate,
             href: '/attendance/card-templates',
             color: 'text-pink-600',
             bg: 'bg-pink-50',
-        },
-        {
+        }] : []),
+        ...(canManageBackOffice ? [{
             title: 'Pengaturan',
             description: 'Konfigurasi absensi dan notifikasi',
             icon: Settings,
             href: '/attendance/settings',
             color: 'text-gray-600',
             bg: 'bg-gray-50',
-        },
-        {
+        }] : []),
+        ...(canOperateScanner ? [{
             title: 'Scanner',
             description: 'Buka aplikasi scanner QR/RFID',
             icon: ScanLine,
             href: '/scanner',
             color: 'text-red-600',
             bg: 'bg-red-50',
-        },
+        }] : []),
     ];
 
     const summary = stats?.summary || {
@@ -124,12 +132,14 @@ export default function AttendanceIndex({ stats }: Props) {
                             Kelola kehadiran siswa dan guru
                         </p>
                     </div>
-                    <Button asChild>
-                        <Link href="/scanner">
-                            <ScanLine className="mr-2 h-4 w-4" />
-                            Buka Scanner
-                        </Link>
-                    </Button>
+                    {canOperateScanner && (
+                        <Button asChild>
+                            <Link href="/scanner">
+                                <ScanLine className="mr-2 h-4 w-4" />
+                                Buka Scanner
+                            </Link>
+                        </Button>
+                    )}
                 </div>
 
                 {/* Today's Summary */}

@@ -26,7 +26,18 @@ import type {
     LookupResult,
     CardLayout,
     CardTemplateResponse,
+    MyAttendanceToday,
+    MyAttendanceHistory,
 } from '@/types/attendance';
+
+// My Attendance API (self-service — guru & pegawai)
+export const myAttendanceApi = {
+    today: () =>
+        api.get<ApiResponse<MyAttendanceToday>>('/attendance/me/today'),
+
+    history: (month: string) =>
+        api.get<ApiResponse<MyAttendanceHistory>>('/attendance/me/history', { params: { month } }),
+};
 
 // Card Template API (Fase 5 — editor kartu ID drag-and-drop)
 export const cardTemplateApi = {
@@ -100,7 +111,7 @@ export const teacherAttendanceApi = {
 // Leave Permission API
 export const leavePermissionApi = {
     list: (params?: LeavePermissionFilters) =>
-        api.get<PaginatedResponse<LeavePermission>>('/attendance/permissions', { params }),
+        api.get<ApiResponse<PaginatedResponse<LeavePermission>>>('/attendance/permissions', { params }),
 
     get: (id: string) =>
         api.get<ApiResponse<LeavePermission>>(`/attendance/permissions/${id}`),
@@ -347,6 +358,7 @@ export const publicAttendanceApi = {
 export default {
     cardTemplate: cardTemplateApi,
     scanner: scannerApi,
+    myAttendance: myAttendanceApi,
     studentAttendance: studentAttendanceApi,
     teacherAttendance: teacherAttendanceApi,
     leavePermission: leavePermissionApi,

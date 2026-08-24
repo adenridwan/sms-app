@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,10 +31,11 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Calendar, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Clock, Pencil, Send, ScanLine } from 'lucide-react';
-import { studentAttendanceApi } from '@/services/attendance';
+import { Calendar, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Clock, Pencil, Send, ScanLine, Search, ListChecks } from 'lucide-react';
+import { studentAttendanceApi, attendanceSettingsApi } from '@/services/attendance';
 import type { DailyAttendanceRecord, AttendanceStatus } from '@/types/attendance';
 import type { ClassRoom } from '@/types';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface Props {
     classrooms: ClassRoom[];
@@ -70,7 +71,31 @@ const getStatusBadge = (status: string) => {
     return <Badge variant={variants[status] || 'outline'}>{labels[status] || status}</Badge>;
 };
 
+/** "HH:mm" atau "HH:mm:ss" -> menit sejak 00:00 */
+const timeToMinutes = (time: string): number => {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+};
+
+const minutesToTime = (totalMinutes: number): string => {
+    const normalized = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+    const hh = Math.floor(normalized / 60);
+    const mm = normalized % 60;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+};
+
+const nowTimeString = (): string => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
+
+interface AttendanceTimeSettings {
+    checkInStart: string; // jam masuk resmi, "HH:mm"
+    checkInDeadline: string; // check_in_end + toleransi, "HH:mm" — lewat ini dianggap terlambat
+}
+
 export default function StudentAttendanceIndex({ classrooms, initialDate, initialClassroom }: Props) {
+    const { can } = usePermissions();
     const [date, setDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
     const [classroomId, setClassroomId] = useState(initialClassroom || '');
     const [students, setStudents] = useState<DailyAttendanceRecord[]>([]);
@@ -78,8 +103,35 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [sending, setSending] = useState(false);
+    const [search, setSearch] = useState('');
     const [editingStudent, setEditingStudent] = useState<DailyAttendanceRecord | null>(null);
     const [editForm, setEditForm] = useState({ status: '' as AttendanceStatus, notes: '' });
+    const [timeSettings, setTimeSettings] = useState<AttendanceTimeSettings | null>(null);
+
+    // Modal isi jam masuk manual — dipicu ketika menandai Hadir tapi sudah
+    // lewat batas jam masuk (check_in_end + toleransi keterlambatan).
+    const [lateEntryOpen, setLateEntryOpen] = useState(false);
+    const [lateEntryStudentId, setLateEntryStudentId] = useState<string | null>(null);
+    const [lateEntryTime, setLateEntryTime] = useState('');
+    const [lateEntryError, setLateEntryError] = useState('');
+
+    useEffect(() => {
+        attendanceSettingsApi
+            .get()
+            .then((response) => {
+                const attendance = response.data.data?.attendance;
+                if (!attendance) return;
+                const checkInStart = attendance.check_in_start.slice(0, 5);
+                const checkInDeadline = minutesToTime(
+                    timeToMinutes(attendance.check_in_end.slice(0, 5)) + attendance.late_tolerance_minutes
+                );
+                setTimeSettings({ checkInStart, checkInDeadline });
+            })
+            .catch(() => {
+                // Pengaturan jam masuk gagal dimuat — auto-isi jam masuk & deteksi
+                // terlambat dilewati, status tetap bisa diubah manual seperti biasa.
+            });
+    }, []);
 
     const fetchAttendance = async () => {
         if (!classroomId || !date) return;
@@ -104,7 +156,32 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
         }
     }, [classroomId, date]);
 
+    const applyPresentStatus = (studentId: string, checkInTime: string) => {
+        setStudents(prev =>
+            prev.map(s =>
+                s.student_id === studentId
+                    ? { ...s, status: 'hadir' as AttendanceStatus, status_label: 'Hadir', check_in_time: checkInTime, menit_keterlambatan: 0 }
+                    : s
+            )
+        );
+    };
+
     const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
+        if (status === 'hadir') {
+            if (timeSettings && nowTimeString() > timeSettings.checkInDeadline) {
+                // Sudah lewat batas jam masuk — jangan asumsikan tepat waktu,
+                // minta admin mengisi jam masuk sebenarnya lewat modal.
+                setLateEntryStudentId(studentId);
+                setLateEntryTime(nowTimeString());
+                setLateEntryError('');
+                setLateEntryOpen(true);
+                return;
+            }
+
+            applyPresentStatus(studentId, timeSettings?.checkInStart ?? nowTimeString());
+            return;
+        }
+
         setStudents(prev =>
             prev.map(s =>
                 s.student_id === studentId
@@ -112,6 +189,39 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                     : s
             )
         );
+    };
+
+    const confirmLateEntry = () => {
+        if (!lateEntryStudentId) return;
+
+        if (timeSettings && lateEntryTime < timeSettings.checkInStart) {
+            setLateEntryError(`Jam masuk tidak boleh kurang dari jam masuk resmi (${timeSettings.checkInStart}).`);
+            return;
+        }
+
+        applyPresentStatus(lateEntryStudentId, lateEntryTime);
+        setLateEntryOpen(false);
+        setLateEntryStudentId(null);
+    };
+
+    const cancelLateEntry = () => {
+        setLateEntryOpen(false);
+        setLateEntryStudentId(null);
+        setLateEntryError('');
+    };
+
+    const handleMarkAllPresent = () => {
+        const checkInStart = timeSettings?.checkInStart ?? nowTimeString();
+        setStudents(prev =>
+            prev.map(s => ({
+                ...s,
+                status: 'hadir' as AttendanceStatus,
+                status_label: 'Hadir',
+                check_in_time: checkInStart,
+                menit_keterlambatan: 0,
+            }))
+        );
+        toast.info('Semua siswa ditandai Hadir (jam masuk sesuai jam masuk resmi) — klik "Simpan Semua" untuk menyimpan.');
     };
 
     const handleSaveAll = async () => {
@@ -122,6 +232,7 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
             const attendances = students.map(s => ({
                 student_id: s.student_id,
                 status: s.status,
+                check_in_time: s.status === 'hadir' ? (s.check_in_time || undefined) : undefined,
                 notes: s.notes || undefined,
             }));
 
@@ -133,8 +244,10 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
 
             toast.success('Absensi berhasil disimpan');
             fetchAttendance();
-        } catch (error) {
-            toast.error('Gagal menyimpan absensi');
+        } catch (error: unknown) {
+            const message = (error as { response?: { data?: { message?: string } } })
+                ?.response?.data?.message;
+            toast.error(message || 'Gagal menyimpan absensi');
         } finally {
             setSaving(false);
         }
@@ -190,6 +303,16 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
         });
     };
 
+    const filteredStudents = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        if (!query) return students;
+        return students.filter(
+            (s) => s.name.toLowerCase().includes(query) || s.nis.toLowerCase().includes(query)
+        );
+    }, [students, search]);
+
+    const lateEntryStudent = students.find(s => s.student_id === lateEntryStudentId) || null;
+
     return (
         <MainLayout title="Absensi Siswa">
             <Head title="Absensi Siswa" />
@@ -203,12 +326,14 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                             Kelola kehadiran harian siswa per kelas
                         </p>
                     </div>
-                    <Button asChild variant="outline">
-                        <Link href="/scanner">
-                            <ScanLine className="mr-2 h-4 w-4" />
-                            Buka Scanner
-                        </Link>
-                    </Button>
+                    {can('attendance.scanner-operate') && (
+                        <Button asChild variant="outline">
+                            <Link href="/scanner">
+                                <ScanLine className="mr-2 h-4 w-4" />
+                                Buka Scanner
+                            </Link>
+                        </Button>
+                    )}
                 </div>
 
                 {/* Filters */}
@@ -331,12 +456,33 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                 {/* Table */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Daftar Siswa</CardTitle>
-                        <CardDescription>
-                            {students.length > 0
-                                ? `${students.length} siswa di kelas ini`
-                                : 'Pilih kelas untuk melihat daftar siswa'}
-                        </CardDescription>
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <CardTitle>Daftar Siswa</CardTitle>
+                                <CardDescription>
+                                    {students.length > 0
+                                        ? `${filteredStudents.length} dari ${students.length} siswa di kelas ini`
+                                        : 'Pilih kelas untuk melihat daftar siswa'}
+                                </CardDescription>
+                            </div>
+                            {students.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="relative w-[220px]">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Cari nama atau NIS..."
+                                            value={search}
+                                            onChange={(e) => setSearch(e.target.value)}
+                                            className="pl-8"
+                                        />
+                                    </div>
+                                    <Button onClick={handleMarkAllPresent} variant="outline" size="sm">
+                                        <ListChecks className="mr-2 h-4 w-4" />
+                                        Ceklis Hadir Semua
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent>
                         {loading ? (
@@ -344,6 +490,10 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                         ) : students.length === 0 ? (
                             <div className="py-8 text-center text-muted-foreground">
                                 {classroomId ? 'Tidak ada siswa di kelas ini' : 'Pilih kelas terlebih dahulu'}
+                            </div>
+                        ) : filteredStudents.length === 0 ? (
+                            <div className="py-8 text-center text-muted-foreground">
+                                Tidak ada siswa yang cocok dengan pencarian "{search}"
                             </div>
                         ) : (
                             <div className="rounded-md border">
@@ -362,7 +512,7 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {students.map((student, index) => (
+                                        {filteredStudents.map((student, index) => (
                                             <TableRow key={student.student_id}>
                                                 <TableCell>{student.student_number_in_class || index + 1}</TableCell>
                                                 <TableCell className="font-medium">{student.nis}</TableCell>
@@ -417,6 +567,45 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Modal isi jam masuk (terlambat) */}
+            <Dialog open={lateEntryOpen} onOpenChange={(open) => !open && cancelLateEntry()}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Isi Jam Masuk</DialogTitle>
+                        <DialogDescription>
+                            {lateEntryStudent?.name} sudah melewati batas jam masuk
+                            {timeSettings ? ` (${timeSettings.checkInDeadline})` : ''}. Masukkan jam masuk sebenarnya.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                        <Label>Jam Masuk</Label>
+                        <Input
+                            type="time"
+                            value={lateEntryTime}
+                            min={timeSettings?.checkInStart}
+                            onChange={(e) => {
+                                setLateEntryTime(e.target.value);
+                                setLateEntryError('');
+                            }}
+                        />
+                        {timeSettings && (
+                            <p className="text-sm text-muted-foreground">
+                                Tidak boleh kurang dari jam masuk resmi ({timeSettings.checkInStart}).
+                            </p>
+                        )}
+                        {lateEntryError && (
+                            <p className="text-sm text-destructive">{lateEntryError}</p>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={cancelLateEntry}>
+                            Batal
+                        </Button>
+                        <Button onClick={confirmLateEntry}>Simpan Jam Masuk</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Edit Dialog */}
             <Dialog open={!!editingStudent} onOpenChange={() => setEditingStudent(null)}>

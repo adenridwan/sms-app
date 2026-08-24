@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { dashboardApi } from '@/services/api';
 import { cn, formatCurrency } from '@/lib/utils';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
     Users,
     GraduationCap,
@@ -171,6 +172,7 @@ function StatCard({
 }
 
 function AttendanceTodayCard({ attendance, title }: { attendance: AttendanceToday; title: string }) {
+    const { can } = usePermissions();
     const s = attendance.summary;
     const boxes = [
         { label: 'Hadir', value: s.hadir, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
@@ -190,12 +192,14 @@ function AttendanceTodayCard({ attendance, title }: { attendance: AttendanceToda
                     </CardTitle>
                     <CardDescription>{todayLabel}</CardDescription>
                 </div>
-                <Button asChild variant="outline" size="sm">
-                    <Link href="/scanner">
-                        <ScanLine className="mr-2 h-4 w-4" />
-                        Buka Scanner
-                    </Link>
-                </Button>
+                {can('attendance.scanner-operate') && (
+                    <Button asChild variant="outline" size="sm">
+                        <Link href="/scanner">
+                            <ScanLine className="mr-2 h-4 w-4" />
+                            Buka Scanner
+                        </Link>
+                    </Button>
+                )}
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
@@ -274,6 +278,8 @@ function FinanceSummaryCard({ finance }: { finance: FinanceSummary }) {
 }
 
 function QuickActions() {
+    const { can } = usePermissions();
+
     return (
         <Card>
             <CardHeader>
@@ -288,12 +294,14 @@ function QuickActions() {
                             <span>Absensi</span>
                         </Link>
                     </Button>
-                    <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
-                        <Link href="/scanner">
-                            <ScanLine className="h-5 w-5" />
-                            <span>Scanner</span>
-                        </Link>
-                    </Button>
+                    {can('attendance.scanner-operate') && (
+                        <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
+                            <Link href="/scanner">
+                                <ScanLine className="h-5 w-5" />
+                                <span>Scanner</span>
+                            </Link>
+                        </Button>
+                    )}
                     <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
                         <Link href="/attendance/permissions">
                             <FileText className="h-5 w-5" />
@@ -324,18 +332,27 @@ function EmptyState({ title, message }: { title: string; message: string }) {
     );
 }
 
-/** Paket admin / kepala sekolah / operasional */
+/**
+ * Paket admin / kepala sekolah / operasional.
+ *
+ * Kartu ringkasan sekolah (Total Siswa/Guru/Staff/Kelas) bersifat statistik
+ * setingan-umum sekolah — hanya untuk 'admin' (admin & super_admin).
+ * 'principal' (kepala sekolah/wakil) dan 'operational' (TU/pustakawan)
+ * cukup lihat ringkasan absensi hari ini, bukan angka sekolah menyeluruh.
+ */
 function SchoolDashboard({ stats }: { stats: DashboardStats }) {
     return (
         <>
             <QuickActions />
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <StatCard title="Total Siswa" value={stats.total_students ?? 0} icon={Users} color="text-blue-600" bg="bg-blue-50 dark:bg-blue-900/20" />
-                <StatCard title="Total Guru" value={stats.total_teachers ?? 0} icon={GraduationCap} color="text-green-600" bg="bg-green-50 dark:bg-green-900/20" />
-                <StatCard title="Total Staff" value={stats.total_staff ?? 0} icon={Briefcase} color="text-purple-600" bg="bg-purple-50 dark:bg-purple-900/20" />
-                <StatCard title="Total Kelas" value={stats.total_classrooms ?? 0} icon={DoorOpen} color="text-orange-600" bg="bg-orange-50 dark:bg-orange-900/20" />
-            </div>
+            {stats.package === 'admin' && (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <StatCard title="Total Siswa" value={stats.total_students ?? 0} icon={Users} color="text-blue-600" bg="bg-blue-50 dark:bg-blue-900/20" />
+                    <StatCard title="Total Guru" value={stats.total_teachers ?? 0} icon={GraduationCap} color="text-green-600" bg="bg-green-50 dark:bg-green-900/20" />
+                    <StatCard title="Total Staff" value={stats.total_staff ?? 0} icon={Briefcase} color="text-purple-600" bg="bg-purple-50 dark:bg-purple-900/20" />
+                    <StatCard title="Total Kelas" value={stats.total_classrooms ?? 0} icon={DoorOpen} color="text-orange-600" bg="bg-orange-50 dark:bg-orange-900/20" />
+                </div>
+            )}
 
             {stats.attendance_today && (
                 <AttendanceTodayCard attendance={stats.attendance_today} title="Absensi Hari Ini" />

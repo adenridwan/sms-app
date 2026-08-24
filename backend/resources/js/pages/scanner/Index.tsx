@@ -1,5 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import QrScanner from 'qr-scanner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -54,6 +55,10 @@ export default function ScannerIndex() {
     const inputRef = useRef<HTMLInputElement>(null);
     const audioSuccessRef = useRef<HTMLAudioElement>(null);
     const audioErrorRef = useRef<HTMLAudioElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const qrScannerRef = useRef<QrScanner | null>(null);
+    const lastDecodedRef = useRef<{ code: string; time: number } | null>(null);
+    const [cameraError, setCameraError] = useState<string | null>(null);
 
     const { queueScan, pendingCount, syncQueue, syncing } = useOfflineQueue();
 
@@ -186,6 +191,64 @@ export default function ScannerIndex() {
             }
         }
     }, [isOnline, scanType, scanning, queueScan]);
+
+    // QrScanner instance dibuat sekali saat masuk mode kamera dan tidak
+    // dibongkar-pasang ulang tiap scanType/isOnline berubah (itu akan
+    // menghentikan & meminta ulang stream kamera). Callback decode selalu
+    // memanggil versi terbaru handleScan lewat ref ini.
+    const handleScanRef = useRef(handleScan);
+    useEffect(() => {
+        handleScanRef.current = handleScan;
+    }, [handleScan]);
+
+    useEffect(() => {
+        if (scanMode !== 'camera' || !videoRef.current) {
+            return;
+        }
+
+        setCameraError(null);
+
+        const qrScanner = new QrScanner(
+            videoRef.current,
+            (result) => {
+                const now = Date.now();
+                const last = lastDecodedRef.current;
+                // QR yang sama terus terbaca puluhan kali/detik selama masih
+                // di depan kamera — abaikan pengulangan dalam 3 detik supaya
+                // tidak memicu banyak request untuk kode yang sama.
+                if (last && last.code === result.data && now - last.time < 3000) {
+                    return;
+                }
+                lastDecodedRef.current = { code: result.data, time: now };
+                handleScanRef.current(result.data);
+            },
+            {
+                returnDetailedScanResult: true,
+                highlightScanRegion: true,
+                highlightCodeOutline: true,
+                maxScansPerSecond: 5,
+            }
+        );
+
+        qrScannerRef.current = qrScanner;
+
+        qrScanner.start().catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            setCameraError(
+                message.toLowerCase().includes('permission') || message.toLowerCase().includes('denied')
+                    ? 'Izin kamera ditolak. Aktifkan izin kamera untuk situs ini di pengaturan browser.'
+                    : message.toLowerCase().includes('camera') || message.toLowerCase().includes('device')
+                        ? 'Kamera tidak ditemukan di perangkat ini.'
+                        : 'Gagal membuka kamera: ' + message
+            );
+        });
+
+        return () => {
+            qrScanner.stop();
+            qrScanner.destroy();
+            qrScannerRef.current = null;
+        };
+    }, [scanMode]);
 
     const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
@@ -372,17 +435,26 @@ export default function ScannerIndex() {
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    <div className="aspect-video rounded-lg bg-gray-900">
-                                        {/* QR Camera Scanner would go here */}
-                                        <div className="flex h-full items-center justify-center text-white">
-                                            <div className="text-center">
-                                                <Camera className="mx-auto h-16 w-16" />
-                                                <p className="mt-2">Kamera QR Scanner</p>
-                                                <p className="text-sm text-gray-400">
-                                                    (Requires camera permission)
-                                                </p>
+                                    <div className="relative aspect-video overflow-hidden rounded-lg bg-gray-900">
+                                        <video
+                                            ref={videoRef}
+                                            className="h-full w-full object-cover"
+                                            muted
+                                            playsInline
+                                        />
+                                        {cameraError && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/95 p-4 text-white">
+                                                <div className="text-center">
+                                                    <Camera className="mx-auto h-12 w-12 text-gray-400" />
+                                                    <p className="mt-2 text-sm">{cameraError}</p>
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
+                                        {scanning && !cameraError && (
+                                            <div className="absolute right-3 top-3">
+                                                <RefreshCw className="h-6 w-6 animate-spin text-white" />
+                                            </div>
+                                        )}
                                     </div>
                                     <p className="text-center text-sm text-muted-foreground">
                                         Arahkan kamera ke QR Code

@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -14,10 +14,11 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { ArrowLeft, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Upload, Loader2, User as UserIcon } from 'lucide-react';
 import { leavePermissionApi } from '@/services/attendance';
 import type { LeaveType } from '@/types/attendance';
-import type { Student, User } from '@/types';
+import type { Student, User, PageProps } from '@/types';
+import { isFullAccessRole, roleSummary } from '@/lib/roles';
 
 interface Props {
     students?: Student[];
@@ -25,6 +26,13 @@ interface Props {
 }
 
 export default function CreateLeavePermission({ students = [], teachers = [] }: Props) {
+    const { auth } = usePage<PageProps>().props;
+    // Guru/siswa (dan role tanpa akses penuh lainnya) hanya boleh mengajukan
+    // izin untuk dirinya sendiri — pemilih siswa/guru disembunyikan dan
+    // student_id/teacher_id tidak dikirim sama sekali; server yang
+    // menentukan identitasnya dari akun login (lihat
+    // LeavePermissionController::resolveSelfIds).
+    const isFullAccess = isFullAccessRole(auth.user?.roles);
     const [submitting, setSubmitting] = useState(false);
     const [personType, setPersonType] = useState<'student' | 'teacher'>('student');
     const [form, setForm] = useState({
@@ -40,13 +48,15 @@ export default function CreateLeavePermission({ students = [], teachers = [] }: 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (personType === 'student' && !form.student_id) {
-            toast.error('Pilih siswa terlebih dahulu');
-            return;
-        }
-        if (personType === 'teacher' && !form.teacher_id) {
-            toast.error('Pilih guru terlebih dahulu');
-            return;
+        if (isFullAccess) {
+            if (personType === 'student' && !form.student_id) {
+                toast.error('Pilih siswa terlebih dahulu');
+                return;
+            }
+            if (personType === 'teacher' && !form.teacher_id) {
+                toast.error('Pilih guru terlebih dahulu');
+                return;
+            }
         }
         if (!form.tanggal_mulai || !form.tanggal_selesai) {
             toast.error('Tanggal harus diisi');
@@ -66,10 +76,12 @@ export default function CreateLeavePermission({ students = [], teachers = [] }: 
                 alasan: form.alasan,
             };
 
-            if (personType === 'student') {
-                data.student_id = form.student_id;
-            } else {
-                data.teacher_id = form.teacher_id;
+            if (isFullAccess) {
+                if (personType === 'student') {
+                    data.student_id = form.student_id;
+                } else {
+                    data.teacher_id = form.teacher_id;
+                }
             }
 
             if (form.bukti) {
@@ -125,64 +137,80 @@ export default function CreateLeavePermission({ students = [], teachers = [] }: 
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* Person Type */}
-                            <div className="space-y-2">
-                                <Label>Tipe</Label>
-                                <Select
-                                    value={personType}
-                                    onValueChange={(value: 'student' | 'teacher') => {
-                                        setPersonType(value);
-                                        setForm(prev => ({ ...prev, student_id: '', teacher_id: '' }));
-                                    }}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="student">Siswa</SelectItem>
-                                        <SelectItem value="teacher">Guru/Karyawan</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {isFullAccess ? (
+                                <>
+                                    {/* Person Type */}
+                                    <div className="space-y-2">
+                                        <Label>Tipe</Label>
+                                        <Select
+                                            value={personType}
+                                            onValueChange={(value: 'student' | 'teacher') => {
+                                                setPersonType(value);
+                                                setForm(prev => ({ ...prev, student_id: '', teacher_id: '' }));
+                                            }}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="student">Siswa</SelectItem>
+                                                <SelectItem value="teacher">Guru/Karyawan</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
-                            {/* Person Selection */}
-                            {personType === 'student' ? (
-                                <div className="space-y-2">
-                                    <Label>Siswa</Label>
-                                    <Select
-                                        value={form.student_id}
-                                        onValueChange={(value) => setForm(prev => ({ ...prev, student_id: value }))}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Pilih siswa" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {students.map((student) => (
-                                                <SelectItem key={student.id} value={student.id}>
-                                                    {student.nis} - {student.user?.full_name || 'Unknown'}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                    {/* Person Selection */}
+                                    {personType === 'student' ? (
+                                        <div className="space-y-2">
+                                            <Label>Siswa</Label>
+                                            <Select
+                                                value={form.student_id}
+                                                onValueChange={(value) => setForm(prev => ({ ...prev, student_id: value }))}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Pilih siswa" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {students.map((student) => (
+                                                        <SelectItem key={student.id} value={student.id}>
+                                                            {student.nis} - {student.user?.full_name || 'Unknown'}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <Label>Guru/Karyawan</Label>
+                                            <Select
+                                                value={form.teacher_id}
+                                                onValueChange={(value) => setForm(prev => ({ ...prev, teacher_id: value }))}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Pilih guru/karyawan" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {teachers.map((teacher) => (
+                                                        <SelectItem key={teacher.id} value={teacher.id}>
+                                                            {teacher.full_name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
+                                </>
                             ) : (
-                                <div className="space-y-2">
-                                    <Label>Guru/Karyawan</Label>
-                                    <Select
-                                        value={form.teacher_id}
-                                        onValueChange={(value) => setForm(prev => ({ ...prev, teacher_id: value }))}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Pilih guru/karyawan" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {teachers.map((teacher) => (
-                                                <SelectItem key={teacher.id} value={teacher.id}>
-                                                    {teacher.full_name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                <div className="flex items-center gap-3 rounded-md border bg-muted/50 p-3">
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                                        <UserIcon className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Mengajukan izin untuk</div>
+                                        <div className="font-medium">
+                                            {auth.user?.full_name} · {roleSummary(auth.user?.roles)}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 

@@ -15,9 +15,10 @@ class AuditLogService
         string $tabel,
         ?string $recordId = null,
         ?array $dataLama = null,
-        ?array $dataBaru = null
+        ?array $dataBaru = null,
+        ?string $tenantId = null
     ): AttendanceAuditLog {
-        return AttendanceAuditLog::log($aksi, $tabel, $recordId, $dataLama, $dataBaru);
+        return AttendanceAuditLog::log($aksi, $tabel, $recordId, $dataLama, $dataBaru, $tenantId);
     }
 
     /**
