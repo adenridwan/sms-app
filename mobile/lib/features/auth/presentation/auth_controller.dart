@@ -94,6 +94,29 @@ class AuthController extends StateNotifier<AuthState> {
     if (state.status != AuthStatus.authenticated || state.isSessionVerified) {
       return;
     }
+
+    // Sesi hasil login offline belum punya token sama sekali. Tukar sekarang
+    // dengan login sungguhan memakai password yang masih dipegang di memori —
+    // tanpa token, antrean absensi tak akan pernah bisa terkirim.
+    final email = _pendingEmail;
+    final password = _pendingPassword;
+    if (password != null && email != null) {
+      try {
+        await _repo.login(email: email, password: password);
+        final user = await _repo.me();
+        await _repo.rememberForOffline(
+            email: email, password: password, user: user);
+        _pendingEmail = null;
+        _pendingPassword = null;
+        state = AuthState(status: AuthStatus.authenticated, user: user);
+      } on ApiException {
+        // Masih gagal (jaringan belum stabil / password sudah diubah di server)
+        // — biarkan sesi offline berjalan, dicoba lagi saat status online
+        // berikutnya.
+      }
+      return;
+    }
+
     try {
       final user = await _repo.me();
       state = AuthState(status: AuthStatus.authenticated, user: user);
@@ -106,15 +129,107 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  /// Berapa lama menunggu server saat login sebelum mencoba jalur offline.
+  static const _onlineLoginTimeout = Duration(seconds: 6);
+
+  static Never _timedOut() => throw ApiException(
+        message: 'Server tidak menjawab.',
+        isNetwork: true,
+      );
+
+  /// Password yang baru saja dipakai untuk masuk offline.
+  ///
+  /// Hanya di memori, tidak pernah ditulis ke disk: dipakai sekali untuk
+  /// menukar sesi offline menjadi token asli begitu server terjangkau lagi.
+  /// Hilang bila aplikasi ditutup — antrean tetap aman, hanya perlu login
+  /// online sekali lagi untuk mengirimkannya.
+  String? _pendingPassword;
+  String? _pendingEmail;
+
   /// Login dengan email + password, lalu muat profil lengkap (permissions).
+  ///
+  /// Bila server tak terjangkau, kredensial diverifikasi terhadap catatan lokal
+  /// dari login online sebelumnya. Aplikasi ini dipakai di gerbang sekolah yang
+  /// sinyalnya putus-putus; terkunci di layar login justru saat server mati
+  /// membuat seluruh premis offline-first tak ada artinya.
   Future<void> login({
     required String email,
     required String password,
     bool remember = true,
-  }) {
-    return _signIn(
-      () => _repo.login(email: email, password: password, remember: remember),
+  }) async {
+    state = const AuthState(status: AuthStatus.authenticating);
+    try {
+      // Batas tunggu sendiri, jauh lebih pendek dari `connectTimeout` global
+      // 15 detik. Kalau server memang mati, menahan petugas menatap tombol
+      // selama itu tak ada gunanya — lebih cepat jatuh ke verifikasi lokal.
+      await _repo
+          .login(email: email, password: password, remember: remember)
+          .timeout(_onlineLoginTimeout, onTimeout: _timedOut);
+      final user = await _repo.me().timeout(
+            _onlineLoginTimeout,
+            onTimeout: _timedOut,
+          );
+      if (await _rejectIfNotStaff(user)) return;
+
+      await _repo.rememberForOffline(
+          email: email, password: password, user: user);
+      _pendingPassword = null;
+      _pendingEmail = null;
+      state = AuthState(status: AuthStatus.authenticated, user: user);
+    } on ApiException catch (e) {
+      if (e.isNetwork) {
+        await _loginOffline(email: email, password: password);
+        return;
+      }
+      state = AuthState(status: AuthStatus.unauthenticated, error: e.message);
+    }
+  }
+
+  /// Masuk memakai catatan kredensial lokal.
+  Future<void> _loginOffline({
+    required String email,
+    required String password,
+  }) async {
+    final user = await _repo.verifyOffline(email: email, password: password);
+
+    if (user == null) {
+      final known = await _repo.offlineEmail();
+      state = AuthState(
+        status: AuthStatus.unauthenticated,
+        error: known == null
+            ? 'Tidak terhubung ke server. Akun ini belum pernah masuk di '
+                'perangkat ini, jadi belum bisa diverifikasi secara offline.'
+            : 'Tidak terhubung ke server. Saat offline hanya akun $known yang '
+                'bisa masuk di perangkat ini, dengan password yang sama.',
+      );
+      return;
+    }
+
+    if (await _rejectIfNotStaff(user)) return;
+
+    // Password ditahan di memori supaya sesi ini bisa ditukar dengan token asli
+    // begitu server hidup (lihat revalidateSession).
+    _pendingEmail = email;
+    _pendingPassword = password;
+
+    state = AuthState(
+      status: AuthStatus.authenticated,
+      user: user,
+      isSessionVerified: false,
+      error: 'Masuk tanpa koneksi — memakai kredensial tersimpan. Absensi '
+          'akan disinkronkan begitu server terjangkau.',
     );
+  }
+
+  /// True bila persona ini ditolak (dan state sudah diisi pesan penolakan).
+  Future<bool> _rejectIfNotStaff(User user) async {
+    if (user.canUseAttendanceApp) return false;
+    await _repo.logout();
+    state = const AuthState(
+      status: AuthStatus.unauthenticated,
+      error: 'Akun ini tidak memiliki akses ke aplikasi absensi petugas.',
+    );
+    return true;
   }
 
   /// Login dengan kode akses sekali-pakai dari administrator (lupa password /
@@ -134,16 +249,7 @@ class AuthController extends StateNotifier<AuthState> {
       await authenticate();
       final user = await _repo.me();
 
-      if (!user.canUseAttendanceApp) {
-        // Persona tak berhak (mis. siswa/orang tua) — tolak di klien.
-        await _repo.logout();
-        state = const AuthState(
-          status: AuthStatus.unauthenticated,
-          error:
-              'Akun ini tidak memiliki akses ke aplikasi absensi petugas.',
-        );
-        return;
-      }
+      if (await _rejectIfNotStaff(user)) return;
 
       state = AuthState(status: AuthStatus.authenticated, user: user);
     } on ApiException catch (e) {
@@ -151,7 +257,14 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  /// Keluar dari sesi.
+  ///
+  /// Catatan kredensial offline **sengaja tidak dihapus** — kalau dihapus,
+  /// keluar lalu masuk lagi saat server mati menjadi mustahil, yaitu persis
+  /// keadaan yang harus ditangani aplikasi ini.
   Future<void> logout() async {
+    _pendingEmail = null;
+    _pendingPassword = null;
     await _repo.logout();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/offline_credential_store.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../../core/storage/user_cache_store.dart';
 import '../models/user.dart';
@@ -13,13 +16,16 @@ class AuthRepository {
     required Dio dio,
     required TokenStorage tokenStorage,
     required UserCacheStore userCache,
+    required OfflineCredentialStore offlineCredentials,
   })  : _dio = dio,
         _tokenStorage = tokenStorage,
-        _userCache = userCache;
+        _userCache = userCache,
+        _offline = offlineCredentials;
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
   final UserCacheStore _userCache;
+  final OfflineCredentialStore _offline;
 
   /// POST /auth/login → simpan token + cache user, kembalikan user.
   Future<User> login({
@@ -91,17 +97,60 @@ class AuthRepository {
   /// User dari cache lokal (potret terakhir), tanpa panggilan jaringan.
   Future<User?> cachedUser() => _userCache.load();
 
+  /// Simpan bukti kredensial supaya akun ini bisa masuk lagi saat server mati.
+  /// Dipanggil hanya setelah login online benar-benar sukses.
+  Future<void> rememberForOffline({
+    required String email,
+    required String password,
+    required User user,
+  }) =>
+      _offline.save(email: email, password: password, user: user);
+
+  /// Verifikasi kredensial terhadap catatan lokal; `null` bila tak cocok.
+  Future<User?> verifyOffline({
+    required String email,
+    required String password,
+  }) =>
+      _offline.verify(email: email, password: password);
+
+  /// Email akun yang punya catatan offline di perangkat ini.
+  Future<String?> offlineEmail() => _offline.knownEmail();
+
   /// POST /auth/logout → cabut token di server, lalu hapus lokal.
   /// Kegagalan jaringan tetap membersihkan token lokal (token kadaluarsa
   /// sendiri dalam 7 hari).
+  /// Keluar dari sesi.
+  ///
+  /// Sesi lokal dihapus **lebih dulu**, pemberitahuan ke server menyusul tanpa
+  /// ditunggu. Urutan sebelumnya (server dulu, baru hapus) membuat tombol
+  /// Keluar tampak mati sampai 15 detik — selama itu Dio menunggu
+  /// `connectTimeout` — dan sama sekali tidak berfungsi saat offline. Keluar
+  /// dari aplikasi tidak boleh bergantung pada jaringan.
+  ///
+  /// Token dibaca dulu sebelum dihapus, supaya permintaan pencabutan masih
+  /// membawa `Authorization` (interceptor tak lagi menemukannya di storage).
   Future<void> logout() async {
+    final token = await _tokenStorage.read();
+
+    await _tokenStorage.clear();
+    await _userCache.clear();
+
+    if (token == null || token.isEmpty) return;
+    unawaited(_revokeOnServer(token));
+  }
+
+  /// Mencabut token di server; kegagalan sengaja diabaikan.
+  ///
+  /// Kalau server tak terjangkau, token yang tertinggal akan kedaluwarsa
+  /// sendiri — itu bukan alasan untuk menahan pengguna di dalam aplikasi.
+  Future<void> _revokeOnServer(String token) async {
     try {
-      await _dio.post('/auth/logout');
+      await _dio.post(
+        '/auth/logout',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
     } on DioException {
-      // abaikan; tetap hapus token lokal
-    } finally {
-      await _tokenStorage.clear();
-      await _userCache.clear();
+      // diabaikan dengan sengaja
     }
   }
 

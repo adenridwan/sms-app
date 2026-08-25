@@ -5,6 +5,7 @@ import '../features/auth/data/auth_repository.dart';
 import 'network/api_client.dart';
 import 'network/api_exception.dart';
 import 'network/backend_status.dart';
+import 'storage/offline_credential_store.dart';
 import 'storage/token_storage.dart';
 import 'storage/user_cache_store.dart';
 
@@ -14,6 +15,10 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage());
 /// Cache lokal profil user (dipakai untuk sesi offline-tolerant).
 final userCacheStoreProvider =
     Provider<UserCacheStore>((ref) => UserCacheStore());
+
+/// Bukti kredensial untuk login saat server mati.
+final offlineCredentialStoreProvider =
+    Provider<OfflineCredentialStore>((ref) => OfflineCredentialStore());
 
 /// Instance Dio terkonfigurasi (base URL, header, Bearer interceptor, +
 /// pelaporan status backend ke [backendStatusProvider] tiap request).
@@ -46,7 +51,14 @@ final dioProvider = Provider<Dio>((ref) {
         final isLoginAttempt =
             path.contains('/auth/login') || path.contains('/auth/login-otp');
 
-        if (error.response?.statusCode == 401 && !isLoginAttempt) {
+        // Hanya berarti "sesi dicabut" kalau kita memang mengirim token.
+        // Sesi hasil login offline belum punya token sama sekali; tanpa syarat
+        // ini, request pertama yang lolos ke server akan menjawab 401 dan
+        // langsung melempar petugas keluar dari sesi offline-nya.
+        final sentToken =
+            error.requestOptions.headers.containsKey('Authorization');
+
+        if (error.response?.statusCode == 401 && !isLoginAttempt && sentToken) {
           ref.read(unauthorizedSignalProvider.notifier).fire();
         }
 
@@ -64,5 +76,6 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     dio: ref.watch(dioProvider),
     tokenStorage: ref.watch(tokenStorageProvider),
     userCache: ref.watch(userCacheStoreProvider),
+    offlineCredentials: ref.watch(offlineCredentialStoreProvider),
   );
 });
