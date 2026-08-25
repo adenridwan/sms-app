@@ -28,6 +28,7 @@ import { Download, RefreshCw, Printer, QrCode, Users, GraduationCap, FileDown, F
 import { qrCodeApi } from '@/services/attendance';
 import type { QrCodeData } from '@/types/attendance';
 import type { ClassRoom } from '@/types';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface Props {
     classrooms: ClassRoom[];
@@ -35,6 +36,11 @@ interface Props {
 
 export default function QrCodeIndex({ classrooms }: Props) {
     const { tenant } = usePage<PageProps>().props;
+    const { can } = usePermissions();
+    // Guru buka halaman ini lewat attendance.scan-students (tab "Siswa"
+    // saja, kelas yang diampu saja) — tab "Guru" dan aksi admin (export,
+    // regenerate kode) tetap khusus admin/TU/super_admin.
+    const canManageAll = can('settings.attendance');
     const [activeTab, setActiveTab] = useState('students');
     const [classroomId, setClassroomId] = useState('');
     const [studentQrCodes, setStudentQrCodes] = useState<QrCodeData[]>([]);
@@ -225,17 +231,19 @@ export default function QrCodeIndex({ classrooms }: Props) {
                         >
                             <Download className="h-4 w-4" />
                         </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => type === 'student'
-                                ? handleRegenerateStudent(qr.student_id!)
-                                : handleRegenerateTeacher(qr.teacher_id!)
-                            }
-                            disabled={regenerating === (qr.student_id || qr.teacher_id)}
-                        >
-                            <RefreshCw className={`h-4 w-4 ${regenerating === (qr.student_id || qr.teacher_id) ? 'animate-spin' : ''}`} />
-                        </Button>
+                        {canManageAll && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => type === 'student'
+                                    ? handleRegenerateStudent(qr.student_id!)
+                                    : handleRegenerateTeacher(qr.teacher_id!)
+                                }
+                                disabled={regenerating === (qr.student_id || qr.teacher_id)}
+                            >
+                                <RefreshCw className={`h-4 w-4 ${regenerating === (qr.student_id || qr.teacher_id) ? 'animate-spin' : ''}`} />
+                            </Button>
+                        )}
                     </div>
                 </div>
             </CardContent>
@@ -265,17 +273,21 @@ export default function QrCodeIndex({ classrooms }: Props) {
                                 <Users className="h-4 w-4" />
                                 Siswa
                             </TabsTrigger>
-                            <TabsTrigger value="teachers" className="gap-2">
-                                <GraduationCap className="h-4 w-4" />
-                                Guru
-                            </TabsTrigger>
+                            {canManageAll && (
+                                <TabsTrigger value="teachers" className="gap-2">
+                                    <GraduationCap className="h-4 w-4" />
+                                    Guru
+                                </TabsTrigger>
+                            )}
                         </TabsList>
 
                         <div className="flex gap-2">
-                            <Button variant="outline" onClick={() => setExportOpen(true)}>
-                                <FileDown className="mr-2 h-4 w-4" />
-                                Export
-                            </Button>
+                            {canManageAll && (
+                                <Button variant="outline" onClick={() => setExportOpen(true)}>
+                                    <FileDown className="mr-2 h-4 w-4" />
+                                    Export
+                                </Button>
+                            )}
                             {((activeTab === 'students' && studentQrCodes.length > 0) ||
                               (activeTab === 'teachers' && teacherQrCodes.length > 0)) && (
                                 <Button onClick={handlePrintAll}>

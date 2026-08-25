@@ -66,6 +66,15 @@ class QrCodeController extends ApiController
             'size' => ['integer', 'min:100', 'max:500'],
         ]);
 
+        // Guru mengakses endpoint ini lewat attendance.scan-students (tab
+        // "Siswa" pada halaman QR Code), bukan settings.attendance —
+        // dibatasi ke kelas yang benar-benar diampunya, supaya tidak bisa
+        // memilih classroom_id kelas lain lewat request manual.
+        if (! $request->user()->can('settings.attendance')
+            && ! in_array($data['classroom_id'], $request->user()->teachingClassroomIds(), true)) {
+            return $this->forbidden('Anda tidak memiliki akses ke kelas ini.');
+        }
+
         $size = $data['size'] ?? 200;
 
         // Get students in classroom

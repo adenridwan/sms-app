@@ -13,6 +13,11 @@ use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
  * qr/students/{id} dan qr/teachers/{id} (GET tunggal) SENGAJA tidak ikut
  * dibatasi — itu dipakai halaman self-service "Absensi Saya" untuk
  * menampilkan QR milik sendiri, harus tetap terbuka untuk semua role.
+ *
+ * /attendance/qr-codes SENGAJA dibuka juga untuk guru (tab "Siswa" saja,
+ * kelas yang diampu saja) — lihat AttendanceQrCodesGuruAccessTest.php untuk
+ * cakupan itu. Test di sini fokus ke Hari Libur/Template Kartu/Pengaturan
+ * yang tetap murni admin/TU/super_admin.
  */
 beforeEach(function () {
     setupSchoolWorld();
@@ -39,9 +44,8 @@ test('halaman hari libur, qr code, template kartu, dan pengaturan bisa diakses a
     }
 });
 
-test('halaman hari libur, qr code, template kartu, dan pengaturan ditolak untuk guru', function () {
+test('halaman hari libur, template kartu, dan pengaturan ditolak untuk guru', function () {
     $this->actingAs($this->guru)->get('/attendance/holidays')->assertForbidden();
-    $this->actingAs($this->guru)->get('/attendance/qr-codes')->assertForbidden();
     $this->actingAs($this->guru)->get('/attendance/card-templates')->assertForbidden();
     $this->actingAs($this->guru)->get('/attendance/settings')->assertForbidden();
 });

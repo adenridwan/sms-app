@@ -436,8 +436,13 @@ class PageController extends Controller
      */
     public function attendanceQrCodes(): Response
     {
+        // Guru sekarang boleh buka halaman ini (tab Siswa saja) — daftar
+        // kelasnya WAJIB dibatasi ke kelas yang diampu sendiri, sama seperti
+        // halaman Absensi Siswa. scopeToTeacher:true tidak memengaruhi
+        // admin/TU/super_admin (mereka ada di Student::ALL_ACCESS_ROLES,
+        // tetap dapat semua kelas).
         return Inertia::render('attendance/qr-codes/Index', [
-            'classrooms' => $this->activeClassroomsForAttendance(),
+            'classrooms' => $this->activeClassroomsForAttendance(scopeToTeacher: true),
         ]);
     }
 

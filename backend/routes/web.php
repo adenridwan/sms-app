@@ -128,15 +128,21 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     Route::get('/attendance/teachers', [PageController::class, 'attendanceTeachers'])->name('attendance.teachers');
     Route::get('/attendance/permissions/create', [PageController::class, 'attendancePermissionsCreate'])->name('attendance.permissions.create');
     Route::get('/attendance/permissions', [PageController::class, 'attendancePermissions'])->name('attendance.permissions');
-    // Perkakas back-office absensi (kalender libur, kredensial QR/RFID,
-    // desain kartu, pengaturan) — hanya admin/tata_usaha/super_admin, sama
-    // seperti settings.attendance yang sudah menjaga endpoint PUT-nya.
+    // Perkakas back-office absensi (kalender libur, desain kartu,
+    // pengaturan) — hanya admin/tata_usaha/super_admin, sama seperti
+    // settings.attendance yang sudah menjaga endpoint PUT-nya.
     Route::middleware('permission:settings.attendance')->group(function () {
         Route::get('/attendance/holidays', [PageController::class, 'attendanceHolidays'])->name('attendance.holidays');
-        Route::get('/attendance/qr-codes', [PageController::class, 'attendanceQrCodes'])->name('attendance.qr-codes');
         Route::get('/attendance/settings', [PageController::class, 'attendanceSettings'])->name('attendance.settings');
         Route::get('/attendance/card-templates', [PageController::class, 'attendanceCardTemplates'])->name('attendance.card-templates');
     });
+    // QR Code: tab "Siswa" (lihat/cetak QR kelas sendiri) dibuka juga untuk
+    // guru (attendance.scan-students) — tab "Guru" dan aksi admin (export,
+    // regenerate) tetap dibatasi settings.attendance di dalam halaman &
+    // route API-nya sendiri (lihat api_v1.php).
+    Route::get('/attendance/qr-codes', [PageController::class, 'attendanceQrCodes'])
+        ->middleware('permission:attendance.scan-students|settings.attendance')
+        ->name('attendance.qr-codes');
     Route::get('/attendance/reports', [PageController::class, 'attendanceReports'])->name('attendance.reports');
     // Halaman scanner dibuka untuk siapa saja yang boleh memindai SESUATU
     // (siswa ATAU staf) — pembatasan per jenis yang discan (guru cuma

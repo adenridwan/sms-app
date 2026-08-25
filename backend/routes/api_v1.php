@@ -222,14 +222,20 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // QR Codes — lihat QR/RFID milik sendiri (dipakai halaman self-service
         // Absensi Saya, semua role) TETAP terbuka; regenerate/bulk/download/
-        // export (halaman admin "QR Code") dibatasi admin/TU/super_admin.
+        // export (halaman admin "QR Code") dibatasi admin/TU/super_admin —
+        // KECUALI qr/students/bulk, yang juga dibuka untuk guru
+        // (attendance.scan-students, tab "Siswa"), dengan classroom_id-nya
+        // sendiri dibatasi ke kelas yang diampu di dalam controller.
         //
         // 'bulk' WAJIB didaftarkan sebelum '{student}'/'{teacher}' — kalau
         // tidak, GET qr/teachers/bulk ketangkap route wildcard {teacher} lebih
         // dulu ("bulk" dianggap id, lalu 500 saat dicocokkan sebagai UUID).
         // Ini bug lama yang baru ketahuan lewat test permission ini.
+        Route::get('qr/students/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkStudents'])
+            ->middleware('permission:attendance.scan-students|settings.attendance')
+            ->name('qr.students.bulk');
+
         Route::middleware('permission:settings.attendance')->group(function () {
-            Route::get('qr/students/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkStudents'])->name('qr.students.bulk');
             Route::get('qr/teachers/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkTeachers'])->name('qr.teachers.bulk');
         });
 
