@@ -172,7 +172,7 @@ function StatCard({
 }
 
 function AttendanceTodayCard({ attendance, title }: { attendance: AttendanceToday; title: string }) {
-    const { can } = usePermissions();
+    const { canAny } = usePermissions();
     const s = attendance.summary;
     const boxes = [
         { label: 'Hadir', value: s.hadir, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
@@ -192,7 +192,7 @@ function AttendanceTodayCard({ attendance, title }: { attendance: AttendanceToda
                     </CardTitle>
                     <CardDescription>{todayLabel}</CardDescription>
                 </div>
-                {can('attendance.scanner-operate') && (
+                {canAny('attendance.scan-students', 'attendance.scan-staff') && (
                     <Button asChild variant="outline" size="sm">
                         <Link href="/scanner">
                             <ScanLine className="mr-2 h-4 w-4" />
@@ -278,7 +278,7 @@ function FinanceSummaryCard({ finance }: { finance: FinanceSummary }) {
 }
 
 function QuickActions() {
-    const { can } = usePermissions();
+    const { canAny } = usePermissions();
 
     return (
         <Card>
@@ -294,7 +294,7 @@ function QuickActions() {
                             <span>Absensi</span>
                         </Link>
                     </Button>
-                    {can('attendance.scanner-operate') && (
+                    {canAny('attendance.scan-students', 'attendance.scan-staff') && (
                         <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
                             <Link href="/scanner">
                                 <ScanLine className="h-5 w-5" />

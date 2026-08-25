@@ -193,7 +193,7 @@ export default function QrCodeIndex({ classrooms }: Props) {
         });
 
         if (!opened) {
-            toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+            toast.error('Gagal menyiapkan halaman cetak. Coba lagi.');
         }
     };
 

@@ -82,7 +82,7 @@ const buildMonthOptions = () => {
 
 export default function MyAttendanceIndex() {
     const { auth } = usePage<PageProps>().props;
-    const { can } = usePermissions();
+    const { canAny } = usePermissions();
     const monthOptions = useMemo(buildMonthOptions, []);
     const [month, setMonth] = useState(monthOptions[0].value);
     const [today, setToday] = useState<MyAttendanceToday | null>(null);
@@ -214,7 +214,7 @@ export default function MyAttendanceIndex() {
                                     Kartu RFID belum ditautkan
                                 </div>
                             ) : null}
-                            {can('attendance.scanner-operate') && (
+                            {canAny('attendance.scan-students', 'attendance.scan-staff') && (
                                 <Button asChild variant="outline" className="w-full border-primary-foreground/50 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground">
                                     <Link href="/scanner">
                                         <ScanLine className="mr-2 h-4 w-4" />

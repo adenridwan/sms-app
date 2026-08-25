@@ -68,6 +68,7 @@ import {
     RefreshCw,
     GraduationCap,
     X,
+    QrCode,
 } from 'lucide-react';
 import type { Student, PaginatedResponse } from '@/types';
 
@@ -132,6 +133,10 @@ export default function StudentsIndex({ students, filters, classrooms = [] }: Pr
     const canCreate = isSuperAdmin || permissions.includes('students.create');
     const canUpdate = isSuperAdmin || permissions.includes('students.update');
     const canDelete = isSuperAdmin || permissions.includes('students.delete');
+    // Halaman /attendance/qr-codes (export/cetak QR+RFID massal, sekali
+    // jalan untuk semua siswa) sudah dibatasi settings.attendance — tombol
+    // pintasannya di sini ikut memakai izin yang sama, bukan izin baru.
+    const canBulkPrintQr = isSuperAdmin || permissions.includes('settings.attendance');
 
     const [exporting, setExporting] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
@@ -203,7 +208,7 @@ export default function StudentsIndex({ students, filters, classrooms = [] }: Pr
             });
 
             if (!opened) {
-                toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+                toast.error('Gagal menyiapkan halaman cetak. Coba lagi.');
             }
         } catch {
             toast.error('Gagal memuat kartu siswa');
@@ -378,6 +383,14 @@ export default function StudentsIndex({ students, filters, classrooms = [] }: Pr
                             <Button variant="outline" onClick={() => setImportOpen(true)}>
                                 <Upload className="mr-2 h-4 w-4" />
                                 Import
+                            </Button>
+                        )}
+                        {canBulkPrintQr && (
+                            <Button variant="outline" asChild>
+                                <Link href="/attendance/qr-codes">
+                                    <QrCode className="mr-2 h-4 w-4" />
+                                    Cetak QR & RFID
+                                </Link>
                             </Button>
                         )}
                         {canCreate && (

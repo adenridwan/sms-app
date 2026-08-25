@@ -94,8 +94,39 @@ interface AttendanceTimeSettings {
     checkInDeadline: string; // check_in_end + toleransi, "HH:mm" — lewat ini dianggap terlambat
 }
 
+/**
+ * Pesan validasi mentah dari Laravel ("The selected attendances.1.status is
+ * invalid. (and 4 more errors)") tidak menunjuk siswa mana yang bermasalah.
+ * Cocokkan key error (mis. "attendances.1.status") ke baris siswa terkait
+ * lewat index-nya supaya pesan yang tampil bisa langsung menyebut nama.
+ */
+const describeAttendanceSaveError = (error: unknown, sentRows: DailyAttendanceRecord[]): string => {
+    const response = (error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } })
+        ?.response;
+    const errors = response?.data?.errors;
+
+    if (errors) {
+        const affectedNames = new Set<string>();
+        for (const key of Object.keys(errors)) {
+            const match = key.match(/^attendances\.(\d+)\./);
+            if (!match) continue;
+            const row = sentRows[Number(match[1])];
+            affectedNames.add(row ? row.name : `baris ke-${Number(match[1]) + 1}`);
+        }
+
+        if (affectedNames.size > 0) {
+            const names = Array.from(affectedNames);
+            const preview = names.slice(0, 3).join(', ');
+            const rest = names.length > 3 ? ` dan ${names.length - 3} siswa lain` : '';
+            return `Gagal menyimpan absensi untuk ${preview}${rest}. Periksa kembali status yang dipilih untuk siswa tersebut.`;
+        }
+    }
+
+    return response?.data?.message || 'Gagal menyimpan absensi';
+};
+
 export default function StudentAttendanceIndex({ classrooms, initialDate, initialClassroom }: Props) {
-    const { can } = usePermissions();
+    const { canAny } = usePermissions();
     const [date, setDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
     const [classroomId, setClassroomId] = useState(initialClassroom || '');
     const [students, setStudents] = useState<DailyAttendanceRecord[]>([]);
@@ -227,9 +258,21 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
     const handleSaveAll = async () => {
         if (!classroomId || !date) return;
 
+        // "Belum Scan" bukan status yang bisa disimpan (cuma penanda "belum
+        // diisi") — kalau ikut dikirim, backend menolaknya dengan pesan teknis
+        // Laravel ("attendances.1.status is invalid"). Kirim hanya baris yang
+        // statusnya sudah benar-benar diisi, supaya pengisian sebagian
+        // (sebagian siswa saja) tetap bisa disimpan tanpa harus melengkapi semua.
+        const filled = students.filter(s => s.status !== 'belum_scan');
+
+        if (filled.length === 0) {
+            toast.error('Belum ada siswa yang diberi status kehadiran. Pilih status di kolom "Ubah Status" terlebih dahulu.');
+            return;
+        }
+
         setSaving(true);
         try {
-            const attendances = students.map(s => ({
+            const attendances = filled.map(s => ({
                 student_id: s.student_id,
                 status: s.status,
                 check_in_time: s.status === 'hadir' ? (s.check_in_time || undefined) : undefined,
@@ -242,12 +285,15 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                 attendances,
             });
 
-            toast.success('Absensi berhasil disimpan');
+            const skipped = students.length - filled.length;
+            toast.success(
+                skipped > 0
+                    ? `Absensi ${filled.length} siswa berhasil disimpan. ${skipped} siswa lain masih "Belum Scan" dan tidak ikut disimpan.`
+                    : 'Absensi berhasil disimpan'
+            );
             fetchAttendance();
         } catch (error: unknown) {
-            const message = (error as { response?: { data?: { message?: string } } })
-                ?.response?.data?.message;
-            toast.error(message || 'Gagal menyimpan absensi');
+            toast.error(describeAttendanceSaveError(error, filled));
         } finally {
             setSaving(false);
         }
@@ -326,7 +372,7 @@ export default function StudentAttendanceIndex({ classrooms, initialDate, initia
                             Kelola kehadiran harian siswa per kelas
                         </p>
                     </div>
-                    {can('attendance.scanner-operate') && (
+                    {canAny('attendance.scan-students', 'attendance.scan-staff') && (
                         <Button asChild variant="outline">
                             <Link href="/scanner">
                                 <ScanLine className="mr-2 h-4 w-4" />

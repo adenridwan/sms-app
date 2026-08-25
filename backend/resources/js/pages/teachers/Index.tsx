@@ -176,7 +176,7 @@ export default function TeachersIndex({ teachers, filters }: Props) {
             });
 
             if (!opened) {
-                toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+                toast.error('Gagal menyiapkan halaman cetak. Coba lagi.');
             }
         } catch {
             toast.error('Gagal memuat kartu guru');

@@ -47,7 +47,7 @@ export default function ShowStudent({ student }: ShowStudentProps) {
             });
 
             if (!opened) {
-                toast.error('Popup blocker mungkin aktif. Izinkan popup untuk mencetak.');
+                toast.error('Gagal menyiapkan halaman cetak. Coba lagi.');
             }
         } catch {
             toast.error('Gagal memuat kartu siswa');

@@ -21,14 +21,18 @@ const CARD_HEIGHT_MM = 54;
  * Template Editor) — dalam hal itu tiap elemen ditempatkan absolut sesuai
  * persen yang tersimpan, di atas dimensi kartu CR80 (85.6mm × 54mm).
  *
- * Mengembalikan false bila popup diblokir browser (pemanggil menampilkan toast).
+ * Dulu memakai window.open('', '_blank') + printWindow.print() — itu
+ * membuka TAB BARU yang independen dari tab aplikasi. Selama dialog cetak
+ * di tab itu belum ditutup/dibatalkan, tab aplikasi ikut tidak merespons
+ * klik (kuirk Chromium: dialog cetak lintas-tab bisa mengunci seluruh
+ * jendela browser, bukan cuma tab yang memicunya). Sekarang dicetak lewat
+ * <iframe> tersembunyi yang ditempel ke halaman yang sama — dialog cetaknya
+ * tetap terikat ke tab aplikasi sendiri (sama seperti Ctrl+P biasa), jadi
+ * tidak ada tab lain yang bisa "lupa ditutup".
+ *
+ * Mengembalikan false bila iframe gagal dibuat (pemanggil menampilkan toast).
  */
 export function printAttendanceCards(people: QrCodeData[], options: CardPrintOptions): boolean {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        return false;
-    }
-
     const esc = (value: string | null | undefined): string =>
         (value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -38,7 +42,7 @@ export function printAttendanceCards(people: QrCodeData[], options: CardPrintOpt
 
     const extraStyle = options.layout ? '' : FIXED_CARD_STYLE;
 
-    printWindow.document.write(`<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
@@ -68,13 +72,48 @@ export function printAttendanceCards(people: QrCodeData[], options: CardPrintOpt
 <body>
     <div class="grid">${cardsHtml}</div>
 </body>
-</html>`);
+</html>`;
 
-    printWindow.document.close();
-    printWindow.focus();
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const frameWindow = iframe.contentWindow;
+    const frameDoc = frameWindow?.document;
+    if (!frameWindow || !frameDoc) {
+        document.body.removeChild(iframe);
+        return false;
+    }
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        if (iframe.parentNode) {
+            document.body.removeChild(iframe);
+        }
+    };
+
+    frameDoc.open();
+    frameDoc.write(html);
+    frameDoc.close();
+
+    frameWindow.addEventListener('afterprint', cleanup);
+    // Sebagian browser tidak selalu memicu 'afterprint' (mis. dibatalkan
+    // lewat cara tertentu) — bersihkan iframe selambat-lambatnya semenit
+    // kemudian supaya tidak menumpuk di DOM.
+    setTimeout(cleanup, 60_000);
+
+    frameWindow.focus();
     setTimeout(() => {
-        printWindow.print();
-    }, 500);
+        frameWindow.print();
+    }, 300);
 
     return true;
 }

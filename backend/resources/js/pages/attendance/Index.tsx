@@ -26,8 +26,11 @@ interface Props {
 }
 
 export default function AttendanceIndex({ stats }: Props) {
-    const { can } = usePermissions();
-    const canOperateScanner = can('attendance.scanner-operate');
+    const { can, canAny } = usePermissions();
+    // Guru hanya punya attendance.scan-students (bukan scan-staff) —
+    // Scanner tetap tampil untuknya, pembatasan jenis yang boleh discan
+    // ditegakkan di server (AttendanceScanService::processScan()).
+    const canOperateScanner = canAny('attendance.scan-students', 'attendance.scan-staff');
     // Perkakas back-office (kalender libur, kredensial QR/RFID, desain
     // kartu, pengaturan) — sama seperti halaman & endpoint-nya sendiri,
     // hanya admin/tata_usaha/super_admin (settings.attendance).
