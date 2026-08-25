@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../core/security/app_lock.dart';
 import 'scan_controller.dart';
 import 'widgets/result_sheet.dart';
 
@@ -47,6 +48,10 @@ class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
     setState(() => _busy = true);
     _lastCode = code;
     _lastAt = now;
+
+    // Memindai adalah aktivitas, walau layar tak disentuh. Tanpa ini petugas
+    // di gerbang — yang justru paling sibuk — akan terkunci tiap 30 detik.
+    ref.read(appLockProvider.notifier).poke();
 
     final result = await ref.read(scanControllerProvider.notifier).submit(code);
     if (mounted) await showResultSheet(context, result);

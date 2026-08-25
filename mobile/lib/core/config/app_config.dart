@@ -42,6 +42,13 @@ class AppConfig {
 
   static const String appName = 'SMS Absensi';
 
+  /// Berapa lama menganggur sebelum aplikasi mengunci diri.
+  ///
+  /// Perangkat membawa daftar siswa, kode QR, dan antrean absensi. Kunci layar
+  /// OS tidak bisa dipaksa dari aplikasi, jadi batas ini yang dipegang sendiri.
+  /// 30 detik memang ketat — itu keputusan sadar, bukan default framework.
+  static const Duration idleLockTimeout = Duration(seconds: 30);
+
   /// Timeout jaringan.
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 20);
