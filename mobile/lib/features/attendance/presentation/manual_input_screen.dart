@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../data/attendance_providers.dart';
+import '../models/scan_time.dart';
 import '../models/student_lookup.dart';
+import '../../../core/theme/ui_kit.dart';
 import 'scan_controller.dart';
 import 'widgets/result_sheet.dart';
 
@@ -13,14 +15,30 @@ import 'widgets/result_sheet.dart';
 /// diketik benar. Absensi tetap bisa dicatat tanpa pratinjau — kalau tidak,
 /// petugas mustahil mencatat apa pun saat server tak terjangkau, padahal
 /// antrean offline justru dibuat untuk keadaan itu.
-class ManualInputScreen extends ConsumerStatefulWidget {
+/// Layar penuh, dipakai saat Ref ID dibuka lewat rute `/manual`.
+class ManualInputScreen extends ConsumerWidget {
   const ManualInputScreen({super.key});
 
   @override
-  ConsumerState<ManualInputScreen> createState() => _ManualInputScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(scanControllerProvider).mode;
+    return Scaffold(
+      appBar: AppBar(title: Text('Input Ref ID · ${mode.label}')),
+      body: const ManualInputView(),
+    );
+  }
 }
 
-class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
+/// Isi Ref ID tanpa Scaffold, supaya bisa ditanam langsung di tab Absensi —
+/// rujukan desain menukar isi layar di tempat, bukan membuka layar baru.
+class ManualInputView extends ConsumerStatefulWidget {
+  const ManualInputView({super.key});
+
+  @override
+  ConsumerState<ManualInputView> createState() => _ManualInputViewState();
+}
+
+class _ManualInputViewState extends ConsumerState<ManualInputView> {
   final _ctrl = TextEditingController();
   LookupResult? _preview;
   bool _looking = false;
@@ -59,7 +77,9 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
       final res = await ref.read(attendanceRepositoryProvider).lookup(_code);
       setState(() {
         _preview = res;
-        if (res == null) _error = 'Kode tidak ditemukan.';
+        if (res == null) {
+          _error = 'Kode tidak ditemukan. Periksa ejaan dan coba lagi.';
+        }
       });
     } on ApiException catch (e) {
       setState(() {
@@ -74,7 +94,8 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
   Future<void> _submit() async {
     if (_code.isEmpty) return;
     setState(() => _submitting = true);
-    final result = await ref.read(scanControllerProvider.notifier).submit(_code);
+    final result =
+        await ref.read(scanControllerProvider.notifier).submit(_code);
     if (mounted) await showResultSheet(context, result);
     if (mounted) {
       setState(() {
@@ -90,72 +111,67 @@ class _ManualInputScreenState extends ConsumerState<ManualInputScreen> {
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(scanControllerProvider).mode;
-    final scheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(title: Text('Input Ref ID · ${mode.label}')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          TextField(
-            controller: _ctrl,
-            autofocus: true,
-            textInputAction: TextInputAction.search,
-            // Tombol simpan bergantung pada isi field, jadi perlu rebuild.
-            onChanged: (_) => setState(() {}),
-            onSubmitted: (_) => _lookup(),
-            decoration: InputDecoration(
-              labelText: 'Kode Ref ID / RFID',
-              hintText: 'STU-XXXX atau RF-XXXX',
-              prefixIcon: const Icon(Icons.badge_outlined),
-              suffixIcon: _looking
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.2)),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.search_rounded),
-                      onPressed: _lookup,
-                    ),
-            ),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      children: [
+        // Sesi ikut dipilih di sini, seperti pada rujukan: Ref ID dipakai saat
+        // kartu tak terbaca, dan petugas tetap perlu menentukan masuk/pulang.
+        PillTabs<ScanTime>(
+          options: const [ScanTime.masuk, ScanTime.pulang],
+          selected: mode,
+          labelOf: (m) => m == ScanTime.masuk ? 'Masuk' : 'Pulang',
+          onChanged: (m) =>
+              ref.read(scanControllerProvider.notifier).setMode(m),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _ctrl,
+          autofocus: false,
+          textInputAction: TextInputAction.search,
+          // Tombol simpan bergantung pada isi field, jadi perlu rebuild.
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) => _lookup(),
+          decoration: const InputDecoration(
+            labelText: 'Kode Referensi / RFID',
+            hintText: 'STU-XXXX atau RF-XXXX',
           ),
-          const SizedBox(height: 16),
-          if (_error != null)
-            _InfoBox(
-              color: scheme.error,
-              icon: Icons.error_outline_rounded,
-              text: _error!,
-            ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton(
+          onPressed: _looking || _code.isEmpty ? null : _lookup,
+          child: _looking
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2.2))
+              : const Text('Periksa'),
+        ),
+        const SizedBox(height: 16),
+        if (_error != null) InfoStrip(text: _error!),
 
-          // Offline bukan kegagalan — beri tahu apa yang akan terjadi, dan
-          // biarkan tombol simpan tetap hidup.
-          if (_offline)
-            const _InfoBox(
-              color: Color(0xFFD97706),
-              icon: Icons.cloud_off_rounded,
-              text: 'Tidak terhubung ke server, jadi identitas tidak bisa '
-                  'dipratinjau. Absensi tetap bisa dicatat dan akan masuk '
-                  'antrean untuk disinkronkan nanti.',
-            ),
-
-          if (_preview != null) _PreviewCard(preview: _preview!),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: _canSubmit ? _submit : null,
-            icon: _submitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.4, color: Colors.white))
-                : const Icon(Icons.check_rounded),
-            label: Text(_submitting ? 'Menyimpan…' : 'Catat Absensi'),
+        // Offline bukan kegagalan — beri tahu apa yang akan terjadi, dan
+        // biarkan tombol simpan tetap hidup.
+        if (_offline)
+          const InfoStrip(
+            text: 'Tidak terhubung ke server, jadi identitas tidak bisa '
+                'dipratinjau. Absensi tetap bisa dicatat dan akan masuk '
+                'antrean untuk disinkronkan nanti.',
           ),
-        ],
-      ),
+
+        if (_preview != null) _PreviewCard(preview: _preview!),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: _canSubmit ? _submit : null,
+          child: _submitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.4, color: Colors.white))
+              : const Text('Catat Absensi'),
+        ),
+      ],
     );
   }
 }
@@ -167,52 +183,47 @@ class _PreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: scheme.primaryContainer,
-          child: Icon(
-            preview.isStudent ? Icons.school_rounded : Icons.person_rounded,
-            color: scheme.onPrimaryContainer,
-          ),
-        ),
-        title: Text(preview.name),
-        subtitle: Text([
-          if (preview.identifier != null) preview.identifier,
-          if (preview.classroom != null) preview.classroom,
-        ].whereType<String>().join(' · ')),
-        trailing: preview.isActive
-            ? null
-            : Chip(
-                label: const Text('Nonaktif'),
-                backgroundColor: scheme.errorContainer,
-              ),
-      ),
-    );
-  }
-}
+    final meta = [
+      if (preview.identifier != null) preview.identifier,
+      if (preview.classroom != null) preview.classroom,
+    ].whereType<String>().join(' · ');
 
-class _InfoBox extends StatelessWidget {
-  const _InfoBox({required this.color, required this.icon, required this.text});
-  final Color color;
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return Panel(
       child: Row(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
           Expanded(
-              child: Text(text, style: TextStyle(color: color, fontSize: 13))),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(preview.name,
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -.3)),
+                if (meta.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(meta,
+                      style: TextStyle(
+                          fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                ],
+              ],
+            ),
+          ),
+          if (!preview.isActive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text('NONAKTIF',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    letterSpacing: .8,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onPrimaryContainer,
+                  )),
+            ),
         ],
       ),
     );

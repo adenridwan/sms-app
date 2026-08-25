@@ -43,6 +43,12 @@ dependencies:
   go_router: ^14.2.0
   # Preferensi ringan (mode tema, antrean offline)
   shared_preferences: ^2.3.2
+
+  # Verifikasi kredensial offline (PBKDF2-HMAC-SHA256).
+  crypto: ^3.0.3
+
+  # QR presensi milik sendiri di tab "Absensi Saya".
+  qr_flutter: ^4.1.0
   # Pemindai QR (kamera) — versi 3.x kompatibel dengan Flutter Gradle Plugin 3.24
   mobile_scanner: ^3.5.7
   # Lokasi GPS (geofence absensi) — 10.x kompatibel dengan toolchain ini
@@ -69,6 +75,22 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Archivo — font pada rujukan desain. Dibundel (bukan diunduh runtime) supaya
+  # tampilan tetap sama saat perangkat offline, keadaan yang memang lumrah di
+  # aplikasi ini. Berkasnya adalah instance statis per bobot, dihasilkan dari
+  # font variabel, agar `fontWeight` bekerja normal tanpa `fontVariations`.
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Archivo-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Archivo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Archivo-ExtraBold.ttf
+          weight: 800
 
   # To add assets to your application, add an assets section, like this:
   # assets:

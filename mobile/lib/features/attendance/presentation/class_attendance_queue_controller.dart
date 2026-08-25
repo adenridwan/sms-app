@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/backend_status.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../../core/storage/sync_status_store.dart';
 import '../data/class_attendance_queue_store.dart';
 import '../data/class_attendance_repository.dart';
 import '../models/queued_class_attendance.dart';
@@ -73,6 +74,7 @@ class ClassAttendanceQueueController
 
     final remaining = await _store.removeIds(done);
     state = ClassAttendanceQueueState(items: remaining);
+    await SyncStatusStore().markSynced();
     return (total: items.length, success: done.length);
   }
 

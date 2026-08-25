@@ -159,6 +159,43 @@ bukan lapisan keamanan tambahan di atas password.
 > sedang login bukan 2FA sungguhan. Opsi push (B) ditunda; lihat catatan di
 > [04-NAVIGATION-MENU.md](../mobile/docs/04-NAVIGATION-MENU.md) §8.
 
+## 4b. Login saat server mati (terimplementasi 2026-08-25)
+
+Aplikasi ini dipakai di gerbang sekolah yang sinyalnya putus-putus. Sesi yang
+sudah berjalan memang bertahan lewat cache, tapi begitu petugas keluar — atau
+aplikasi dipasang ulang — ia terkunci di layar login sampai server hidup,
+padahal justru saat itulah absensi harus tetap jalan. Karena itu login punya
+jalur offline.
+
+**Alur:**
+
+1. Login online sukses → selain token & profil, disimpan pula turunan
+   **PBKDF2-HMAC-SHA256** (salt acak 16 byte, 50.000 iterasi) dari password,
+   bersama potret profil, untuk **satu akun terakhir** di perangkat itu.
+2. Login berikutnya menunggu server maksimal **6 detik** (jauh di bawah
+   `connectTimeout` 15 detik — menahan petugas menatap tombol selengkap itu
+   tak ada gunanya bila server memang mati).
+3. Lewat batas itu, password dibandingkan dengan turunan lokal. Cocok → masuk
+   dengan `isSessionVerified: false` dan **tanpa token**; tidak cocok → pesan
+   yang menyebutkan akun mana yang bisa masuk offline di perangkat ini.
+4. Password ditahan **di memori saja**. Begitu `/ping` menandai server `online`,
+   `revalidateSession()` menukarnya jadi token asli lewat `POST /auth/login`,
+   lalu antrean absensi ikut terkirim.
+
+**Yang disimpan bukan password**, melainkan turunannya — isi penyimpanan tidak
+bisa dipakai untuk login ke server.
+
+**Konsekuensi yang disengaja:** catatan itu **tidak dihapus saat logout**. Kalau
+dihapus, keluar lalu masuk lagi saat offline mustahil — yaitu persis keadaan
+yang harus ditangani. Artinya sesudah logout, siapa pun **yang tahu password
+akun itu** masih bisa masuk offline di perangkat tersebut. Ambangnya sama dengan
+login biasa, tapi berbeda dari sebelumnya (dulu: tanpa server, tak seorang pun
+bisa masuk). Bila perangkat berpindah tangan permanen, hapus data aplikasi.
+
+Batasannya: hanya **satu akun** per perangkat (yang terakhir login online),
+sejalan dengan satu slot `cached_user`. Login akun lain saat offline ditolak
+dengan pesan yang menyebutkan akun mana yang tersedia.
+
 ## 5. Logout flow (Feature F11)
 
 1. User confirms logout (recommended confirmation dialog, per [08-UI-UX-FLOW.md](08-UI-UX-FLOW.md)).

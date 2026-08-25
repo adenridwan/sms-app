@@ -7,20 +7,220 @@
 **Storyboard visual (wireframe interaktif):**
 https://claude.ai/code/artifact/1d04d982-17d6-4cca-adfe-9521720f8830
 
+**Rujukan desain yang dipakai sekarang (2026-08-23):**
+https://claude.ai/code/artifact/0af1e5c5-d9bd-4a24-8dd5-350595b2e80e
+
+---
+
+## 0. Sistem Desain
+
+Seluruh layar mengikuti rujukan di atas. Token ada di
+`lib/core/theme/app_theme.dart`, komponen bersama di `lib/core/theme/ui_kit.dart`.
+
+### Token
+
+| Peran | Nilai | Catatan |
+|---|---|---|
+| Aksen (terang / gelap) | `#EC3013` / `#E15B47` | dipakai hemat: aksi utama & penanda aktif |
+| Aksen lembut | `#FFF2EF` · `#FFE0D9` · `#7C1405` | latar pil peran, rel pesan |
+| Latar layar | `#F3F2F2` (terang) · `#1A1817` (gelap) | **bukan putih** — kartu putih mengambang di atasnya |
+| Permukaan kartu | `#FFFFFF` · `#242121` | |
+| Teks | `#201E1D` · `#F8F4F4` | |
+| Radius | 16 (kartu), 12 (tombol/field), 999 (pil) | |
+| Tipografi | **Archivo** 400/600/700/800, di-bundle di `assets/fonts/` | judul berbobot 800 dengan `letterSpacing` negatif |
+
+Tiga aturan yang tidak boleh dilanggar, karena itulah yang membedakan rujukan
+ini dari tema Material bawaan:
+
+1. **Tanpa elevation.** Semua permukaan datar; pemisah memakai garis 1px.
+2. **Latar bukan putih.** Kedalaman datang dari kontras kartu vs latar hangat.
+3. **Ikon dipakai seperlunya.** Grid aksi dan daftar memakai kata, bukan simbol
+   — ikon hanya di bilah tab, lembar pintasan, dan kamera.
+4. **Tombol memakai tinggi minimum, bukan `Size.fromHeight`.** `Size.fromHeight`
+   berarti lebar tak hingga; begitu tombol dipakai di dalam `Row` (bilah simpan
+   Absen Kelas, baris aksi dialog) tata letak gagal dengan
+   *BoxConstraints forces an infinite width* dan **seluruh isi layar hilang** —
+   daftar siswa sempat tampil kosong karenanya. Tombol tetap selebar layar di
+   `ListView` dan bilah bawah karena induknya sudah memberi lebar penuh.
+
+> `ColorScheme.fromSeed` memetakan seed ke palet tonal M3 dan mengubah
+> merah-oranye ini jadi cokelat kusam, sehingga nilai `primary`,
+> `primaryContainer`, `surface`, dan `onSurface` **dikunci** lewat `.copyWith`.
+
+### Komponen bersama (`ui_kit.dart`)
+
+| Komponen | Dipakai untuk |
+|---|---|
+| `Panel` | kartu putih datar (opsional `onTap`, `tinted` untuk keadaan aktif) |
+| `InfoStrip` | pesan satu baris dengan rel warna di kiri — pengganti banner berikon |
+| `PillTabs<T>` | pemilih 2–3 pilihan; terpilih = bidang gelap penuh |
+| `FieldLabel` | label huruf kapital kecil di atas kelompok kendali |
+| `EmptyNote` | keadaan kosong: judul tebal + satu kalimat penjelas |
+
+Kartu gelap (`color: scheme.onSurface`) adalah satu-satunya bidang gelap per
+layar dan menandai "pokok layar ini": ringkasan hari ini di Beranda, petugas di
+Absensi, identitas di Profil.
+
+### Peran
+
+Peran **selalu berasal dari akun yang login** (`roles`/`permissions` di token),
+tidak pernah dari pemilih di aplikasi:
+
+- Beranda — judul kartu ringkasan berbunyi *Kelas Anda* untuk guru, *Seluruh
+  Sekolah* untuk admin; grid aksi disaring `visibleActionsFor(user)`.
+- Absen Kelas — daftar kelas dibatasi server (guru hanya kelas yang diampu).
+- Profil — peran tampil sebagai fakta akun, tanpa kendali pengubah.
+
+Ringkasan Beranda dikunci pada id akun (`dashboardStatsFamily`). Tanpa itu
+`FutureProvider` mewarisi nilai lama saat dibangun ulang, sehingga beberapa
+detik setelah ganti akun **admin melihat kartu "Kelas Anda" milik guru**
+lengkap dengan peringatan "belum terhubung ke kelas".
+
 ---
 
 ## 1. Model Navigasi
 
-Aplikasi absensi memakai **bottom navigation** 4 tab (persona Operator):
+**Bottom navigation** 4 tab — susunan dan namanya disalin dari `bottomTabs`
+pada rujukan desain:
 
 ```
-[ Scan ] · [ Rekap ] · [ Antrean ] · [ Profil ]
-   F5/F6      F10         F8           F11/F2
+[ Beranda ] · [ Absensi ] · [ Keuangan ] · [ Profil ]
+     F2          F5/F6           (belum)        F11
 ```
 
-- **Auth gate** di depan: Splash → cek token → Login (F1) atau langsung Dashboard/Scan.
-- Tab default setelah login = **Scan**.
-- Badge angka pada **Antrean** menampilkan jumlah scan offline menunggu (F8).
+- **Auth gate** di depan: Splash → cek token → Login (F1) atau langsung Beranda.
+- Tab default setelah login = **Beranda**.
+- Tab **Absensi** disembunyikan bila akun tak punya izin `attendance.record`.
+- **Keuangan** — lihat §1c.
+- **Notifikasi kehilangan tabnya** (posisinya diambil Keuangan). Fiturnya tetap
+  jalan dan dibuka dari **Profil → Notifikasi**, lengkap dengan jumlah belum
+  dibaca. Ini konsekuensi menyamakan menu dengan rujukan, yang memang tidak
+  punya layar notifikasi.
+- Antrean offline muncul sebagai `InfoStrip` yang bisa diketuk di Beranda (F8)
+  dan sebagai panel di tab Absensi.
+
+### 1a. Grid aksi Beranda
+
+Judul dan keterangannya **persis** `homeActionDefs` pada rujukan, termasuk
+perbedaan set antar peran. Peran diambil dari `user_type` di token.
+
+| Guru | Admin / Staf / Super Admin |
+|---|---|
+| **Absensi** — Pindai, Ref ID & checklist | **Absensi** — Pindai, Ref ID & checklist |
+| **Jadwal** — Jadwal minggu ini | **Keuangan** — Verifikasi pembayaran |
+| **Pengumuman** — Pengumuman terbaru | **Pengumuman** — Buat & publikasikan |
+| **Nilai** — Input & finalisasi | **Jadwal** — Lihat jadwal |
+
+Hanya **Absensi** yang sudah dibangun; sisanya tampil redup dan tidak bisa
+diketuk. Sengaja tetap ditampilkan supaya peta menu terbaca utuh — sama seperti
+rujukan yang menyediakan `act.disabled`.
+
+> Satu keterangan tidak bisa disamakan persis: pada rujukan, Pengumuman untuk
+> guru berbunyi `${ANNOUNCEMENTS.length} baru`. Tidak ada API pengumuman di
+> sini, dan mengarang angka lebih buruk daripada mengganti kalimatnya, jadi
+> dipakai "Pengumuman terbaru".
+
+Lembar "Semua menu" beserta pengaturan pintasan **dihapus**: rujukan hanya
+punya empat kartu per peran, jadi menyembunyikan sebagian di balik lembar
+tambahan menambah langkah tanpa menghemat ruang.
+
+### 1c. Keuangan
+
+Mengikuti varian `financeIsAdmin` pada rujukan:
+
+| Bagian | Sumber |
+|---|---|
+| Kartu gelap **SISA TAGIHAN** + Tertagih/Terbayar + hitungan jatuh tempo | `GET /finance/fees/summary` (nilai rupiah dipakai apa adanya dari `*_formatted`) |
+| **Pembayaran untuk diverifikasi** | `GET /finance/payments?needs_verification=1` |
+| Setujui / Tolak | `POST /finance/payments/{id}/verify` dengan `approved` |
+
+Verifikasi punya **dua arah** karena endpoint mewajibkan `approved` — bukan
+sekadar "tandai selesai". Selalu lewat dialog konfirmasi: menyangkut uang dan
+tak ada tombol urung di aplikasi.
+
+**Varian `financeIsTeacher` pada rujukan tidak dibuat.** Di sana guru
+men-ceklis "sudah bayar" per siswa per pos per bulan; backend tak punya konsep
+itu — yang ada tagihan (`student_fees`) dan pembayaran (`payments`). Menandai
+lunas berarti membuat transaksi pembayaran sungguhan, dan mengarang alur uang di
+klien jauh lebih berbahaya daripada belum menyediakannya.
+
+### 1d. Profil & Pengaturan
+
+Baris Profil mengikuti urutan rujukan (`tabIsProfile`): **Absensi Saya ·
+Pengaturan & Sinkronisasi · Notifikasi · Tema · Masuk & Keamanan · Versi
+Aplikasi · Keluar**.
+
+Layar **Pengaturan** (`/settings`) memuat bagian **Sinkronisasi Server** dari
+rujukan: "Terakhir tersinkron" (disimpan `SyncStatusStore` tiap antrean berhasil
+terkirim) dan tombol "Sinkronkan dengan Server API" yang mengirim kedua antrean.
+
+Waktu ditampilkan relatif ("3 menit lalu"): pertanyaan di lapangan adalah "data
+saya sudah masuk belum?", bukan jam pastinya. Jumlah antrean saja tak cukup —
+antrean kosong bisa berarti "sudah terkirim" atau "memang belum ada apa-apa".
+
+Bagian **Master Data Keuangan** pada rujukan (periode laporan, tambah/hapus pos
+biaya) **tidak** dibuat: proyek ini menaruh seluruh master data di web dan
+menyisakan transaksi saja untuk mobile (§5 dokumen ini). Yang tampil hanya
+penunjuk ke web. **Masuk & Keamanan** pun sama — menerbitkan kode akses dan
+mencabut sesi adalah wewenang administratif; di sini hanya status koneksi.
+
+### 1b. Metode absensi
+
+Isi menu tab Absensi mengikuti `attMethodOptions` pada rujukan:
+
+| Label | Tujuan |
+|---|---|
+| **Pindai QR** (admin) / **Tampilkan QR** (peran lain) | S3 kamera scan |
+| **Ref ID** | S4 input manual |
+| **Checklist** | absen kelas (ceklis per siswa) |
+| **Absensi Saya** | QR & Ref ID milik akun yang login, plus riwayat bulan ini |
+
+Seperti rujukan, pil metode **menukar isi layar di tempat** — bukan membuka
+layar baru. `ManualInputView` dan `ClassAttendanceView` sengaja dipisahkan dari
+Scaffold-nya supaya bisa dipakai dua-duanya: ditanam di tab, dan tetap berdiri
+sendiri lewat rute `/manual` serta `/class-attendance`.
+
+Pengecualian: **kamera tetap layar penuh** (`/scan`). Viewfinder butuh seluruh
+layar dan punya siklus hidup sendiri (izin kamera, torch, pause saat app ke
+latar), jadi menanamnya di dalam tab justru menyulitkan.
+
+Isi tiap panel, mengikuti rujukan:
+
+| Panel | Isi |
+|---|---|
+| Pindai QR / Tampilkan QR | pil `Masuk`/`Pulang`, bidang gelap berbingkai QR + "Arahkan kamera ke kode QR siswa", catatan "Lokasi wajib · dalam radius sekolah" bila diwajibkan, tombol utama, lalu panel antrean offline |
+| Ref ID | pil `Masuk`/`Pulang`, field **Kode Referensi / RFID**, tombol **Periksa**, pratinjau identitas, tombol **Catat Absensi** |
+| Checklist | pemilih kelas & tanggal, **Tandai Semua Hadir**, daftar siswa dengan tombol H/S/I/A, bilah simpan |
+| Absensi Saya | kartu gelap **KODE PRESENSI ANDA** berisi QR asli + kode + Ref ID, pil status hari ini, lalu daftar **Riwayat** berpil status |
+
+Bingkai QR pada panel Pindai digambar dengan `CustomPaint`, bukan aset:
+bentuknya sederhana dan harus ikut warna aksen tema.
+
+**Dua penyimpangan dari rujukan, keduanya disengaja:**
+
+1. **QR di "Absensi Saya" sungguhan, bukan gambar hiasan.** Rujukan hanya
+   menggambar tiga sudut penanda. Kode presensi yang tak bisa dipindai tak ada
+   gunanya, jadi QR di sini berisi `unique_code` — kolom yang memang
+   dicocokkan `ScannerController`. Datanya dari `GET /attendance/me/today`
+   (`qr.unique_code`, `rfid_code`), riwayatnya dari `GET /attendance/me/history`.
+2. **Kamera tetap layar penuh** (`/scan`). Viewfinder butuh seluruh layar dan
+   punya siklus hidup sendiri (izin kamera, torch, jeda saat app ke latar).
+
+### Filter tanggal pada Checklist
+
+Mengganti kelas **atau tanggal** memuat ulang lewat
+`GET /attendance/students/daily?classroom_id&date`, yang mengembalikan daftar
+siswa **beserta status yang sudah tercatat** pada tanggal itu.
+
+Sebelumnya daftar hanya dimuat saat kelas berganti dan selalu di-set "semua
+hadir", sehingga memilih tanggal lain cuma mengganti label — dan menyimpan akan
+**menimpa absensi tanggal itu** dengan tanda yang tak pernah dilihat gurunya.
+
+Status `belum_scan` dari server dipetakan ke `hadir`: `AttendanceMark` hanya
+memuat status yang boleh disimpan, dan roll call memang dimulai dari anggapan
+semua hadir. Saat offline, daftar siswa masih diambil dari endpoint kelas dan
+dimulai dari "semua hadir" — status tersimpan tak bisa dibaca tanpa server, tapi
+guru tetap bisa bekerja.
 
 ---
 
@@ -76,6 +276,7 @@ S7 Antrean → online → POST /scan/sync-offline → ringkasan per-item
 - **Transisi keluar:** otomatis (tanpa aksi pengguna).
 
 ### S1 · Login
+- **Tampilan (rujukan 2026-08-23):** kotak aksen kecil + nama aplikasi sebagai kop, judul “Masuk” `headlineMedium`; tanpa blok ikon besar.
 - **Tujuan:** autentikasi (F1).
 - **Elemen:** field Email, Password (toggle lihat), checkbox "Ingat saya", tombol **Masuk**, tautan "Lupa password?".
 - **State:** `idle` · `submitting` (tombol loading, field dikunci) · `error` (pesan inline) · `success` → S2.
@@ -83,6 +284,7 @@ S7 Antrean → online → POST /scan/sync-offline → ringkasan per-item
 - **Error:** 401/403/422/429/offline (lihat F1).
 
 ### S2 · Dashboard Scan (Home)
+- **Tampilan (rujukan 2026-08-23):** dipecah dua — **Beranda** (sapaan editorial + pil peran + kartu ringkasan gelap + grid aksi tanpa ikon) dan tab **Absensi** (kartu petugas gelap, `PillTabs` Masuk/Pulang, tiga tombol bertingkat, panel antrean). Ringkasan hanya memuat kategori yang benar-benar dikembalikan `GET /dashboard` — tidak ada “Terlambat” karena API tak menyediakannya.
 - **Tujuan:** titik awal & konteks (F3).
 - **Elemen:** tanggal & jam server; **segmented [Masuk | Pulang]**; kartu ringkasan ("128 masuk hari ini"); tombol utama **Mulai Scan**; tombol sekunder **Input Ref ID**; badge offline bila ada antrean; banner libur bila `is_holiday`.
 - **State:** `loading` (skeleton) · `ready` · `holiday` (scan dinonaktifkan) · `offline` (pakai setting cache, banner).
@@ -97,6 +299,7 @@ S7 Antrean → online → POST /scan/sync-offline → ringkasan per-item
 - **Edge:** QR bukan milik sistem → S5 gagal "Kode tidak ditemukan"; duplikat kode beruntun < 3 dtk → diabaikan (debounce) untuk cegah dobel.
 
 ### S4 · Input Ref ID (Manual)
+- **Tampilan (rujukan 2026-08-23):** `InfoStrip` menggantikan kotak pesan berikon; kartu pratinjau jadi `Panel` teks (nama tebal + meta), status nonaktif jadi pil.
 - **Tujuan:** fallback ketik/tempel kode (F6).
 - **Elemen:** field kode (autofocus, mendukung pembaca RFID sebagai keyboard), tombol **Cek** (lookup), kartu pratinjau identitas, tombol **Catat**.
 - **State:** `idle` · `looking_up` · `preview` (identitas tampil) · `submitting` · `result` (→ S5) · `not_found`.
@@ -114,11 +317,13 @@ S7 Antrean → online → POST /scan/sync-offline → ringkasan per-item
 - **State:** `loading` · `list` · `empty` · `error` (coba lagi).
 
 ### S7 · Antrean Offline
+- **Tampilan (rujukan 2026-08-23):** baris antrean jadi `Panel` polos tanpa avatar berikon; keadaan kosong memakai `EmptyNote`.
 - **Tujuan:** kelola scan tertunda (F8).
 - **Elemen:** indikator "Offline · N menunggu"; daftar item (kode, waktu, mode); tombol **Sinkron N data**; hasil per-item setelah sinkron (✓/✕ + alasan).
 - **State:** `empty` · `queued` · `syncing` · `partial` (sebagian gagal, tetap tampil).
 
 ### S8 · Profil & Info Sekolah
+- **Tampilan (rujukan 2026-08-23):** kartu identitas gelap (inisial dalam kotak aksen), peran sebagai pil `primaryContainer`, pengaturan dalam satu `Panel` berbaris label/nilai tanpa ikon pembuka.
 - **Tujuan:** identitas & keluar (F11/F2).
 - **Elemen:** nama, peran, sekolah aktif, versi app; toggle tema; tombol **Keluar** (konfirmasi).
 

@@ -2,245 +2,169 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 
-/// Blok header Beranda: sapaan, identitas, avatar, dan satu kartu status
-/// bersarang di dalam bidang biru.
+/// Kepala Beranda: tanggal, sapaan, dan lencana peran.
 ///
-/// Kartu bersarang itu penting: ia mengangkat **satu** informasi terpenting
-/// hari ini ke tempat paling menonjol, tanpa menambah kartu baru di badan
-/// halaman.
+/// Berbeda dari versi sebelumnya yang memakai bidang biru bergradien — rujukan
+/// desain bergaya editorial: latar tetap terang, hierarki dibangun dari ukuran
+/// dan bobot huruf, bukan dari blok warna.
 class HomeHero extends StatelessWidget {
   const HomeHero({
     super.key,
     required this.greeting,
-    required this.name,
-    required this.subtitle,
-    required this.statusTitle,
-    this.statusDate,
-    this.statusCaption,
-    this.statusColor,
-    this.statusIcon,
+    required this.roleLabel,
+    this.dateLabel,
+    this.schoolName,
   });
 
+  /// Mis. "Selamat pagi, Sari".
   final String greeting;
-  final String name;
-  final String subtitle;
 
-  /// Baris utama kartu status, mis. "486 dari 540 sudah hadir".
-  final String statusTitle;
+  /// Peran **dari akun yang login**, bukan pilihan pengguna.
+  final String roleLabel;
 
-  /// Label kanan atas kartu status, biasanya tanggal.
-  final String? statusDate;
-
-  /// Baris kecil di bawah [statusTitle].
-  final String? statusCaption;
-
-  final Color? statusColor;
-  final IconData? statusIcon;
+  final String? dateLabel;
+  final String? schoolName;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final chipText = [roleLabel, if (schoolName != null) schoolName!]
+        .where((e) => e.isNotEmpty)
+        .join(' · ');
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-        20,
-        MediaQuery.of(context).padding.top + 18,
-        20,
-        22,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.primary, AppTheme.heroGradientEnd],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (dateLabel != null)
+          Text(dateLabel!,
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 2),
+        Text(
+          greeting,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.headlineSmall,
         ),
-        borderRadius: const BorderRadius.vertical(
-          bottom: Radius.circular(26),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(greeting,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: .85),
-                          fontSize: 13,
-                        )),
-                    const SizedBox(height: 2),
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -.4,
-                      ),
-                    ),
-                    if (subtitle.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: .78),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
+        if (chipText.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: scheme.onPrimaryContainer,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              _Avatar(name: name),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _StatusCard(
-            title: statusTitle,
-            date: statusDate,
-            caption: statusCaption,
-            color: statusColor ?? const Color(0xFF22C55E),
-            icon: statusIcon ?? Icons.check_circle_rounded,
+                const SizedBox(width: 6),
+                Text(
+                  chipText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onPrimaryContainer,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final parts =
-        name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
-    final initials = parts.isEmpty
-        ? '?'
-        : parts.take(2).map((e) => e[0].toUpperCase()).join();
-
-    return Container(
-      width: 46,
-      height: 46,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .2),
-        shape: BoxShape.circle,
-      ),
-      child: Text(
-        initials,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: 15,
-        ),
-      ),
-    );
-  }
-}
-
-/// Panel semi-transparan di dalam hero — permukaan kedua tanpa memakai warna
-/// baru, sehingga hierarkinya terbaca tanpa menambah bobot visual.
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({
+/// Kartu ringkasan gelap dengan tiga angka besar.
+///
+/// Satu-satunya bidang gelap di layar — itulah yang membuatnya jadi pusat
+/// perhatian tanpa perlu warna aksen.
+class SummaryCard extends StatelessWidget {
+  const SummaryCard({
+    super.key,
     required this.title,
-    required this.color,
-    required this.icon,
-    this.date,
-    this.caption,
+    required this.figures,
   });
 
   final String title;
-  final String? date;
-  final String? caption;
-  final Color color;
-  final IconData icon;
+  final List<SummaryFigure> figures;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final onDark = scheme.surface;
+    final mutedOnDark = onDark.withValues(alpha: .62);
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .14),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: .16)),
+        color: scheme.onSurface,
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Status hari ini',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: .82),
-                    fontSize: 11.5,
-                  )),
-              if (date != null)
-                Text(date!,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: .82),
-                      fontSize: 11.5,
-                    )),
-            ],
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w600,
+              color: mutedOnDark,
+            ),
           ),
-          const SizedBox(height: 11),
+          const SizedBox(height: 12),
           Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                child: Icon(icon, size: 21, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+              for (var i = 0; i < figures.length; i++) ...[
+                if (i > 0) const SizedBox(width: 22),
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -.2,
+                      figures[i].value,
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -.6,
+                        color: figures[i].tint ?? onDark,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    if (caption != null) ...[
-                      const SizedBox(height: 1),
-                      Text(
-                        caption!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: .8),
-                          fontSize: 11.5,
-                        ),
-                      ),
-                    ],
+                    const SizedBox(height: 2),
+                    Text(
+                      figures[i].label,
+                      style: TextStyle(fontSize: 11, color: mutedOnDark),
+                    ),
                   ],
                 ),
-              ),
+              ],
             ],
           ),
         ],
       ),
     );
   }
+}
+
+class SummaryFigure {
+  const SummaryFigure({required this.value, required this.label, this.tint});
+
+  final String value;
+  final String label;
+
+  /// Aksen dipakai untuk angka yang perlu perhatian (terlambat / tidak hadir).
+  final Color? tint;
+
+  /// Nuansa aksen di atas bidang gelap, seperti pada rujukan.
+  static Color get warn => AppTheme.accentSoft;
+  static Color get bad => AppTheme.accent200;
 }

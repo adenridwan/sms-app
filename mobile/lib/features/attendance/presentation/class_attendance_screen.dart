@@ -2,17 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/backend_status_dot.dart';
+import '../../../core/theme/ui_kit.dart';
 import '../../home/presentation/widgets/attendance_bar.dart';
 import '../models/class_attendance.dart';
 import 'class_attendance_controller.dart';
 
-/// Absen kelas dengan ceklis manual oleh guru.
+/// Layar penuh ceklis kelas, dipakai lewat rute `/class-attendance`.
+class ClassAttendanceScreen extends StatelessWidget {
+  const ClassAttendanceScreen({super.key, this.initialClassroomId});
+
+  final String? initialClassroomId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Absen Kelas'),
+        actions: const [
+          Center(child: BackendStatusDot()),
+          SizedBox(width: 16),
+        ],
+      ),
+      body: ClassAttendanceView(initialClassroomId: initialClassroomId),
+    );
+  }
+}
+
+/// Ceklis manual oleh guru, tanpa Scaffold sehingga bisa ditanam di tab
+/// Absensi — rujukan desain menukar isi layar di tempat, bukan membuka layar
+/// baru.
 ///
 /// Semua siswa mulai berstatus **Hadir**; guru hanya menandai pengecualian.
 /// Daftar kelas & siswa dibatasi server sesuai peran — guru hanya melihat
 /// kelas yang ia ampu, admin melihat semuanya.
-class ClassAttendanceScreen extends ConsumerWidget {
-  const ClassAttendanceScreen({super.key, this.initialClassroomId});
+class ClassAttendanceView extends ConsumerWidget {
+  const ClassAttendanceView({super.key, this.initialClassroomId});
 
   final String? initialClassroomId;
 
@@ -23,40 +47,30 @@ class ClassAttendanceScreen extends ConsumerWidget {
     final controller = ref.read(provider.notifier);
     final scheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Absen Kelas'),
-        actions: const [
-          Center(child: BackendStatusDot()),
-          SizedBox(width: 16),
-        ],
-      ),
-      body: Column(
-        children: [
-          _Toolbar(state: state, controller: controller),
-          Expanded(child: _Body(state: state, controller: controller)),
-          if (state.students.isNotEmpty)
-            _SaveBar(
-              state: state,
-              onSave: () async {
-                final outcome = await controller.save();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(SnackBar(
-                    content: Text(outcome.label),
-                    // Masuk antrean bukan kegagalan — jangan diwarnai merah,
-                    // supaya guru tidak merasa pekerjaannya hilang.
-                    backgroundColor:
-                        outcome.isFailure ? scheme.error : null,
-                    duration: outcome.kind == SaveOutcomeKind.queued
-                        ? const Duration(seconds: 5)
-                        : const Duration(seconds: 3),
-                  ));
-              },
-            ),
-        ],
-      ),
+    return Column(
+      children: [
+        _Toolbar(state: state, controller: controller),
+        Expanded(child: _Body(state: state, controller: controller)),
+        if (state.students.isNotEmpty)
+          _SaveBar(
+            state: state,
+            onSave: () async {
+              final outcome = await controller.save();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(SnackBar(
+                  content: Text(outcome.label),
+                  // Masuk antrean bukan kegagalan — jangan diwarnai merah,
+                  // supaya guru tidak merasa pekerjaannya hilang.
+                  backgroundColor: outcome.isFailure ? scheme.error : null,
+                  duration: outcome.kind == SaveOutcomeKind.queued
+                      ? const Duration(seconds: 5)
+                      : const Duration(seconds: 3),
+                ));
+            },
+          ),
+      ],
     );
   }
 }
@@ -140,7 +154,7 @@ class _Toolbar extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: () => controller.markAll(AttendanceMark.hadir),
                 icon: const Icon(Icons.done_all_rounded, size: 16),
-                label: const Text('Tandai semua hadir',
+                label: const Text('Tandai Semua Hadir',
                     style: TextStyle(fontSize: 11.5)),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
@@ -197,18 +211,22 @@ class _Body extends StatelessWidget {
     }
 
     if (state.classes.isEmpty) {
-      return _Empty(
-        icon: Icons.link_off_rounded,
-        text: state.error ??
-            'Tidak ada kelas yang bisa Anda absen. '
-                'Akun Anda mungkin belum terhubung ke kelas mana pun.',
+      return Center(
+        child: EmptyNote(
+          title: 'Belum ada kelas',
+          body: state.error ??
+              'Tidak ada kelas yang bisa Anda absen. Akun Anda mungkin belum '
+                  'terhubung ke kelas mana pun.',
+        ),
       );
     }
 
     if (state.students.isEmpty) {
-      return _Empty(
-        icon: Icons.groups_outlined,
-        text: state.error ?? 'Kelas ini belum memiliki siswa aktif.',
+      return Center(
+        child: EmptyNote(
+          title: 'Kelas kosong',
+          body: state.error ?? 'Kelas ini belum memiliki siswa aktif.',
+        ),
       );
     }
 
@@ -375,33 +393,6 @@ class _SaveBar extends StatelessWidget {
                 : const Text('Simpan'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 44, color: scheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(text,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.onSurfaceVariant)),
-          ],
-        ),
       ),
     );
   }

@@ -11,8 +11,10 @@ import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/finance/presentation/finance_screen.dart';
 import '../../features/notifications/presentation/notification_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/profile/presentation/settings_screen.dart';
 import 'app_shell.dart';
 
 /// Menjembatani perubahan state Riverpod ke GoRouter (refresh + redirect).
@@ -79,14 +81,29 @@ final routerProvider = Provider<GoRouter>((ref) {
           ]),
           StatefulShellBranch(routes: [
             GoRoute(
-              path: '/notifications',
-              builder: (_, __) => const NotificationScreen(),
+              path: '/finance',
+              builder: (_, __) => const FinanceScreen(),
             ),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
           ]),
         ],
+      ),
+
+      // Dibuka dari Profil, bukan tab tersendiri — sesuai rujukan desain.
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/settings',
+        builder: (_, __) => const SettingsScreen(),
+      ),
+
+      // Notifikasi kehilangan tabnya karena rujukan desain memakai Keuangan
+      // sebagai tab ketiga; fiturnya tetap jalan, dibuka dari Profil.
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/notifications',
+        builder: (_, __) => const NotificationScreen(),
       ),
 
       // Layar penuh di atas shell (bottom nav sengaja disembunyikan agar

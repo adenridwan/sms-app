@@ -36,6 +36,67 @@ class ClassAttendanceRepository {
     }
   }
 
+  /// Absensi kelas pada satu tanggal: daftar siswa **beserta status yang sudah
+  /// tercatat**.
+  ///
+  /// Dipakai saat kelas atau tanggal berubah. Tanpa ini, memilih tanggal lain
+  /// hanya mengganti label — daftar tetap memakai status hari sebelumnya dan
+  /// menyimpan akan menimpa data yang sudah benar.
+  ///
+  /// `belum_scan` yang dikembalikan server dipetakan ke [AttendanceMark.hadir]:
+  /// enum ini hanya memuat status yang boleh disimpan, dan roll call memang
+  /// dimulai dari anggapan semua hadir.
+  Future<({List<ClassStudent> students, Map<String, AttendanceMark> marks})>
+      daily({required String classroomId, required DateTime date}) async {
+    try {
+      final res = await _dio.get('/attendance/students/daily', queryParameters: {
+        'classroom_id': classroomId,
+        'date': _ymd(date),
+      });
+      // Endpoint ini membungkus daftarnya: `data.students`, bukan `data`
+      // langsung seperti endpoint kelas.
+      final data = (res.data as Map)['data'];
+      final items = data is Map ? data['students'] : data;
+      if (items is! List) {
+        return (
+          students: const <ClassStudent>[],
+          marks: const <String, AttendanceMark>{}
+        );
+      }
+
+      final students = <ClassStudent>[];
+      final marks = <String, AttendanceMark>{};
+
+      for (final raw in items.whereType<Map>()) {
+        final row = Map<String, dynamic>.from(raw);
+        final id = row['student_id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+
+        students.add(ClassStudent(
+          id: id,
+          name: (row['name'] ?? '').toString().isEmpty
+              ? '(tanpa nama)'
+              : row['name'].toString(),
+          nis: row['nis']?.toString(),
+        ));
+
+        marks[id] = AttendanceMark.values.firstWhere(
+          (m) => m.slug == row['status']?.toString(),
+          orElse: () => AttendanceMark.hadir,
+        );
+      }
+
+      return (students: students, marks: marks);
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  static String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
   Future<List<ClassStudent>> students(String classroomId) async {
     try {
       final res = await _dio.get('/academic/classrooms/$classroomId/students');

@@ -97,6 +97,28 @@ Diuji langsung dengan mematikan backend, lalu menutup & membuka ulang aplikasi.
 | **Input manual** | Pratinjau identitas gagal (wajar, butuh server) tapi **penyimpanan tetap terbuka** dan masuk antrean. Kode yang benar-benar tak dikenal saat online tetap dicegah. | [manual_input_screen.dart](../mobile/lib/features/attendance/presentation/manual_input_screen.dart) |
 | **Absen kelas** | Seluruh sesi (kelas + tanggal + status tiap siswa) masuk antrean tersendiri. | [class_attendance_queue_controller.dart](../mobile/lib/features/attendance/presentation/class_attendance_queue_controller.dart) |
 | **Layar lain (Beranda, rekap)** | Tampil dari data terakhir bila ada, atau keadaan kosong yang jujur. | — |
+| **Login** | Setelah 6 detik server tak menjawab, kredensial diverifikasi terhadap catatan PBKDF2 lokal dari login online sebelumnya. Sesi masuk tanpa token dan ditandai belum terverifikasi. | [offline_credential_store.dart](../mobile/lib/core/storage/offline_credential_store.dart) |
+| **Keluar (logout)** | Sesi lokal dihapus **lebih dulu**, pencabutan token di server menyusul tanpa ditunggu. Catatan kredensial offline sengaja dipertahankan. | [auth_repository.dart](../mobile/lib/features/auth/data/auth_repository.dart) |
+| **Server hidup lagi** | Diketuk berkala lewat `GET /ping` selagi status belum `online`; satu respons memicu sinkron antrean otomatis, lalu pemeriksa berhenti. | [backend_probe.dart](../mobile/lib/core/network/backend_probe.dart) |
+
+> **Sesi hasil login offline belum punya token.** Karena itu 401 hanya dianggap
+> "sesi dicabut" bila request memang mengirim `Authorization` — tanpa syarat
+> itu, request pertama yang lolos ke server akan menjawab 401 dan langsung
+> melempar petugas keluar dari sesi offline-nya. Begitu `/ping` menandai server
+> `online`, `revalidateSession()` menukar sesi itu dengan token asli memakai
+> password yang masih dipegang **di memori** (tak pernah ditulis ke disk).
+> Terbukti di log server: `/ping` → `/auth/login` → `/auth/me` dalam 1 detik.
+>
+> Bila aplikasi ditutup sebelum server kembali, password di memori hilang dan
+> antrean menunggu satu kali login online — datanya tetap aman, hanya tertunda.
+
+> **Urutan pada logout itu penting.** Versi sebelumnya memanggil
+> `POST /auth/logout` **lebih dulu** lalu menghapus token di `finally`. Saat
+> server tak terjangkau, Dio menunggu `connectTimeout` 15 detik sebelum
+> melanjutkan — selama itu tombol Keluar tampak mati total. Token dibaca dulu
+> sebelum dihapus supaya permintaan pencabutan tetap membawa `Authorization`;
+> kalau permintaan itu gagal, token sisa di server akan kedaluwarsa sendiri, dan
+> itu bukan alasan menahan pengguna di dalam aplikasi.
 
 **Dua antrean, bukan satu.** Scan tunggal (`offline_scans`) dan sesi absen kelas
 (`offline_class_attendance`) disimpan terpisah di SharedPreferences karena

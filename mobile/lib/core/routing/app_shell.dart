@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/auth_controller.dart';
-import '../../features/notifications/presentation/notification_controller.dart';
 
 /// Kerangka aplikasi: bottom navigation 4 tab tetap
-/// (`Beranda · Absensi · Notifikasi · Profil`).
+/// (`Beranda · Absensi · Keuangan · Profil`) — susunan dan namanya persis
+/// mengikuti `bottomTabs` pada rujukan desain (artifact `0af1e5c5`).
 ///
 /// Tab sengaja **tidak** berubah-ubah per peran — perbedaan izin tampil di
 /// grid aksi Beranda, bukan di navigasi (lihat docs/04-NAVIGATION-MENU.md §2).
@@ -20,7 +20,6 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider).user;
-    final unread = ref.watch(notificationControllerProvider).unreadCount;
     final canAttend = user?.hasPermission('attendance.record') ?? false;
 
     // Indeks branch di router tetap (0..3); yang disembunyikan hanya tampilan
@@ -45,18 +44,10 @@ class AppShell extends ConsumerWidget {
         ),
       (
         branch: 2,
-        dest: NavigationDestination(
-          icon: Badge.count(
-            count: unread,
-            isLabelVisible: unread > 0,
-            child: const Icon(Icons.notifications_none_rounded),
-          ),
-          selectedIcon: Badge.count(
-            count: unread,
-            isLabelVisible: unread > 0,
-            child: const Icon(Icons.notifications_rounded),
-          ),
-          label: 'Notifikasi',
+        dest: const NavigationDestination(
+          icon: Icon(Icons.account_balance_wallet_outlined),
+          selectedIcon: Icon(Icons.account_balance_wallet_rounded),
+          label: 'Keuangan',
         )
       ),
       (
@@ -91,9 +82,9 @@ class AppShell extends ConsumerWidget {
           // Label selalu tampil: tab di sini jarang ditebak dari ikon saja
           // (Absensi vs Riwayat mudah tertukar).
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          // Pil bertinta di balik ikon aktif — penanda posisi yang terbaca
-          // sekilas, sesuai rujukan desain.
-          indicatorColor: scheme.primary.withValues(alpha: .12),
+          // Pil bertinta aksen di balik ikon aktif — penanda posisi yang
+          // terbaca sekilas, sesuai rujukan desain.
+          indicatorColor: scheme.primaryContainer,
           indicatorShape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

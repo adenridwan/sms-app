@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/theme/ui_kit.dart';
 import '../data/attendance_providers.dart';
 import '../models/queued_class_attendance.dart';
 import '../models/queued_scan.dart';
@@ -86,19 +87,25 @@ class _OfflineQueueScreenState extends ConsumerState<OfflineQueueScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : total == 0
-              ? _empty(context)
+              ? const Center(
+                  child: EmptyNote(
+                    title: 'Tidak ada antrean',
+                    body: 'Semua absensi sudah tersinkron ke server.',
+                  ),
+                )
               : ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
                   children: [
                     if (classQueue.items.isNotEmpty) ...[
-                      _SectionLabel(
-                          'Absen kelas (${classQueue.items.length})'),
+                      FieldLabel('Absen kelas · ${classQueue.items.length}'),
+                      const SizedBox(height: 8),
                       for (final item in classQueue.items)
                         _ClassTile(item: item),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 20),
                     ],
                     if (_scans.isNotEmpty) ...[
-                      _SectionLabel('Scan (${_scans.length})'),
+                      FieldLabel('Scan · ${_scans.length}'),
+                      const SizedBox(height: 8),
                       for (final s in _scans) _ScanTile(scan: s),
                     ],
                   ],
@@ -107,58 +114,55 @@ class _OfflineQueueScreenState extends ConsumerState<OfflineQueueScreen> {
           ? null
           : SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.icon(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: FilledButton(
                   onPressed: _syncing ? null : _sync,
-                  icon: _syncing
+                  child: _syncing
                       ? const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                               strokeWidth: 2.4, color: Colors.white))
-                      : const Icon(Icons.cloud_upload_rounded),
-                  label:
-                      Text(_syncing ? 'Menyinkron…' : 'Sinkron $total data'),
+                      : Text('Sinkron $total data'),
                 ),
               ),
             ),
     );
   }
-
-  Widget _empty(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.cloud_done_rounded,
-              size: 48, color: scheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text('Tidak ada antrean',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text('Semua absensi sudah tersinkron.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant)),
-        ],
-      ),
-    );
-  }
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-  final String text;
+/// Baris antrean: judul tebal + keterangan, tanpa avatar berikon.
+///
+/// Ikon bundar sebelumnya membuat daftar terasa berat padahal isinya seragam —
+/// rujukan memakai panel putih polos dan mengandalkan teks.
+class _QueueTile extends StatelessWidget {
+  const _QueueTile({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text,
-          style: const TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: -.2)),
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Panel(
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 13),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -.2)),
+            const SizedBox(height: 3),
+            Text(subtitle,
+                style:
+                    TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -169,28 +173,18 @@ class _ClassTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final tally = item.tally;
     final parts = [
       for (final m in tally.keys)
         if ((tally[m] ?? 0) > 0) '${tally[m]} ${m.label.toLowerCase()}',
     ];
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: scheme.primaryContainer,
-          child: Icon(Icons.fact_check_rounded,
-              color: scheme.onPrimaryContainer, size: 20),
-        ),
-        title: Text(item.classroomName.isEmpty
-            ? '${item.studentCount} siswa'
-            : '${item.classroomName} · ${item.studentCount} siswa'),
-        subtitle: Text(
+    return _QueueTile(
+      title: item.classroomName.isEmpty
+          ? '${item.studentCount} siswa'
+          : '${item.classroomName} · ${item.studentCount} siswa',
+      subtitle:
           '${_fmtDate(item.date)}${parts.isEmpty ? '' : ' · ${parts.join(', ')}'}',
-        ),
-      ),
     );
   }
 
@@ -205,26 +199,10 @@ class _ScanTile extends StatelessWidget {
   final QueuedScan scan;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: scheme.secondaryContainer,
-          child: Icon(
-            scan.waktu.name == 'pulang'
-                ? Icons.logout_rounded
-                : Icons.login_rounded,
-            color: scheme.onSecondaryContainer,
-            size: 20,
-          ),
-        ),
-        title: Text(scan.uniqueCode),
-        subtitle: Text('${scan.waktu.label} · ${_fmt(scan.scannedAt)}'),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _QueueTile(
+        title: scan.uniqueCode,
+        subtitle: '${scan.waktu.label} · ${_fmt(scan.scannedAt)}',
+      );
 
   static String _fmt(DateTime d) {
     String two(int n) => n.toString().padLeft(2, '0');

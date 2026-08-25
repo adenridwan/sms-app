@@ -84,19 +84,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(Icons.qr_code_scanner_rounded,
-                          color: scheme.onPrimary, size: 28),
+                    // Kotak aksen kecil + nama aplikasi — penanda merek pada
+                    // rujukan desain, menggantikan ikon besar sebelumnya.
+                    Row(
+                      children: [
+                        Container(width: 14, height: 14, color: scheme.primary),
+                        const SizedBox(width: 10),
+                        const Text(
+                          AppConfig.appName,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -.2,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    Text('Masuk ke ${AppConfig.appName}',
-                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 28),
+                    Text('Masuk',
+                        style: Theme.of(context).textTheme.headlineMedium),
                     const SizedBox(height: 4),
                     Text('Gunakan akun sekolah Anda',
                         style: Theme.of(context)

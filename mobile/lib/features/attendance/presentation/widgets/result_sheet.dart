@@ -60,7 +60,7 @@ class _ResultCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 30,
-            backgroundColor: v.color.withOpacity(0.15),
+            backgroundColor: v.color.withValues(alpha: .15),
             child: Icon(v.icon, color: v.color, size: 34),
           ),
           const SizedBox(height: 14),
@@ -86,7 +86,7 @@ class _ResultCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
-              color: v.color.withOpacity(0.14),
+              color: v.color.withValues(alpha: .14),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(

@@ -97,23 +97,54 @@ class ClassAttendanceController extends StateNotifier<ClassAttendanceState> {
     }
   }
 
-  Future<void> selectClass(String classroomId) async {
+  Future<void> selectClass(String classroomId) {
+    state = state.copyWith(selectedClassId: classroomId);
+    return _loadSheet();
+  }
+
+  /// Muat daftar siswa **beserta status yang sudah tercatat** untuk kelas dan
+  /// tanggal yang sedang dipilih.
+  ///
+  /// Dipanggil tiap kali salah satunya berubah. Sebelumnya daftar hanya dimuat
+  /// saat kelas berganti dan selalu di-set "semua hadir", sehingga mengganti
+  /// tanggal tak berpengaruh apa pun — dan menyimpan akan menimpa absensi
+  /// tanggal itu dengan tanda yang tak pernah dilihat gurunya.
+  Future<void> _loadSheet() async {
+    final classroomId = state.selectedClassId;
+    if (classroomId == null) return;
+
     state = state.copyWith(
-      selectedClassId: classroomId,
       loadingStudents: true,
       students: const [],
       marks: const {},
     );
     try {
-      final students = await _repo.students(classroomId);
+      final sheet = await _repo.daily(
+        classroomId: classroomId,
+        date: state.date ?? DateTime.now(),
+      );
       state = state.copyWith(
-        students: students,
-        // Semua default "Hadir": guru hanya menandai pengecualian, sebagaimana
-        // roll call sungguhan bekerja.
-        marks: {for (final s in students) s.id: AttendanceMark.hadir},
+        students: sheet.students,
+        marks: sheet.marks,
         loadingStudents: false,
       );
     } on ApiException catch (e) {
+      // Offline: daftar siswa masih bisa diambil dari endpoint kelas, tapi
+      // status tersimpan tak bisa dibaca — mulai dari "semua hadir" seperti
+      // roll call biasa, supaya guru tetap bisa bekerja.
+      if (e.isNetwork) {
+        try {
+          final students = await _repo.students(classroomId);
+          state = state.copyWith(
+            students: students,
+            marks: {for (final s in students) s.id: AttendanceMark.hadir},
+            loadingStudents: false,
+          );
+          return;
+        } on ApiException {
+          // jatuh ke pesan error di bawah
+        }
+      }
       state = state.copyWith(loadingStudents: false, error: e.message);
     }
   }
@@ -128,7 +159,10 @@ class ClassAttendanceController extends StateNotifier<ClassAttendanceState> {
     );
   }
 
-  void setDate(DateTime date) => state = state.copyWith(date: date);
+  Future<void> setDate(DateTime date) {
+    state = state.copyWith(date: date);
+    return _loadSheet();
+  }
 
   /// Simpan absensi kelas.
   ///

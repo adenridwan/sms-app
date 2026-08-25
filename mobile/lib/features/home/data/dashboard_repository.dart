@@ -28,13 +28,29 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>(
   (ref) => DashboardRepository(ref.watch(dioProvider)),
 );
 
-/// Ringkasan Beranda. `AsyncValue` cukup di sini — tak ada mutasi state,
-/// hanya muat ulang (pull-to-refresh lewat `ref.invalidate`).
+/// Ringkasan Beranda untuk **akun yang sedang login**.
 ///
-/// Sengaja bergantung pada **id user yang sedang login**: tanpa itu, data
-/// tetap tersimpan setelah ganti akun, sehingga guru yang baru masuk masih
-/// melihat ringkasan milik admin sebelumnya.
-final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) {
-  ref.watch(authControllerProvider.select((s) => s.user?.id));
-  return ref.watch(dashboardRepositoryProvider).fetch();
-});
+/// Dikunci pada id user lewat `family`. `FutureProvider` biasa menyimpan nilai
+/// lama saat dibangun ulang (`copyWithPrevious`), sehingga beberapa detik
+/// setelah ganti akun Beranda sempat memakai ringkasan milik akun sebelumnya —
+/// admin melihat kartu "Kelas Anda" beserta peringatan khusus guru. Satu
+/// instance provider per user tidak punya nilai sebelumnya untuk diwarisi.
+final dashboardStatsFamily =
+    FutureProvider.autoDispose.family<DashboardStats, String?>(
+  (ref, userId) => ref.watch(dashboardRepositoryProvider).fetch(),
+);
+
+/// Id akun yang sedang login — kunci untuk [dashboardStatsFamily].
+final currentUserIdProvider = Provider<String?>(
+  (ref) => ref.watch(authControllerProvider.select((s) => s.user?.id)),
+);
+
+/// Yang ditonton layar. Tak ada mutasi state di sini, hanya muat ulang
+/// (pull-to-refresh lewat [invalidateDashboardStats]).
+final dashboardStatsProvider = Provider.autoDispose<AsyncValue<DashboardStats>>(
+  (ref) => ref.watch(dashboardStatsFamily(ref.watch(currentUserIdProvider))),
+);
+
+/// Muat ulang ringkasan milik akun yang sedang login.
+void invalidateDashboardStats(WidgetRef ref) =>
+    ref.invalidate(dashboardStatsFamily(ref.read(currentUserIdProvider)));

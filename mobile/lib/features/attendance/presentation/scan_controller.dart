@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/backend_status.dart';
+import '../../../core/storage/sync_status_store.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/attendance_providers.dart';
 import '../data/attendance_repository.dart';
@@ -64,7 +65,18 @@ class ScanController extends StateNotifier<ScanState> {
       final data = await _repo.bootstrap();
       state = state.copyWith(bootstrap: data, loadingBootstrap: false);
     } on ApiException catch (e) {
-      state = state.copyWith(loadingBootstrap: false, bootstrapError: e.message);
+      // 403 di sini berarti perannya memang tidak boleh mengoperasikan scanner
+      // gerbang (`attendance.scanner-operate` hanya milik admin/TU). Pesan
+      // mentah dari server berbahasa Inggris dan menyebut nama izin — tak ada
+      // gunanya bagi guru yang membuka layar ini, jadi diganti kalimat yang
+      // menjelaskan apa yang masih bisa ia lakukan.
+      state = state.copyWith(
+        loadingBootstrap: false,
+        bootstrapError: e.isForbidden
+            ? 'Akun Anda tidak berwenang mengoperasikan scanner gerbang. '
+                'Gunakan Checklist untuk mengabsen kelas Anda.'
+            : e.message,
+      );
     }
   }
 
@@ -137,6 +149,11 @@ class ScanController extends StateNotifier<ScanState> {
     }
     final remaining = await _queue.removeIds(doneIds);
     state = state.copyWith(queueCount: remaining.length);
+
+    // Dicatat walau sebagian gagal: yang berarti bagi pengguna adalah "kapan
+    // terakhir aplikasi berhasil bicara dengan server", bukan kesempurnaan
+    // satu batch.
+    await SyncStatusStore().markSynced();
 
     return (
       total: (data['total'] as num?)?.toInt() ?? items.length,

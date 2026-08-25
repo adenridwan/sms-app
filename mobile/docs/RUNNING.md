@@ -24,6 +24,102 @@ php artisan serve --env=testing --port=8001
 php artisan serve --host=0.0.0.0 --port=8000
 ```
 
+## Pasang ke HP dalam satu perintah
+
+```bash
+cd backend && php artisan serve --env=demo --port=8001 --host=0.0.0.0 &
+cd mobile  && ./scripts/install-apk.sh
+```
+
+Skrip itu mendeteksi IP LAN komputer, membangun APK release dengan
+`--dart-define=API_BASE_URL=http://<ip>:8001/api/v1`, memasangnya, lalu
+membuka aplikasinya. Variasinya:
+
+```bash
+./scripts/install-apk.sh 192.168.1.14   # tentukan IP sendiri
+SKIP_BUILD=1 ./scripts/install-apk.sh   # pasang ulang APK yang sudah ada
+PORT=8080 ./scripts/install-apk.sh      # backend di port lain
+```
+
+Tiga hal yang membuatnya ada:
+
+- **Alamat backend di-*bake* ke APK.** Pindah WiFi → IP berubah → APK **harus**
+  dibangun ulang. Karena itu IP-nya dicetak sebelum build, dan `…/ping` diketuk
+  lebih dulu supaya ketahuan kalau server mati — lebih baik daripada memasang
+  APK yang lalu gagal login tanpa sebab yang jelas.
+- **Emulator dilewati.** `adb install` gagal dengan *more than one
+  device/emulator* kalau emulator ikut menyala, jadi skrip memilih HP fisik.
+- **`unauthorized` dijelaskan.** Kalau dialog "Allow USB debugging?" belum
+  disetujui, skrip menyebutkan langkahnya alih-alih gagal diam-diam.
+
+---
+
+### Pakai `sms_demo` untuk uji di perangkat
+
+`sms_testing` adalah basis milik phpunit. Siapa pun yang menjalankan
+`php artisan test` — dari terminal, dari IDE, dari sesi lain — mengosongkannya
+lewat `RefreshDatabase`, dan aplikasi di HP mendadak menjawab
+"Email atau password salah". Jejaknya terlihat di log PostgreSQL sebagai
+`FATAL: database "database_yang_tidak_ada_ini" does not exist`
+(dari `tests/Feature/DatabaseConnectionTest.php`).
+
+Untuk demo/uji perangkat, pakai basis terpisah yang tak pernah disentuh test:
+
+```bash
+cd backend
+
+# sekali saja
+psql -U postgres -h 127.0.0.1 -c "CREATE DATABASE sms_demo"
+sed -e 's/^APP_ENV=testing/APP_ENV=demo/'     -e 's/^DB_DATABASE=sms_testing/DB_DATABASE=sms_demo/'     .env.testing > .env.demo
+
+php artisan migrate:fresh --seed --env=demo --force
+php artisan serve --env=demo --port=8001 --host=0.0.0.0
+```
+
+`DemoAttendanceFixtureSeeder` (sudah masuk `DatabaseSeeder`) mengisi apa yang
+tak diisi seeder demo lain: `unique_code`/`rfid_code` siswa & guru, dan wali
+kelas. Tanpa itu **pindai QR, Ref ID, "Absensi Saya", dan Checklist per kelas
+semuanya tak bisa dipakai** — tak ada kode untuk dipindai dan tak ada guru yang
+mengampu kelas. Idempoten, jadi bisa dijalankan sendiri di basis yang sudah ada:
+
+```bash
+php artisan db:seed --class=DemoAttendanceFixtureSeeder --env=demo --force
+```
+
+Akun guru yang **tertaut ke data kepegawaian** (punya QR & kelas) memakai pola
+`<nama><n>@teacher.sms.local`, mis. `drbambangsud10@teacher.sms.local`.
+`guru1@demo.sms.local` hanyalah akun login — tidak punya baris `teachers`, jadi
+"Absensi Saya" dan Checklist tidak akan berisi apa pun untuknya.
+
+### Bila `sms_testing` kosong
+
+`php artisan test` memakai basis ini dengan `RefreshDatabase`, jadi **setiap kali
+suite dijalankan isinya terhapus**. Gejalanya: login menjawab 401 padahal
+kredensial benar, atau Beranda kosong melompong. Isi ulang:
+
+```bash
+cd backend
+php artisan migrate:fresh --seed --env=testing --force
+
+# Verifikasi sebelum lanjut — jangan percaya "DONE" dari seeder saja
+php artisan tinker --env=testing   --execute="echo \DB::table('users')->count();"
+```
+
+Dua hal yang pernah menggigit:
+
+- **Jangan jalankan dua `migrate:fresh --seed` bersamaan.** Yang satu menghapus
+  saat yang lain sedang mengisi, dan seeder tetap melapor sukses.
+- **`DemoFinanceSeeder` tidak idempoten** — hanya aman di atas basis yang baru
+  di-`fresh`; di basis terisi ia gagal pada foreign key `payment_items`.
+
+Akun demo (kata sandi semuanya `password`):
+
+| Peran | Email |
+|---|---|
+| Super admin | `superadmin@sms.local` |
+| Admin sekolah | `admin@demo.sms.local` |
+| Guru | `guru1@demo.sms.local`, `guru2@demo.sms.local` |
+
 ---
 
 ## 1. Emulator Android (cara termudah)

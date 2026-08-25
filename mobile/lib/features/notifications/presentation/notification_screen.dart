@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/backend_status_dot.dart';
+import '../../../core/theme/ui_kit.dart';
+import '../models/app_notification.dart';
 import 'notification_controller.dart';
 
-/// Tab Notifikasi: daftar notifikasi + tandai baca.
+/// Tab Notifikasi.
+///
+/// Rujukan desain menampilkan daftar sebagai kartu putih terpisah, bukan
+/// [ListTile] berikon dengan garis pemisah: yang belum dibaca ditandai titik
+/// aksen kecil dan judul tebal — tanpa ikon lonceng yang mengulang konteks tab.
 class NotificationScreen extends ConsumerWidget {
   const NotificationScreen({super.key});
 
@@ -12,7 +18,6 @@ class NotificationScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(notificationControllerProvider);
     final notifier = ref.read(notificationControllerProvider.notifier);
-    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -24,7 +29,7 @@ class NotificationScreen extends ConsumerWidget {
               child: const Text('Tandai semua'),
             ),
           const Center(child: BackendStatusDot()),
-          const SizedBox(width: 12),
+          const SizedBox(width: 20),
         ],
       ),
       body: RefreshIndicator(
@@ -37,48 +42,94 @@ class NotificationScreen extends ConsumerWidget {
 
             if (state.items.isEmpty) {
               return ListView(
-                padding: const EdgeInsets.all(32),
                 children: [
-                  const SizedBox(height: 60),
-                  Icon(Icons.notifications_none_rounded,
-                      size: 48, color: scheme.onSurfaceVariant),
-                  const SizedBox(height: 12),
-                  Text(
-                    state.error ?? 'Belum ada notifikasi.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  const SizedBox(height: 40),
+                  EmptyNote(
+                    title: state.error == null
+                        ? 'Belum ada notifikasi'
+                        : 'Tidak bisa memuat',
+                    body: state.error ??
+                        'Pemberitahuan absensi, izin, dan pengumuman akan '
+                            'muncul di sini.',
                   ),
                 ],
               );
             }
 
             return ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
               itemCount: state.items.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, i) {
-                final n = state.items[i];
-                return ListTile(
-                  leading: Icon(
-                    n.isRead
-                        ? Icons.notifications_none_rounded
-                        : Icons.notifications_active_rounded,
-                    color: n.isRead ? scheme.onSurfaceVariant : scheme.primary,
-                  ),
-                  title: Text(
-                    n.title.isEmpty ? '(tanpa judul)' : n.title,
-                    style: TextStyle(
-                      fontWeight:
-                          n.isRead ? FontWeight.normal : FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: n.body.isEmpty ? null : Text(n.body),
-                  onTap: n.isRead ? null : () => notifier.markRead(n.id),
-                );
-              },
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, i) => _NotificationTile(
+                item: state.items[i],
+                onTap: state.items[i].isRead
+                    ? null
+                    : () => notifier.markRead(state.items[i].id),
+              ),
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({required this.item, this.onTap});
+
+  final AppNotification item;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final unread = !item.isRead;
+
+    return Panel(
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Titik aksen menggantikan ikon: cukup untuk membedakan belum/sudah
+          // dibaca tanpa menambah bobot visual pada tiap baris.
+          Container(
+            margin: const EdgeInsets.only(top: 5, right: 12),
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: unread ? scheme.primary : scheme.outlineVariant,
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title.isEmpty ? '(tanpa judul)' : item.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    letterSpacing: -.2,
+                    fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                    color: unread ? scheme.onSurface : scheme.onSurfaceVariant,
+                  ),
+                ),
+                if (item.body.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    item.body,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
