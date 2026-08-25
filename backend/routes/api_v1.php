@@ -283,10 +283,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // ===========================================
     // Scanner Module (for QR/RFID scanning)
     // Mengoperasikan mesin scan untuk memproses absen ORANG LAIN (bukan
-    // attendance.check-in punya diri sendiri) — hanya admin/TU/super_admin,
-    // lihat PermissionSeeder soal attendance.scanner-operate.
+    // attendance.check-in punya diri sendiri). Route ini hanya menyaring
+    // "boleh scan sesuatu" (siswa ATAU staf); jenis yang boleh discan
+    // (attendance.scan-students vs attendance.scan-staff) dicek per-kode di
+    // AttendanceScanService::processScan() — guru cuma punya scan-students,
+    // jadi ditolak kalau kode yang discan ternyata milik guru/pegawai.
     // ===========================================
-    Route::prefix('scan')->name('scan.')->middleware('permission:attendance.scanner-operate')->group(function () {
+    Route::prefix('scan')->name('scan.')->middleware('permission:attendance.scan-students|attendance.scan-staff')->group(function () {
         Route::get('bootstrap', [\App\Http\Controllers\Api\V1\Attendance\ScannerController::class, 'bootstrap'])->name('bootstrap');
         Route::post('/', [\App\Http\Controllers\Api\V1\Attendance\ScannerController::class, 'scan'])->name('process');
         Route::post('sync-offline', [\App\Http\Controllers\Api\V1\Attendance\ScannerController::class, 'syncOffline'])->name('sync-offline');

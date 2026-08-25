@@ -42,11 +42,25 @@ class AttendanceScanService
         // Try to identify as student first, then teacher
         $student = Student::findByCode($code);
         if ($student) {
+            // Guru hanya punya attendance.scan-students — dicek di sini
+            // (bukan cuma di middleware route) karena jenis kode baru
+            // diketahui SETELAH di-lookup, bukan saat routing.
+            if (! auth()->user()?->can('attendance.scan-students')) {
+                return $this->errorResponse('Anda tidak memiliki akses untuk memproses absensi siswa.');
+            }
+
             return $this->processStudentScan($student, $scanType, $location);
         }
 
         $teacher = Teacher::findByCode($code);
         if ($teacher) {
+            // Guru SENGAJA tidak diberi attendance.scan-staff — mencegah
+            // guru memindai kehadiran guru/pegawai lain, termasuk dirinya
+            // sendiri, lewat Scanner.
+            if (! auth()->user()?->can('attendance.scan-staff')) {
+                return $this->errorResponse('Scanner ini hanya untuk absensi siswa. Anda tidak memiliki akses memproses absensi guru/pegawai.');
+            }
+
             return $this->processTeacherScan($teacher, $scanType, $location);
         }
 

@@ -45,7 +45,7 @@ class RoleSeeder extends Seeder
                 'staff.view', 'staff.create', 'staff.update', 'staff.delete', 'staff.manage',
                 // Attendance
                 'attendance.view', 'attendance.record', 'attendance.manage', 'attendance.report',
-                'attendance.scanner-operate',
+                'attendance.scan-students', 'attendance.scan-staff',
                 // Exams & Grades
                 'exams.view', 'exams.create', 'exams.update', 'exams.delete', 'exams.manage',
                 'grades.view', 'grades.input', 'grades.update', 'grades.manage', 'grades.finalize', 'grades.export',
@@ -140,6 +140,11 @@ class RoleSeeder extends Seeder
                 'teachers.view-own',
                 // Attendance
                 'attendance.view', 'attendance.record', 'attendance.check-in', 'attendance.check-out',
+                // Scan absensi siswa (mis. presensi kelas via QR/RFID) —
+                // SENGAJA tidak diberi attendance.scan-staff, supaya guru
+                // tidak bisa memindai kehadiran guru/pegawai lain ataupun
+                // dirinya sendiri lewat Scanner.
+                'attendance.scan-students',
                 // Exams & Grades
                 'exams.view', 'exams.create', 'exams.update',
                 'grades.view', 'grades.input', 'grades.update',
@@ -184,7 +189,7 @@ class RoleSeeder extends Seeder
                 'staff.view', 'staff.create', 'staff.update',
                 // Attendance
                 'attendance.view', 'attendance.check-in', 'attendance.check-out',
-                'attendance.scanner-operate',
+                'attendance.scan-students', 'attendance.scan-staff',
                 // Attendance settings (TU boleh atur jam absen & notifikasi)
                 'settings.attendance',
                 // Reports

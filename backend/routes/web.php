@@ -138,8 +138,11 @@ Route::middleware(['auth', 'password.current'])->group(function () {
         Route::get('/attendance/card-templates', [PageController::class, 'attendanceCardTemplates'])->name('attendance.card-templates');
     });
     Route::get('/attendance/reports', [PageController::class, 'attendanceReports'])->name('attendance.reports');
+    // Halaman scanner dibuka untuk siapa saja yang boleh memindai SESUATU
+    // (siswa ATAU staf) — pembatasan per jenis yang discan (guru cuma
+    // scan-students) ditegakkan di dalam AttendanceScanService::processScan().
     Route::get('/scanner', [PageController::class, 'scanner'])
-        ->middleware('permission:attendance.scanner-operate')
+        ->middleware('permission:attendance.scan-students|attendance.scan-staff')
         ->name('scanner');
 
     // Settings Module
