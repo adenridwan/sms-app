@@ -145,15 +145,15 @@ class _LockScreenState extends ConsumerState<_LockScreen> {
 
     // Tanpa catatan kredensial, tak ada yang bisa dicocokkan — bilang apa
     // adanya, jangan menuduh passwordnya salah.
-    final known = await ref.read(offlineCredentialStoreProvider).knownEmail();
+    final known = await ref.read(offlineCredentialStoreProvider).knownEmails();
     if (!mounted) return;
 
     setState(() {
       _checking = false;
-      _error = known == null
-          ? 'Perangkat ini belum menyimpan bukti kredensial. Keluar lalu '
-              'masuk sekali saat online untuk mengaktifkan kunci.'
-          : 'Password salah.';
+      _error = known.contains(user.email.trim().toLowerCase())
+          ? 'Password salah.'
+          : 'Perangkat ini belum menyimpan bukti kredensial untuk akun Anda. '
+              'Keluar lalu masuk sekali saat online untuk mengaktifkan kunci.';
     });
   }
 

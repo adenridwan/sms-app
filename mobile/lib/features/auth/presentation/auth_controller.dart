@@ -193,14 +193,25 @@ class AuthController extends StateNotifier<AuthState> {
     final user = await _repo.verifyOffline(email: email, password: password);
 
     if (user == null) {
-      final known = await _repo.offlineEmail();
+      final known = await _repo.offlineEmails();
+      final isKnown = known.contains(email.trim().toLowerCase());
+
       state = AuthState(
         status: AuthStatus.unauthenticated,
-        error: known == null
-            ? 'Tidak terhubung ke server. Akun ini belum pernah masuk di '
-                'perangkat ini, jadi belum bisa diverifikasi secara offline.'
-            : 'Tidak terhubung ke server. Saat offline hanya akun $known yang '
-                'bisa masuk di perangkat ini, dengan password yang sama.',
+        // Tiga keadaan yang berbeda, dan membedakannya menghemat waktu orang:
+        // password salah, akun ini belum pernah masuk di sini, atau perangkat
+        // ini memang belum pernah dipakai sama sekali.
+        error: isKnown
+            ? 'Tidak terhubung ke server, dan password tidak cocok dengan '
+                'yang tersimpan untuk akun ini.'
+            : known.isEmpty
+                ? 'Tidak terhubung ke server. Perangkat ini belum pernah '
+                    'dipakai login, jadi belum ada yang bisa diverifikasi '
+                    'secara offline. Satu kali login online dibutuhkan lebih '
+                    'dulu.'
+                : 'Tidak terhubung ke server. Akun ini belum pernah masuk di '
+                    'perangkat ini. Yang bisa masuk offline: '
+                    '${known.join(', ')}.',
       );
       return;
     }

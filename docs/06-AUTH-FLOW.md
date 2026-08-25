@@ -171,7 +171,8 @@ jalur offline.
 
 1. Login online sukses → selain token & profil, disimpan pula turunan
    **PBKDF2-HMAC-SHA256** (salt acak 16 byte, 50.000 iterasi) dari password,
-   bersama potret profil, untuk **satu akun terakhir** di perangkat itu.
+   bersama potret profil. Disimpan **per akun**, sampai 10 akun per perangkat
+   (yang paling lama tak dipakai dibuang lebih dulu).
 2. Login berikutnya menunggu server maksimal **6 detik** (jauh di bawah
    `connectTimeout` 15 detik — menahan petugas menatap tombol selengkap itu
    tak ada gunanya bila server memang mati).
@@ -192,9 +193,32 @@ akun itu** masih bisa masuk offline di perangkat tersebut. Ambangnya sama dengan
 login biasa, tapi berbeda dari sebelumnya (dulu: tanpa server, tak seorang pun
 bisa masuk). Bila perangkat berpindah tangan permanen, hapus data aplikasi.
 
-Batasannya: hanya **satu akun** per perangkat (yang terakhir login online),
-sejalan dengan satu slot `cached_user`. Login akun lain saat offline ditolak
-dengan pesan yang menyebutkan akun mana yang tersedia.
+**Banyak akun, bukan satu.** Versi pertama hanya menyimpan akun terakhir;
+akibatnya perangkat jaga yang dipakai bergantian hanya bisa dimasuki orang
+terakhir yang kebetulan login online — kalau itu super admin, hanya super admin
+yang bisa. Perangkat di gerbang memang dipakai bergantian, jadi satu slot salah
+sejak awal. Catatan format lama dipindahkan otomatis, jadi perangkat yang sudah
+terpasang tidak kehilangan kemampuan masuk offline setelah pembaruan.
+
+Pesan galat membedakan tiga keadaan, karena ketiganya menuntut tindakan
+berbeda: password salah, akun ini belum pernah masuk **di perangkat ini**
+(disebutkan siapa saja yang bisa), atau perangkat ini belum pernah dipakai
+login sama sekali.
+
+### Batas yang tidak bisa dilewati
+
+Perangkat yang **belum pernah** terhubung ke server sama sekali tidak bisa
+memasukkan siapa pun. Tak ada turunan password untuk dibandingkan, tak ada
+profil, tak ada izin — tak ada apa pun yang bisa diverifikasi. Ini bukan
+keterbatasan implementasi melainkan sifat autentikasi: sesuatu harus sampai ke
+perangkat lebih dulu.
+
+Jadi aturannya: **satu kali login online per akun per perangkat**, sesudah itu
+akun tersebut bebas masuk offline selamanya. Untuk benar-benar meniadakan
+langkah itu, perangkat harus di-*provision* lebih dulu — mis. administrator
+menerbitkan berkas/QR berisi turunan kredensial yang diimpor aplikasi. Itu
+belum dibangun, dan memindahkan bukti kredensial lewat berkas punya risiko
+sendiri yang perlu dipikirkan terpisah.
 
 ## 5. Logout flow (Feature F11)
 

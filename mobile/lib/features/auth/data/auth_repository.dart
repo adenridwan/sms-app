@@ -113,8 +113,8 @@ class AuthRepository {
   }) =>
       _offline.verify(email: email, password: password);
 
-  /// Email akun yang punya catatan offline di perangkat ini.
-  Future<String?> offlineEmail() => _offline.knownEmail();
+  /// Email yang punya catatan offline di perangkat ini.
+  Future<List<String>> offlineEmails() => _offline.knownEmails();
 
   /// POST /auth/logout → cabut token di server, lalu hapus lokal.
   /// Kegagalan jaringan tetap membersihkan token lokal (token kadaluarsa
