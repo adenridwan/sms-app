@@ -55,6 +55,10 @@ class MyAttendanceController extends ApiController
                 // ada di tabel teachers) — staf non-guru belum punya QR sendiri.
                 'available' => (bool) $user->teacher,
                 'teacher_id' => $user->teacher?->id,
+                // Isi QR-nya. Scanner mencocokkan `unique_code` (lihat
+                // ScannerController), jadi tanpa kolom ini aplikasi mobile
+                // tidak punya apa pun yang benar-benar bisa dipindai.
+                'unique_code' => $user->teacher?->unique_code,
             ],
             // Ref ID (rfid_code) dipakai untuk scan tap kartu ATAU diketik
             // manual di mode "RFID / Manual" pada halaman Scanner — sama

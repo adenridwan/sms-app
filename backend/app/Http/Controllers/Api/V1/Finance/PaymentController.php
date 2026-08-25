@@ -20,7 +20,17 @@ class PaymentController extends ApiController
     public function index(Request $request): JsonResponse
     {
         $query = Payment::query()
-            ->with(['student.user', 'paymentMethod', 'receivedBy', 'verifiedBy'])
+            // `.profile` ikut dimuat: nama lengkap User membacanya, dan tanpa
+            // itu `index` melempar LazyLoadingViolationException (500) begitu
+            // dipanggil tanpa filter status.
+            ->with([
+                'student.user.profile',
+                // Resource menampilkan kelas siswa juga.
+                'student.currentClass',
+                'paymentMethod',
+                'receivedBy.profile',
+                'verifiedBy.profile',
+            ])
             ->withCount('items')
             ->when($request->search, function ($q, $search) {
                 $q->where('invoice_number', 'ilike', "%{$search}%")

@@ -48,8 +48,12 @@ class ClassroomController extends ApiController
             $roles = $user->getRoleNames();
 
             if ($roles->intersect(\App\Infrastructure\Persistence\Eloquent\Student\Student::ALL_ACCESS_ROLES)->isEmpty()) {
-                $ids = $user->teachingClassroomIds();
-                $query->whereIn('id', $ids === [] ? ['-'] : $ids);
+                // `whereIn` dengan array kosong sudah menghasilkan `0 = 1`
+                // di Laravel. Sentinel `['-']` yang dipakai sebelumnya justru
+                // meledak di PostgreSQL: `id` bertipe uuid, jadi membandingkan
+                // dengan '-' melempar `invalid input syntax for type uuid`
+                // — guru tanpa kelas mendapat 500, bukan daftar kosong.
+                $query->whereIn('id', $user->teachingClassroomIds());
             }
         }
 

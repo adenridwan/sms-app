@@ -30,6 +30,10 @@ class DatabaseSeeder extends Seeder
             DemoStudentSeeder::class,
             DemoTeacherSeeder::class,
             DemoAttendanceSeeder::class,
+            // Melengkapi apa yang tak diisi seeder di atas: kode QR/RFID dan
+            // wali kelas. Tanpa itu pindai QR, Ref ID, "Absensi Saya", dan
+            // Checklist per kelas semuanya tak bisa dipakai.
+            DemoAttendanceFixtureSeeder::class,
             DemoFinanceSeeder::class,
         ]);
     }
