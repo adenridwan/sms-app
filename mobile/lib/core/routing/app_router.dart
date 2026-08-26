@@ -9,6 +9,7 @@ import '../../features/attendance/presentation/scan_camera_screen.dart';
 import '../../features/attendance/presentation/scanner_home_screen.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/provision_scanner_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/finance/presentation/finance_screen.dart';
@@ -41,8 +42,9 @@ class _RouterNotifier extends ChangeNotifier {
       return null;
     }
 
-    // unauthenticated / authenticating → tetap di login
-    return loc == '/login' ? null : '/login';
+    // unauthenticated / authenticating → tetap di login atau provision-scan
+    if (loc == '/login' || loc == '/provision-scan') return null;
+    return '/login';
   }
 }
 
@@ -63,6 +65,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (_, __) => const LoginScreen(),
+      ),
+      // Scan QR provisioning — di luar shell karena belum login.
+      // Jika ada query param `token`, langsung proses tanpa scan.
+      GoRoute(
+        path: '/provision-scan',
+        builder: (_, state) => ProvisionScannerScreen(
+          initialToken: state.uri.queryParameters['token'],
+        ),
       ),
 
       // App shell — bottom nav 4 tab, tiap tab punya tumpukan navigasi sendiri.

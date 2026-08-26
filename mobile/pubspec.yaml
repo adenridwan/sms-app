@@ -54,6 +54,9 @@ dependencies:
   # Lokasi GPS (geofence absensi) — 10.x kompatibel dengan toolchain ini
   geolocator: ^10.1.1
 
+  # Deep linking untuk QR provisioning (smsapp://provision?token=xxx)
+  app_links: ^6.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

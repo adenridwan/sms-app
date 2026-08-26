@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/network/backend_status_dot.dart';
@@ -101,8 +102,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 28),
-                    Text('Masuk',
-                        style: Theme.of(context).textTheme.headlineMedium),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Masuk',
+                            style: Theme.of(context).textTheme.headlineMedium),
+                        // QR Scan icon untuk login via provisioning
+                        Container(
+                          decoration: BoxDecoration(
+                            color: scheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            onPressed: busy ? null : () => context.push('/provision-scan'),
+                            tooltip: 'Scan QR Akses',
+                            icon: Icon(
+                              Icons.qr_code_scanner_rounded,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Text('Gunakan akun sekolah Anda',
                         style: Theme.of(context)

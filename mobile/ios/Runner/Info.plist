@@ -49,5 +49,19 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Deep link: smsapp://provision?token=xxx -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.sms.mobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>smsapp</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

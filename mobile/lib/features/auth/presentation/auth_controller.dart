@@ -252,6 +252,15 @@ class AuthController extends StateNotifier<AuthState> {
     return _signIn(() => _repo.loginWithOtp(email: email, code: code));
   }
 
+  /// Login dengan token provisioning dari QR code.
+  ///
+  /// Admin men-generate token provisioning untuk user tertentu (berlaku 15
+  /// menit), lalu user scan QR di perangkat baru untuk langsung login tanpa
+  /// ketik password. Butuh koneksi untuk redeem token.
+  Future<void> loginWithProvision({required String provisionToken}) {
+    return _signIn(() => _repo.redeemProvision(provisionToken: provisionToken));
+  }
+
   /// Alur bersama kedua cara masuk: terbitkan sesi, muat profil lengkap
   /// (permissions), lalu tegakkan guard persona.
   Future<void> _signIn(Future<User> Function() authenticate) async {

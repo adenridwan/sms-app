@@ -74,6 +74,33 @@ class AuthRepository {
     }
   }
 
+  /// POST /auth/redeem-provision → masuk dengan token provisioning dari QR.
+  ///
+  /// Admin men-generate token provisioning untuk user tertentu, lalu user
+  /// scan QR di perangkat baru untuk langsung login tanpa ketik password.
+  Future<User> redeemProvision({required String provisionToken}) async {
+    try {
+      final res = await _dio.post('/auth/redeem-provision', data: {
+        'provision_token': provisionToken,
+      });
+      final data = (res.data as Map)['data'] as Map;
+      final token = data['token'] as String;
+      await _tokenStorage.save(token);
+
+      final userJson = Map<String, dynamic>.from(data['user'] as Map);
+      final permissions =
+          (data['permissions'] as List?)?.map((e) => e.toString()).toList();
+      final roles =
+          (data['roles'] as List?)?.map((e) => e.toString()).toList();
+      final user =
+          User.fromJson(userJson, permissions: permissions, roles: roles);
+      await _userCache.save(user);
+      return user;
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   /// GET /auth/me → user lengkap dengan roles + permissions. Cache lokal
   /// diperbarui tiap kali panggilan ini sukses (dipakai bila offline nanti).
   Future<User> me() async {

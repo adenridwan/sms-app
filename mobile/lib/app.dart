@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/config/app_config.dart';
 import 'core/network/backend_probe.dart';
 import 'core/routing/app_router.dart';
+import 'core/routing/deep_link_handler.dart';
 import 'core/security/app_lock_gate.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
@@ -16,6 +17,9 @@ class SmsApp extends ConsumerWidget {
     // Menyalakan pemeriksa jangkauan server. Harus ditonton dari widget yang
     // hidup selama aplikasi hidup, supaya timer-nya tidak ikut mati.
     ref.watch(backendProbeProvider);
+
+    // Mendengarkan deep link (smsapp://provision?token=xxx).
+    ref.watch(deepLinkHandlerProvider);
 
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);

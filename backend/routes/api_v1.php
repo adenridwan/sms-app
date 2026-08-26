@@ -29,6 +29,13 @@ Route::prefix('auth')->name('auth.')->group(function () {
         ->middleware('throttle:auth')
         ->name('activate');
 
+    // Redeem provision token (QR code login) — public karena user belum
+    // punya token auth. Token provisioning sendiri di-generate admin lewat
+    // endpoint protected di bawah.
+    Route::post('/redeem-provision', [\App\Http\Controllers\Api\V1\Auth\ProvisionController::class, 'redeem'])
+        ->middleware('throttle:auth')
+        ->name('redeem-provision');
+
     // Tidak ada reset password via email — "lupa password" dipakaikan
     // login-otp di atas (kode akses sekali-pakai dari admin). Dua route
     // 'forgot-password'/'reset-password' yang dulu di sini menunjuk ke
@@ -547,6 +554,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('users/{user}/otp', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'generateOtp'])->name('otp.generate');
             Route::delete('users/{user}/otp', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'revokeOtp'])->name('otp.revoke');
             Route::post('users/{user}/revoke-sessions', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'revokeSessions'])->name('sessions.revoke');
+        });
+
+        // Provisioning via QR Code: admin generate token, user scan di mobile.
+        Route::prefix('provision')->name('provision.')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\V1\Auth\ProvisionController::class, 'generate'])->name('generate');
+            Route::get('users/{user}', [\App\Http\Controllers\Api\V1\Auth\ProvisionController::class, 'history'])->name('history');
         });
         Route::get('audit-logs/{auditLog}', [\App\Http\Controllers\Api\V1\Admin\AuditLogController::class, 'show'])->name('audit-logs.show');
 

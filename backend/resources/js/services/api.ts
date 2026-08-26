@@ -1156,6 +1156,35 @@ export const loginSecurityApi = {
         api.post<ApiResponse<{ revoked: number }>>(`/admin/login-security/users/${userId}/revoke-sessions`),
 };
 
+// QR Code Provisioning: admin generate QR untuk user login di mobile tanpa ketik password
+export interface ProvisionTokenResponse {
+    provision_token: string;
+    expires_at: string;
+    expires_in_minutes: number;
+    user: { id: string; name: string; email: string };
+    qr_content: string;
+}
+
+export interface ProvisionHistoryEntry {
+    id: string;
+    created_at: string;
+    expires_at: string;
+    redeemed_at: string | null;
+    is_active: boolean;
+    created_by: { id: string; name: string } | null;
+}
+
+export const provisionApi = {
+    generate: (userId: string) =>
+        api.post<ApiResponse<ProvisionTokenResponse>>('/admin/provision', { user_id: userId }),
+
+    history: (userId: string) =>
+        api.get<ApiResponse<{
+            user: { id: string; name: string };
+            tokens: ProvisionHistoryEntry[];
+        }>>(`/admin/provision/users/${userId}`),
+};
+
 // Finance Reports
 export const financeReportsApi = {
     dashboard: <T = unknown>(params?: Record<string, unknown>) =>

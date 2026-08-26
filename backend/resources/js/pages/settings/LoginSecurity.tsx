@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { RefreshCw, KeyRound, ShieldOff, Copy } from 'lucide-react';
-import { loginSecurityApi, usersApi, type LoginLogEntry } from '@/services/api';
+import { RefreshCw, KeyRound, ShieldOff, Copy, QrCode, Download, Smartphone } from 'lucide-react';
+import { loginSecurityApi, usersApi, provisionApi, type LoginLogEntry, type ProvisionTokenResponse } from '@/services/api';
+import { QRCodeSVG } from 'qrcode.react';
 import type { User } from '@/types';
 
 const formatDateTime = (value: string) =>
@@ -17,12 +18,14 @@ const failureLabel: Record<string, string> = {
     invalid_credentials: 'Email/password salah',
     inactive_account: 'Akun tidak aktif',
     invalid_otp: 'Kode akses tidak valid',
+    invalid_token: 'Token QR tidak valid',
 };
 
 const methodLabel: Record<string, string> = {
     password: 'Password',
     otp: 'Kode Akses',
     activation: 'Aktivasi Akun',
+    provision: 'QR Provisioning',
 };
 
 export default function LoginSecurity() {
@@ -34,6 +37,10 @@ export default function LoginSecurity() {
     const [users, setUsers] = useState<User[]>([]);
     const [searching, setSearching] = useState(false);
     const [issuedCode, setIssuedCode] = useState<{ code: string; name: string; minutes: number } | null>(null);
+
+    // QR Provisioning state
+    const [provisionData, setProvisionData] = useState<ProvisionTokenResponse | null>(null);
+    const [generatingQr, setGeneratingQr] = useState<string | null>(null);
 
     const fetchLogs = async (email?: string) => {
         setLoadingLogs(true);
@@ -88,6 +95,42 @@ export default function LoginSecurity() {
         }
     };
 
+    const generateProvisionQr = async (user: User) => {
+        setGeneratingQr(user.id);
+        try {
+            const res = await provisionApi.generate(user.id);
+            if (res.data.data) {
+                setProvisionData(res.data.data);
+            }
+        } catch {
+            toast.error('Gagal membuat QR provisioning');
+        } finally {
+            setGeneratingQr(null);
+        }
+    };
+
+    const downloadQrCode = () => {
+        if (!provisionData) return;
+        const svg = document.getElementById('provision-qr-svg');
+        if (!svg) return;
+
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx?.drawImage(img, 0, 0);
+            const pngUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `qr-akses-${provisionData.user.name.replace(/\s+/g, '-').toLowerCase()}.png`;
+            link.href = pngUrl;
+            link.click();
+        };
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    };
+
     return (
         <MainLayout>
             <Head title="Keamanan Login" />
@@ -96,7 +139,7 @@ export default function LoginSecurity() {
                 <div>
                     <h1 className="text-2xl font-semibold">Keamanan Login</h1>
                     <p className="text-muted-foreground text-sm">
-                        Riwayat percobaan login, kode akses sekali-pakai, dan pencabutan sesi perangkat.
+                        QR provisioning, kode akses sekali-pakai, pencabutan sesi, dan riwayat login.
                     </p>
                 </div>
 
@@ -106,10 +149,9 @@ export default function LoginSecurity() {
                             <KeyRound className="h-4 w-4" /> Kode Akses & Sesi Pengguna
                         </CardTitle>
                         <CardDescription>
-                            Cari pengguna, lalu buat kode akses sekali-pakai untuk membantunya masuk di aplikasi
-                            mobile (mis. lupa password) atau untuk <strong>mengaktifkan akun yang baru mendaftar
-                            sendiri</strong> (bertanda “Menunggu aktivasi”). Bacakan kode ke pengguna lewat kanal
-                            terpercaya — kode hanya ditampilkan sekali di sini.
+                            Cari pengguna, lalu pilih aksi: <strong>QR Akses</strong> untuk scan langsung di mobile
+                            tanpa ketik password, <strong>Buat Kode</strong> untuk kode 6 digit yang dibacakan/dikirim,
+                            atau <strong>Cabut Sesi</strong> untuk logout paksa. QR dan kode berlaku 15 menit, sekali pakai.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -150,6 +192,55 @@ export default function LoginSecurity() {
                             </div>
                         )}
 
+                        {provisionData && (
+                            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
+                                <div className="flex items-start gap-4">
+                                    <div className="rounded-lg bg-white p-3">
+                                        <QRCodeSVG
+                                            id="provision-qr-svg"
+                                            value={provisionData.qr_content}
+                                            size={160}
+                                            level="M"
+                                            includeMargin={false}
+                                        />
+                                    </div>
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <Smartphone className="h-4 w-4 text-emerald-600" />
+                                            <p className="font-medium text-emerald-800 dark:text-emerald-200">
+                                                QR Akses untuk {provisionData.user.name}
+                                            </p>
+                                        </div>
+                                        <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                                            Scan QR ini di aplikasi mobile untuk login tanpa ketik password.
+                                            Berlaku <strong>{provisionData.expires_in_minutes} menit</strong>, sekali pakai.
+                                        </p>
+                                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                                            Kedaluwarsa: {new Date(provisionData.expires_at).toLocaleString('id-ID')}
+                                        </p>
+                                        <div className="flex gap-2 pt-2">
+                                            <Button size="sm" variant="outline" onClick={downloadQrCode}>
+                                                <Download className="mr-1 h-3 w-3" /> Unduh QR
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(provisionData.qr_content);
+                                                    toast.success('Link disalin');
+                                                }}
+                                            >
+                                                <Copy className="mr-1 h-3 w-3" /> Salin Link
+                                            </Button>
+                                            <Button size="sm" variant="ghost" onClick={() => setProvisionData(null)}>
+                                                Tutup
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {users.length > 0 && (
                             <div className="divide-y rounded-md border">
                                 {users.map((u) => (
@@ -171,6 +262,20 @@ export default function LoginSecurity() {
                                             <p className="text-muted-foreground truncate text-xs">{u.email}</p>
                                         </div>
                                         <div className="flex shrink-0 gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => generateProvisionQr(u)}
+                                                disabled={generatingQr === u.id || u.status !== 'active'}
+                                                title={u.status !== 'active' ? 'Hanya akun aktif yang bisa di-provision' : 'Generate QR untuk login di mobile'}
+                                            >
+                                                {generatingQr === u.id ? (
+                                                    <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
+                                                ) : (
+                                                    <QrCode className="mr-1 h-3 w-3" />
+                                                )}
+                                                QR Akses
+                                            </Button>
                                             <Button size="sm" variant="outline" onClick={() => generateOtp(u)}>
                                                 <KeyRound className="mr-1 h-3 w-3" /> Buat Kode
                                             </Button>
