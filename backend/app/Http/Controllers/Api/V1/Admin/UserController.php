@@ -25,13 +25,19 @@ class UserController extends ApiController
     {
         $query = User::with(['roles', 'profile'])
             ->when($request->search, function ($q, $search) {
-                $q->where(function ($query) use ($search) {
-                    $query->where('username', 'ilike', "%{$search}%")
-                        ->orWhere('email', 'ilike', "%{$search}%")
-                        ->orWhereHas('profile', fn ($p) => $p
-                            ->where('first_name', 'ilike', "%{$search}%")
-                            ->orWhere('last_name', 'ilike', "%{$search}%"));
-                });
+                // Join profile sekali saja, lebih cepat dari whereHas berulang.
+                // Mendukung pencarian nama lengkap (first + last) dan email.
+                $q->leftJoin('user_profiles as up', 'users.id', '=', 'up.user_id')
+                    ->where(function ($query) use ($search) {
+                        $term = '%' . $search . '%';
+                        $query->where('users.username', 'ilike', $term)
+                            ->orWhere('users.email', 'ilike', $term)
+                            ->orWhere('up.first_name', 'ilike', $term)
+                            ->orWhere('up.last_name', 'ilike', $term)
+                            // Gabungan nama lengkap agar "Budi Santoso" ketemu
+                            ->orWhereRaw("concat(up.first_name, ' ', up.last_name) ilike ?", [$term]);
+                    })
+                    ->select('users.*'); // Hindari kolom duplikat dari join
             })
             ->when($request->role, fn ($q, $role) => $q->role($role))
             ->when($request->status, fn ($q, $status) => $q->where('status', $status))
