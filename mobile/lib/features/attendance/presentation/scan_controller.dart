@@ -193,8 +193,24 @@ final scanControllerProvider =
   // Koneksi pulih → kirim antrean tanpa menunggu pengguna membuka layar
   // Antrean. Sebelumnya sinkron hanya jalan bila tombolnya ditekan manual,
   // sehingga hasil scan offline bisa tertinggal berhari-hari tanpa disadari.
-  ref.listen<BackendStatus>(backendStatusProvider, (previous, next) {
+  //
+  // Sinkron hanya dilakukan bila sesi sudah terverifikasi (punya token). Sesi
+  // hasil login offline belum punya token; revalidateSession() di auth
+  // controller akan menukarnya dengan token asli. Listener itu juga dipicu oleh
+  // BackendStatus.online, tapi urutan async tidak dijamin — jadi di sini kita
+  // tunggu sebentar supaya revalidasi punya kesempatan selesai lebih dulu.
+  ref.listen<BackendStatus>(backendStatusProvider, (previous, next) async {
     if (next == BackendStatus.online && previous != BackendStatus.online) {
+      // Tunggu sebentar agar revalidateSession() di auth punya waktu selesai.
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final auth = ref.read(authControllerProvider);
+      if (!auth.isSessionVerified) {
+        // Sesi belum terverifikasi (belum punya token). Sync akan gagal 401.
+        // Biarkan — akan dicoba lagi saat status online berikutnya setelah
+        // revalidasi berhasil.
+        return;
+      }
       controller.syncOfflineSilently();
     }
   });

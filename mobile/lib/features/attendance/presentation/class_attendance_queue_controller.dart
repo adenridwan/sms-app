@@ -100,8 +100,16 @@ final classAttendanceQueueProvider = StateNotifierProvider<
     ref.watch(classAttendanceRepositoryProvider),
   );
 
-  ref.listen<BackendStatus>(backendStatusProvider, (previous, next) {
+  // Sinkron hanya dilakukan bila sesi sudah terverifikasi (punya token). Sesi
+  // hasil login offline belum punya token; revalidateSession() di auth
+  // controller akan menukarnya. Tunggu sebentar supaya revalidasi selesai.
+  ref.listen<BackendStatus>(backendStatusProvider, (previous, next) async {
     if (next == BackendStatus.online && previous != BackendStatus.online) {
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final auth = ref.read(authControllerProvider);
+      if (!auth.isSessionVerified) return;
+
       controller.syncSilently();
     }
   });
