@@ -12,14 +12,14 @@ class LoginLogService
     public function record(
         Request $request,
         ?User $user,
-        string $email,
+        ?string $email,
         string $method,
         bool $successful,
         ?string $failureReason = null
     ): AuthLoginLog {
         return AuthLoginLog::create([
             'user_id' => $user?->id,
-            'email' => $email,
+            'email' => $email ?? $user?->email,
             'ip_address' => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 255),
             'method' => $method,
