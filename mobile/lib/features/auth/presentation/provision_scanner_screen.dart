@@ -63,7 +63,7 @@ class _ProvisionScannerScreenState
 
     final state = ref.read(authControllerProvider);
     if (state.isAuthenticated) {
-      context.go('/');
+      context.go('/home');
     } else {
       setState(() => _busy = false);
       ScaffoldMessenger.of(context)
