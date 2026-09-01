@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/auth_controller.dart';
+import '../config/app_config.dart';
+import '../providers.dart';
 import 'app_router.dart';
 
 /// Handler untuk deep link `smsapp://provision?token=xxx`.
@@ -35,12 +37,14 @@ class DeepLinkHandler {
     _sub = _appLinks.uriLinkStream.listen(_handleUri);
   }
 
-  void _handleUri(Uri uri) {
+  Future<void> _handleUri(Uri uri) async {
     debugPrint('[DeepLink] Received: $uri');
 
-    // Format: smsapp://provision?token=xxx
+    // Format: smsapp://provision?token=xxx&server=http://...
     if (uri.scheme == 'smsapp' && uri.host == 'provision') {
       final token = uri.queryParameters['token'];
+      final serverUrl = uri.queryParameters['server'];
+
       if (token != null && token.length == 64) {
         // Cek apakah user sudah login
         final authState = _ref.read(authControllerProvider);
@@ -48,6 +52,14 @@ class DeepLinkHandler {
           // Sudah login, tidak perlu provision
           debugPrint('[DeepLink] Already authenticated, ignoring provision link');
           return;
+        }
+
+        // Set server URL jika ada (sebelum navigasi)
+        if (serverUrl != null && serverUrl.isNotEmpty) {
+          await AppConfig.setServerUrl(serverUrl);
+          // Update Dio baseUrl langsung (tanpa invalidate provider)
+          final dio = _ref.read(dioProvider);
+          dio.options.baseUrl = AppConfig.baseUrl;
         }
 
         // Navigasi ke provision scanner dengan token

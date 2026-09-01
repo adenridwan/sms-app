@@ -80,9 +80,19 @@ class AuthRepository {
   /// scan QR di perangkat baru untuk langsung login tanpa ketik password.
   Future<User> redeemProvision({required String provisionToken}) async {
     try {
+      // Debug: log the URL being used
+      // ignore: avoid_print
+      print('[AuthRepo] redeemProvision to: ${_dio.options.baseUrl}/auth/redeem-provision');
+      // ignore: avoid_print
+      print('[AuthRepo] Token (first 10): ${provisionToken.substring(0, 10)}...');
+
       final res = await _dio.post('/auth/redeem-provision', data: {
         'provision_token': provisionToken,
       });
+
+      // ignore: avoid_print
+      print('[AuthRepo] Response status: ${res.statusCode}');
+
       final data = (res.data as Map)['data'] as Map;
       final token = data['token'] as String;
       await _tokenStorage.save(token);
@@ -95,8 +105,16 @@ class AuthRepository {
       final user =
           User.fromJson(userJson, permissions: permissions, roles: roles);
       await _userCache.save(user);
+
+      // ignore: avoid_print
+      print('[AuthRepo] User logged in: ${user.email}');
+
       return user;
     } on DioException catch (e) {
+      // ignore: avoid_print
+      print('[AuthRepo] DioException: ${e.message}');
+      // ignore: avoid_print
+      print('[AuthRepo] Response: ${e.response?.data}');
       throw ApiException.fromDio(e);
     }
   }

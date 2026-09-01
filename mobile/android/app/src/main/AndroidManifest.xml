@@ -7,6 +7,9 @@
     <!-- Lokasi untuk geofence absensi (opsional, bila diaktifkan sekolah). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Heartbeat: deteksi status dan nama jaringan WiFi. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <application
         android:label="SMS Absensi"
         android:name="${applicationName}"

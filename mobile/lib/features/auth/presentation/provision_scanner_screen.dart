@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/providers.dart';
 import 'auth_controller.dart';
 
 /// Layar pemindai QR untuk login via provisioning.
@@ -39,7 +42,7 @@ class _ProvisionScannerScreenState
     // Jika ada token dari deep link, langsung proses
     if (widget.initialToken != null && widget.initialToken!.length == 64) {
       // Delay sedikit agar widget sudah mounted
-      Future.microtask(() => _processToken(widget.initialToken!));
+      Future.microtask(() => _processProvision({'token': widget.initialToken!}));
     }
   }
 
@@ -49,27 +52,55 @@ class _ProvisionScannerScreenState
     super.dispose();
   }
 
-  /// Proses token provisioning (dari scan atau deep link).
-  Future<void> _processToken(String token) async {
+  /// Proses QR provisioning (dari scan atau deep link).
+  Future<void> _processProvision(Map<String, String> qrData) async {
     if (_busy || !mounted) return;
 
     setState(() => _busy = true);
 
-    await ref
-        .read(authControllerProvider.notifier)
-        .loginWithProvision(provisionToken: token);
+    final token = qrData['token']!;
+    final serverUrl = qrData['server'];
+
+    debugPrint('[Provision] Token: ${token.substring(0, 10)}...');
+    debugPrint('[Provision] Server URL dari QR: $serverUrl');
+
+    // Jika ada server URL dari QR, simpan dan update Dio baseUrl langsung
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      await AppConfig.setServerUrl(serverUrl);
+      // Update Dio baseUrl langsung (tanpa invalidate provider)
+      final dio = ref.read(dioProvider);
+      dio.options.baseUrl = AppConfig.baseUrl;
+      debugPrint('[Provision] Dio baseUrl updated to: ${dio.options.baseUrl}');
+    } else {
+      debugPrint('[Provision] No server URL in QR, using: ${AppConfig.baseUrl}');
+    }
+
+    try {
+      debugPrint('[Provision] Calling loginWithProvision...');
+      await ref
+          .read(authControllerProvider.notifier)
+          .loginWithProvision(provisionToken: token);
+      debugPrint('[Provision] loginWithProvision completed');
+    } catch (e) {
+      debugPrint('[Provision] Error during login: $e');
+    }
 
     if (!mounted) return;
 
     final state = ref.read(authControllerProvider);
+    debugPrint('[Provision] Auth state: ${state.status}, error: ${state.error}');
+
     if (state.isAuthenticated) {
+      debugPrint('[Provision] Login successful, navigating to /home');
       context.go('/home');
     } else {
       setState(() => _busy = false);
+      final errorMsg = state.error ?? 'Gagal login dengan QR';
+      debugPrint('[Provision] Login failed: $errorMsg');
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
-          content: Text(state.error ?? 'Gagal login dengan QR'),
+          content: Text(errorMsg),
           backgroundColor: Colors.red,
         ));
     }
@@ -92,9 +123,9 @@ class _ProvisionScannerScreenState
     _lastCode = rawValue;
     _lastAt = now;
 
-    // Parse deep link: smsapp://provision?token=xxx
-    final token = _parseProvisionToken(rawValue);
-    if (token == null) {
+    // Parse QR: smsapp://provision?token=xxx&server=http://...
+    final qrData = _parseProvisionQr(rawValue);
+    if (qrData == null) {
       if (mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
@@ -107,20 +138,44 @@ class _ProvisionScannerScreenState
       return;
     }
 
-    await _processToken(token);
+    await _processProvision(qrData);
   }
 
-  /// Parse token dari deep link format: smsapp://provision?token=xxx
-  String? _parseProvisionToken(String rawValue) {
+  /// Parse QR provisioning: smsapp://provision?token=xxx&server=http://...
+  /// Returns map dengan 'token' dan optional 'server'.
+  Map<String, String>? _parseProvisionQr(String rawValue) {
+    debugPrint('[Provision] Raw QR value: $rawValue');
+
     // Support both deep link and raw token
     if (rawValue.startsWith('smsapp://provision')) {
       final uri = Uri.tryParse(rawValue);
-      return uri?.queryParameters['token'];
+      debugPrint('[Provision] Parsed URI: $uri');
+      debugPrint('[Provision] Query params: ${uri?.queryParameters}');
+
+      final token = uri?.queryParameters['token'];
+      if (token == null || token.isEmpty) {
+        debugPrint('[Provision] No token found in QR');
+        return null;
+      }
+
+      final result = {
+        'token': token,
+        if (uri?.queryParameters['server'] != null)
+          'server': uri!.queryParameters['server']!,
+        if (uri?.queryParameters['device_name'] != null)
+          'device_name': uri!.queryParameters['device_name']!,
+        if (uri?.queryParameters['location'] != null)
+          'location': uri!.queryParameters['location']!,
+      };
+      debugPrint('[Provision] Parsed result: $result');
+      return result;
     }
     // Jika bukan deep link tapi panjangnya 64 karakter, anggap raw token
     if (rawValue.length == 64 && !rawValue.contains('/')) {
-      return rawValue;
+      debugPrint('[Provision] Raw token detected');
+      return {'token': rawValue};
     }
+    debugPrint('[Provision] Invalid QR format');
     return null;
   }
 
