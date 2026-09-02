@@ -954,6 +954,17 @@ export const payrollPeriodsApi = {
 
     summary: (id: string) =>
         api.get<ApiResponse>(`/payroll/periods/${id}/summary`),
+
+    // Attendance integration
+    generateSlipsWithAttendance: (id: string) =>
+        api.post<ApiResponse<{ slips_created: number; attendance_processed: number; attendance_errors?: Array<{ slip_id: string; error: string }> }>>(
+            `/payroll/periods/${id}/generate-slips-with-attendance`
+        ),
+
+    calculateAttendance: (id: string) =>
+        api.post<ApiResponse<{ processed: number; errors: Array<{ slip_id: string; error: string }> }>>(
+            `/payroll/periods/${id}/calculate-attendance`
+        ),
 };
 
 // Payroll Slips
@@ -1237,6 +1248,106 @@ export const payrollReportsApi = {
 
     exportBpjs: (params: { year: number; month?: number }) =>
         api.get('/payroll/reports/export/bpjs', { params, responseType: 'blob' }),
+};
+
+// Expense Reports (Laporan Pengeluaran)
+export const expenseReportsApi = {
+    monthly: (params: { year: number; month?: number }) =>
+        api.get<ApiResponse<unknown>>('/finance/reports/monthly-expense', { params }),
+
+    exportMonthly: (params: { year: number; month?: number }) =>
+        api.get('/finance/reports/export/monthly-expense', { params, responseType: 'blob' }),
+};
+
+// Device Monitor: monitoring perangkat scanner
+export interface ServerInfo {
+    status: string;
+    local_ip: string;
+    port: number;
+    base_url: string;
+    api_url: string;
+    public_url: string | null;
+    server_time: string;
+}
+
+export interface DeviceSummary {
+    total: number;
+    online: number;
+    idle: number;
+    offline: number;
+    pending_sync_total: number;
+}
+
+export interface ScannerDevice {
+    id: string;
+    device_name: string;
+    location: string | null;
+    is_active: boolean;
+    connection_status: 'online' | 'idle' | 'offline';
+    last_seen: string | null;
+    last_heartbeat_at: string | null;
+    last_scan_at: string | null;
+    pending_sync_count: number;
+    user: { id: string; name: string; email: string } | null;
+    // Detail fields (only in show)
+    app_version?: string | null;
+    os_version?: string | null;
+    device_model?: string | null;
+    battery_level?: number | null;
+    battery_charging?: boolean;
+    network_type?: string | null;
+    network_name?: string | null;
+    latency_ms?: number | null;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface DeviceTodayStats {
+    total_scans: number;
+    check_in: number;
+    check_out: number;
+    synced: number;
+    failed: number;
+    pending: number;
+}
+
+export interface DeviceProvisionQr {
+    qr_content: string;
+    provision_token: string;
+    server_url: string;
+    expires_at: string;
+    expires_in_minutes: number;
+    user: { id: string; name: string; email: string };
+    device_info: { name: string | null; location: string | null };
+}
+
+export const deviceMonitorApi = {
+    serverInfo: () =>
+        api.get<ApiResponse<ServerInfo>>('/admin/devices/server-info'),
+
+    summary: () =>
+        api.get<ApiResponse<DeviceSummary>>('/admin/devices/summary'),
+
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<{ data: ScannerDevice[]; meta: { current_page: number; last_page: number; per_page: number; total: number } }>>('/admin/devices', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<{ device: ScannerDevice; today_stats: DeviceTodayStats }>>(`/admin/devices/${id}`),
+
+    create: (data: { device_name: string; location?: string; user_id?: string }) =>
+        api.post<ApiResponse<ScannerDevice>>('/admin/devices', data),
+
+    update: (id: string, data: Partial<{ device_name: string; location: string; user_id: string; is_active: boolean }>) =>
+        api.put<ApiResponse<ScannerDevice>>(`/admin/devices/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/admin/devices/${id}`),
+
+    regenerateToken: (id: string) =>
+        api.post<ApiResponse<{ device_token: string }>>(`/admin/devices/${id}/regenerate-token`),
+
+    generateProvisionQr: (data: { user_id: string; device_name?: string; location?: string }) =>
+        api.post<ApiResponse<DeviceProvisionQr>>('/admin/devices/provision-qr', data),
 };
 
 export default api;

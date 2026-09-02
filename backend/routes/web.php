@@ -166,11 +166,19 @@ Route::middleware(['auth', 'password.current'])->group(function () {
         Route::get('/backups', [PageController::class, 'backups'])
             ->middleware('role:super_admin')
             ->name('backups');
+        Route::get('/devices', [PageController::class, 'devices'])
+            ->middleware('role:super_admin|admin')
+            ->name('devices');
         // Kelas & Jurusan dipindah ke menu Akademik (biar tidak dobel);
         // route lama dipertahankan sebagai redirect saja supaya tautan atau
         // bookmark yang sudah ada tidak berujung 404.
         Route::redirect('/class-rooms', '/academic/classrooms')->name('class-rooms');
         Route::redirect('/majors', '/academic/majors')->name('majors');
+    });
+
+    // Reports Module (Laporan Terpisah)
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/expense', [PageController::class, 'expenseReport'])->name('expense');
     });
 
     // Profile Routes

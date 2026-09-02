@@ -60,8 +60,11 @@ import {
     Calculator,
     Send,
     DollarSign,
+    CalendarCheck,
+    Users,
 } from 'lucide-react';
 import { payrollPeriodsApi } from '@/services/api';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { PaginationMeta } from '@/types';
 
 interface PayrollPeriod {
@@ -153,6 +156,8 @@ function getStatusColor(status: string): 'default' | 'secondary' | 'destructive'
 }
 
 export default function PayrollPeriods() {
+    const { can } = usePermissions();
+
     const [items, setItems] = useState<PayrollPeriod[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -267,9 +272,17 @@ export default function PayrollPeriods() {
                     await payrollPeriodsApi.generateSlips(actionItem.id);
                     toast.success('Slip gaji berhasil di-generate');
                     break;
+                case 'generate_with_attendance':
+                    await payrollPeriodsApi.generateSlipsWithAttendance(actionItem.id);
+                    toast.success('Slip gaji berhasil di-generate dengan data kehadiran');
+                    break;
                 case 'calculate':
                     await payrollPeriodsApi.calculate(actionItem.id);
                     toast.success('Perhitungan gaji berhasil diperbarui');
+                    break;
+                case 'calculate_attendance':
+                    await payrollPeriodsApi.calculateAttendance(actionItem.id);
+                    toast.success('Data kehadiran berhasil dihitung dan diterapkan');
                     break;
                 case 'submit':
                     await payrollPeriodsApi.submitForApproval(actionItem.id);
@@ -306,7 +319,9 @@ export default function PayrollPeriods() {
     const getActionLabel = () => {
         switch (actionType) {
             case 'generate': return 'Generate Slip Gaji';
+            case 'generate_with_attendance': return 'Generate + Kehadiran';
             case 'calculate': return 'Hitung Ulang';
+            case 'calculate_attendance': return 'Hitung Kehadiran';
             case 'submit': return 'Ajukan Persetujuan';
             case 'approve': return 'Setujui';
             case 'paid': return 'Tandai Dibayar';
@@ -318,7 +333,9 @@ export default function PayrollPeriods() {
     const getActionDescription = () => {
         switch (actionType) {
             case 'generate': return 'Ini akan membuat slip gaji untuk semua karyawan dengan pengaturan gaji aktif.';
+            case 'generate_with_attendance': return 'Ini akan membuat slip gaji DAN menghitung tunjangan/potongan kehadiran berdasarkan data absensi dalam periode.';
             case 'calculate': return 'Ini akan menghitung ulang semua slip gaji termasuk BPJS dan PPh 21.';
+            case 'calculate_attendance': return 'Ini akan menghitung data kehadiran (hadir, absen, telat) dari modul absensi dan menerapkan tunjangan/potongan kehadiran.';
             case 'submit': return 'Periode akan diajukan untuk persetujuan atasan.';
             case 'approve': return 'Anda yakin ingin menyetujui periode gaji ini?';
             case 'paid': return 'Ini menandakan bahwa gaji sudah dibayarkan ke semua karyawan.';
@@ -343,10 +360,12 @@ export default function PayrollPeriods() {
                             Kelola periode dan proses penggajian bulanan
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Buat Periode
-                    </Button>
+                    {can('payroll.manage') && (
+                        <Button onClick={openCreate}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Buat Periode
+                        </Button>
+                    )}
                 </div>
 
                 <Card>
@@ -439,37 +458,47 @@ export default function PayrollPeriods() {
                                                             <DropdownMenuItem onClick={() => viewSlips(item.id)}>
                                                                 <Eye className="mr-2 h-4 w-4" /> Lihat Slip
                                                             </DropdownMenuItem>
-                                                            {item.can_generate_slips && (
-                                                                <DropdownMenuItem onClick={() => confirmAction(item, 'generate')}>
-                                                                    <Play className="mr-2 h-4 w-4" /> Generate Slip
-                                                                </DropdownMenuItem>
+                                                            {item.can_generate_slips && can('payroll.process') && (
+                                                                <>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'generate')}>
+                                                                        <Play className="mr-2 h-4 w-4" /> Generate Slip
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'generate_with_attendance')}>
+                                                                        <CalendarCheck className="mr-2 h-4 w-4" /> Generate + Kehadiran
+                                                                    </DropdownMenuItem>
+                                                                </>
                                                             )}
-                                                            {item.is_editable && item.employee_count > 0 && (
-                                                                <DropdownMenuItem onClick={() => confirmAction(item, 'calculate')}>
-                                                                    <Calculator className="mr-2 h-4 w-4" /> Hitung Ulang
-                                                                </DropdownMenuItem>
+                                                            {item.is_editable && item.employee_count > 0 && can('payroll.process') && (
+                                                                <>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'calculate')}>
+                                                                        <Calculator className="mr-2 h-4 w-4" /> Hitung Ulang
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'calculate_attendance')}>
+                                                                        <Users className="mr-2 h-4 w-4" /> Hitung Kehadiran
+                                                                    </DropdownMenuItem>
+                                                                </>
                                                             )}
-                                                            {item.status === 'processing' && (
+                                                            {item.status === 'processing' && can('payroll.process') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'submit')}>
                                                                     <Send className="mr-2 h-4 w-4" /> Ajukan Persetujuan
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.can_approve && (
+                                                            {item.can_approve && can('payroll.approve') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'approve')}>
                                                                     <CheckCircle className="mr-2 h-4 w-4" /> Setujui
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.status === 'approved' && (
+                                                            {item.status === 'approved' && can('payroll.approve') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'paid')}>
                                                                     <DollarSign className="mr-2 h-4 w-4" /> Tandai Dibayar
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.can_finalize && (
+                                                            {item.can_finalize && can('payroll.approve') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'finalize')}>
                                                                     <Lock className="mr-2 h-4 w-4" /> Finalisasi
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.is_draft && (
+                                                            {item.is_draft && can('payroll.manage') && (
                                                                 <>
                                                                     <DropdownMenuSeparator />
                                                                     <DropdownMenuItem

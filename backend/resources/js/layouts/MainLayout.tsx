@@ -195,6 +195,7 @@ const menuItems: MenuItem[] = [
         icon: FileText,
         permission: 'reports.view',
         children: [
+            { key: 'reports.expense', title: 'Pengeluaran', href: '/reports/expense', permission: 'finance.report' },
             { key: 'reports.report-cards', title: 'Rapor', href: '/reports/report-cards' },
             { key: 'reports.generate', title: 'Generate Laporan', href: '/reports/generate' },
         ],
@@ -211,6 +212,7 @@ const menuItems: MenuItem[] = [
             { key: 'settings.menu', title: 'Pengaturan Menu', href: '/settings/menu', permission: 'settings.manage' },
             { key: 'settings.users', title: 'Pengguna', href: '/settings/users', superAdminOnly: true },
             { key: 'settings.login-security', title: 'Keamanan Login', href: '/settings/login-security', permission: 'settings.manage' },
+            { key: 'settings.devices', title: 'Monitor Device', href: '/settings/devices', permission: 'settings.manage' },
             { key: 'settings.backups', title: 'Backup Database', href: '/settings/backups', superAdminOnly: true },
         ],
     },

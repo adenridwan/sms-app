@@ -259,14 +259,32 @@ class EmployeeSalaryController extends ApiController
     {
         $type = $request->get('type', 'all');
 
+        // Ambil tenant_id dari user atau dari header X-Tenant-ID (untuk super_admin)
+        $tenantId = auth()->user()->tenant_id ?? $request->header('X-Tenant-ID');
+
+        // Untuk super_admin tanpa tenant, kembalikan array kosong dengan pesan
+        if (!$tenantId) {
+            return $this->success([
+                'data' => [],
+                'message' => 'Pilih tenant terlebih dahulu untuk melihat daftar karyawan',
+            ]);
+        }
+
         $employees = [];
 
         if ($type === 'all' || $type === 'teacher') {
-            $teachersWithSalary = EmployeeSalary::where('employee_type', EmployeeSalary::TYPE_TEACHER)
+            $teachersWithSalary = EmployeeSalary::forTenant($tenantId)
+                ->where('employee_type', EmployeeSalary::TYPE_TEACHER)
                 ->current()
                 ->pluck('employee_id');
 
-            $teachers = Teacher::with('user')
+            $teachers = Teacher::forTenant($tenantId)
+                ->with(['user', 'user.profile'])
+                ->where(function ($q) {
+                    // Guru aktif atau status belum diset
+                    $q->where('status', 'active')
+                      ->orWhereNull('status');
+                })
                 ->whereNotIn('id', $teachersWithSalary)
                 ->get()
                 ->map(fn($t) => [
@@ -274,8 +292,8 @@ class EmployeeSalaryController extends ApiController
                     'type' => 'teacher',
                     'type_label' => 'Guru',
                     'identifier' => $t->nip,
-                    'name' => $t->user?->full_name ?? $t->full_name,
-                    'email' => $t->user?->email ?? $t->email,
+                    'name' => $t->user?->full_name ?? ($t->user?->username ?? 'Guru tanpa akun'),
+                    'email' => $t->user?->email,
                     'employment_status' => $t->employment_status,
                 ]);
 
@@ -283,11 +301,18 @@ class EmployeeSalaryController extends ApiController
         }
 
         if ($type === 'all' || $type === 'staff') {
-            $staffWithSalary = EmployeeSalary::where('employee_type', EmployeeSalary::TYPE_STAFF)
+            $staffWithSalary = EmployeeSalary::forTenant($tenantId)
+                ->where('employee_type', EmployeeSalary::TYPE_STAFF)
                 ->current()
                 ->pluck('employee_id');
 
-            $staff = Staff::with('user')
+            $staff = Staff::forTenant($tenantId)
+                ->with(['user', 'user.profile'])
+                ->where(function ($q) {
+                    // Staf aktif atau status belum diset
+                    $q->where('status', 'active')
+                      ->orWhereNull('status');
+                })
                 ->whereNotIn('id', $staffWithSalary)
                 ->get()
                 ->map(fn($s) => [
@@ -295,8 +320,8 @@ class EmployeeSalaryController extends ApiController
                     'type' => 'staff',
                     'type_label' => 'Staf',
                     'identifier' => $s->employee_id,
-                    'name' => $s->user?->full_name ?? 'Staf',
-                    'email' => $s->user?->email ?? null,
+                    'name' => $s->user?->full_name ?? ($s->user?->username ?? 'Staf tanpa akun'),
+                    'email' => $s->user?->email,
                     'employment_status' => $s->employment_status,
                 ]);
 

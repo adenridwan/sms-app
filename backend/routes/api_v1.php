@@ -310,6 +310,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     // ===========================================
+    // Device Monitor (heartbeat dari mobile app)
+    // Semua user yang bisa scan (operator) bisa mengirim heartbeat.
+    // ===========================================
+    Route::prefix('devices')->name('devices.')->group(function () {
+        Route::post('heartbeat', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'heartbeat'])->name('heartbeat');
+    });
+
+    // ===========================================
     // Exam & Grade Module
     // ===========================================
     Route::prefix('exams')->name('exams.')->group(function () {
@@ -373,6 +381,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('reports/export/outstanding', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportOutstanding'])->name('reports.export.outstanding');
         Route::get('reports/export/by-classroom', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportByClassroom'])->name('reports.export.by-classroom');
         Route::get('reports/export/monthly', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportMonthly'])->name('reports.export.monthly');
+
+        // Laporan Pengeluaran (integrasi dengan Payroll)
+        Route::get('reports/monthly-expense', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'monthlyExpense'])->name('reports.monthly-expense');
+        Route::get('reports/export/monthly-expense', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportMonthlyExpense'])->name('reports.export.monthly-expense');
     });
 
     // ===========================================
@@ -416,7 +428,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Payroll Periods (static routes first)
         Route::get('periods/statuses', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'statuses'])->name('periods.statuses');
         Route::post('periods/{payrollPeriod}/generate-slips', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'generateSlips'])->name('periods.generate-slips');
+        Route::post('periods/{payrollPeriod}/generate-slips-with-attendance', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'generateSlipsWithAttendance'])->name('periods.generate-slips-with-attendance');
         Route::post('periods/{payrollPeriod}/calculate', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'calculate'])->name('periods.calculate');
+        Route::post('periods/{payrollPeriod}/calculate-attendance', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'calculateAttendance'])->name('periods.calculate-attendance');
         Route::post('periods/{payrollPeriod}/submit-for-approval', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'submitForApproval'])->name('periods.submit-for-approval');
         Route::post('periods/{payrollPeriod}/approve', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'approve'])->name('periods.approve');
         Route::post('periods/{payrollPeriod}/mark-as-paid', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'markAsPaid'])->name('periods.mark-as-paid');
@@ -562,6 +576,19 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::get('users/{user}', [\App\Http\Controllers\Api\V1\Auth\ProvisionController::class, 'history'])->name('history');
         });
         Route::get('audit-logs/{auditLog}', [\App\Http\Controllers\Api\V1\Admin\AuditLogController::class, 'show'])->name('audit-logs.show');
+
+        // Device Monitor: kelola perangkat scanner, monitoring koneksi.
+        Route::prefix('devices')->name('devices.')->group(function () {
+            Route::get('server-info', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'serverInfo'])->name('server-info');
+            Route::get('summary', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'summary'])->name('summary');
+            Route::get('/', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'store'])->name('store');
+            Route::post('provision-qr', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'generateProvisionQr'])->name('provision-qr');
+            Route::get('{device}', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'show'])->name('show');
+            Route::put('{device}', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'update'])->name('update');
+            Route::delete('{device}', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'destroy'])->name('destroy');
+            Route::post('{device}/regenerate-token', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'regenerateToken'])->name('regenerate-token');
+        });
 
         // Activity Logs
         Route::get('activity-logs', [\App\Http\Controllers\Api\V1\Admin\ActivityLogController::class, 'index'])->name('activity-logs.index');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Payroll;
 
+use App\Domain\Payroll\Services\AttendancePayrollService;
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Resources\Payroll\PayrollPeriodResource;
 use App\Infrastructure\Persistence\Eloquent\Payroll\BpjsRate;
@@ -9,8 +10,10 @@ use App\Infrastructure\Persistence\Eloquent\Payroll\EmployeeSalary;
 use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollPeriod;
 use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollSlip;
 use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollSlipItem;
+use App\Infrastructure\Persistence\Eloquent\Payroll\SalaryComponent;
 use App\Infrastructure\Persistence\Eloquent\Payroll\TaxBracket;
 use App\Infrastructure\Persistence\Eloquent\Payroll\TaxSetting;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +21,10 @@ use Illuminate\Validation\Rule;
 
 class PayrollPeriodController extends ApiController
 {
+    public function __construct(
+        protected AttendancePayrollService $attendanceService
+    ) {}
+
     /**
      * Display a listing of payroll periods.
      */
@@ -218,9 +225,16 @@ class PayrollPeriodController extends ApiController
 
     /**
      * Submit period for approval.
+     * Requires: payroll.process permission.
      */
     public function submitForApproval(PayrollPeriod $payrollPeriod): JsonResponse
     {
+        abort_unless(
+            request()->user()->can('payroll.process'),
+            403,
+            'Anda tidak memiliki izin untuk mengajukan persetujuan penggajian'
+        );
+
         if ($payrollPeriod->status !== PayrollPeriod::STATUS_PROCESSING) {
             return $this->error('Hanya periode yang sedang diproses dapat diajukan untuk persetujuan', 422);
         }
@@ -239,9 +253,16 @@ class PayrollPeriodController extends ApiController
 
     /**
      * Approve the payroll period.
+     * Requires: payroll.approve permission.
      */
     public function approve(PayrollPeriod $payrollPeriod): JsonResponse
     {
+        abort_unless(
+            request()->user()->can('payroll.approve'),
+            403,
+            'Anda tidak memiliki izin untuk menyetujui penggajian'
+        );
+
         if (!$payrollPeriod->canApprove()) {
             return $this->error('Periode ini tidak dapat disetujui', 422);
         }
@@ -260,9 +281,16 @@ class PayrollPeriodController extends ApiController
 
     /**
      * Mark period as paid.
+     * Requires: payroll.approve permission.
      */
     public function markAsPaid(PayrollPeriod $payrollPeriod): JsonResponse
     {
+        abort_unless(
+            request()->user()->can('payroll.approve'),
+            403,
+            'Anda tidak memiliki izin untuk menandai pembayaran gaji'
+        );
+
         if ($payrollPeriod->status !== PayrollPeriod::STATUS_APPROVED) {
             return $this->error('Hanya periode yang sudah disetujui dapat ditandai sebagai dibayar', 422);
         }
@@ -278,9 +306,16 @@ class PayrollPeriodController extends ApiController
 
     /**
      * Finalize the payroll period (lock from further changes).
+     * Requires: payroll.approve permission.
      */
     public function finalize(PayrollPeriod $payrollPeriod): JsonResponse
     {
+        abort_unless(
+            request()->user()->can('payroll.approve'),
+            403,
+            'Anda tidak memiliki izin untuk memfinalisasi penggajian'
+        );
+
         if (!$payrollPeriod->canFinalize()) {
             return $this->error('Periode ini tidak dapat difinalisasi', 422);
         }
@@ -326,6 +361,124 @@ class PayrollPeriodController extends ApiController
         ];
 
         return $this->success($stats);
+    }
+
+    /**
+     * Calculate attendance data for all slips in the period.
+     *
+     * Menghitung data kehadiran dari modul attendance dan menambahkan
+     * komponen gaji berbasis kehadiran (tunjangan hadir, potongan absen, dll).
+     */
+    public function calculateAttendance(PayrollPeriod $payrollPeriod): JsonResponse
+    {
+        if ($payrollPeriod->isFinalized()) {
+            return $this->error('Periode yang sudah final tidak dapat dihitung ulang', 422);
+        }
+
+        if ($payrollPeriod->slips()->count() === 0) {
+            return $this->error('Tidak ada slip gaji dalam periode ini. Generate slip terlebih dahulu.', 422);
+        }
+
+        try {
+            $result = DB::transaction(function () use ($payrollPeriod) {
+                $tenantId = auth()->user()->tenant_id ?? request()->header('X-Tenant-ID');
+                $slips = $payrollPeriod->slips()->with('items')->get();
+
+                $startDate = Carbon::parse($payrollPeriod->start_date);
+                $endDate = Carbon::parse($payrollPeriod->end_date);
+
+                $processResult = $this->attendanceService->processAttendanceForPeriod(
+                    $tenantId,
+                    $startDate,
+                    $endDate,
+                    $slips
+                );
+
+                // Recalculate each slip to update totals
+                foreach ($slips as $slip) {
+                    $this->calculateSlip($slip);
+                }
+
+                // Update period totals
+                $payrollPeriod->recalculateTotals();
+
+                return $processResult;
+            });
+
+            return $this->success([
+                'processed' => $result['processed'],
+                'errors' => $result['errors'],
+                'period' => new PayrollPeriodResource($payrollPeriod->fresh()),
+            ], "Berhasil menghitung kehadiran untuk {$result['processed']} slip gaji");
+        } catch (\Exception $e) {
+            return $this->error('Gagal menghitung kehadiran: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Generate slips with attendance calculation.
+     *
+     * Generate slip gaji dan langsung hitung data kehadiran.
+     */
+    public function generateSlipsWithAttendance(PayrollPeriod $payrollPeriod): JsonResponse
+    {
+        if (!$payrollPeriod->canGenerateSlips()) {
+            return $this->error('Slip gaji hanya dapat di-generate untuk periode dengan status draf', 422);
+        }
+
+        try {
+            $result = DB::transaction(function () use ($payrollPeriod) {
+                // Delete existing slips
+                $payrollPeriod->slips()->delete();
+
+                // Get all employees with current salary
+                $employeeSalaries = EmployeeSalary::with(['salaryGrade', 'components.salaryComponent', 'teacher.user', 'staff.user'])
+                    ->current()
+                    ->get();
+
+                $slipsCreated = 0;
+                $slips = collect();
+
+                foreach ($employeeSalaries as $empSalary) {
+                    $slip = $this->createSlipFromEmployeeSalary($payrollPeriod, $empSalary);
+                    if ($slip) {
+                        $slipsCreated++;
+                        $slips->push($slip);
+                    }
+                }
+
+                // Calculate attendance for all slips
+                $tenantId = auth()->user()->tenant_id ?? request()->header('X-Tenant-ID');
+                $startDate = Carbon::parse($payrollPeriod->start_date);
+                $endDate = Carbon::parse($payrollPeriod->end_date);
+
+                $attendanceResult = $this->attendanceService->processAttendanceForPeriod(
+                    $tenantId,
+                    $startDate,
+                    $endDate,
+                    $slips
+                );
+
+                // Recalculate slips after attendance items added
+                foreach ($slips as $slip) {
+                    $this->calculateSlip($slip);
+                }
+
+                // Update period status and totals
+                $payrollPeriod->update(['status' => PayrollPeriod::STATUS_PROCESSING]);
+                $payrollPeriod->recalculateTotals();
+
+                return [
+                    'slips_created' => $slipsCreated,
+                    'attendance_processed' => $attendanceResult['processed'],
+                    'attendance_errors' => $attendanceResult['errors'],
+                ];
+            });
+
+            return $this->success($result, "Berhasil generate {$result['slips_created']} slip gaji dengan data kehadiran");
+        } catch (\Exception $e) {
+            return $this->error('Gagal generate slip gaji: ' . $e->getMessage(), 500);
+        }
     }
 
     /**

@@ -93,6 +93,8 @@ class RoleSeeder extends Seeder
                 'grades.view', 'grades.finalize',
                 // Finance
                 'finance.view', 'fees.view', 'payments.view', 'finance.report',
+                // Payroll - Kepala sekolah bisa lihat dan approve gaji
+                'payroll.view', 'payroll.approve', 'payroll.report',
                 // Reports
                 'reports.view', 'reports.generate', 'reports.export',
                 'report-cards.view', 'report-cards.approve', 'report-cards.print',

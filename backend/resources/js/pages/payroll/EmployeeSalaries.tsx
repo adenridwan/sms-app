@@ -300,7 +300,7 @@ export default function EmployeeSalaries() {
             const params: Record<string, string> = {};
             if (type) params.type = type;
             const response = await employeeSalariesApi.availableEmployees(params);
-            setAvailableEmployees(response.data.data.data ?? []);
+            setAvailableEmployees(response.data.data?.data ?? []);
         } catch {
             console.error('Failed to load available employees');
         }

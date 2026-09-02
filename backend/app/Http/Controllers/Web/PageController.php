@@ -505,6 +505,14 @@ class PageController extends Controller
     }
 
     /**
+     * Display device monitoring page (monitor device scanner).
+     */
+    public function devices(): Response
+    {
+        return Inertia::render('settings/Devices');
+    }
+
+    /**
      * Display login security page (riwayat login, kode akses, cabut sesi).
      */
     public function loginSecurity(): Response
@@ -720,5 +728,13 @@ class PageController extends Controller
     public function financeReports(): Response
     {
         return Inertia::render('finance/Reports');
+    }
+
+    /**
+     * Display expense report page (Laporan Pengeluaran).
+     */
+    public function expenseReport(): Response
+    {
+        return Inertia::render('reports/ExpenseReport');
     }
 }
