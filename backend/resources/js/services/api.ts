@@ -1006,8 +1006,31 @@ export const payrollSlipsApi = {
     removeItem: (slipId: string, itemId: string) =>
         api.delete<ApiResponse<PayrollSlip>>(`/payroll/slips/${slipId}/items/${itemId}`),
 
+    updateItem: (slipId: string, itemId: string, data: {
+        quantity?: number;
+        rate?: number;
+        amount?: number;
+        notes?: string;
+        reason: string;
+    }) => api.put<ApiResponse<PayrollSlip>>(`/payroll/slips/${slipId}/items/${itemId}`, data),
+
     updateNotes: (id: string, notes: string | null) =>
         api.put<ApiResponse<PayrollSlip>>(`/payroll/slips/${id}/notes`, { notes }),
+
+    getAudits: (id: string) =>
+        api.get<ApiResponse<{ audits: Array<{
+            id: string;
+            item: { id: string; component_code: string; component_name: string } | null;
+            field: string;
+            field_label: string;
+            old_value: string | null;
+            new_value: string | null;
+            old_value_formatted: string;
+            new_value_formatted: string;
+            reason: string;
+            changed_by: { id: string; name: string } | null;
+            changed_at: string;
+        }>; total: number }>>(`/payroll/slips/${id}/audits`),
 
     printData: (id: string) =>
         api.get<ApiResponse>(`/payroll/slips/${id}/print`),

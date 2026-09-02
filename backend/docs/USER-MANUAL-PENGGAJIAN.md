@@ -497,13 +497,43 @@ Setelah slip di-generate, review dan edit jika diperlukan:
 
 **Mengedit Item Slip (Jika Diperlukan):**
 
-1. Pada detail slip, klik **Edit Item**
-2. Tambah/Edit/Hapus item sesuai kebutuhan
-3. Klik **Simpan**
-4. Sistem otomatis menghitung ulang total
+1. Pada detail slip, klik **Edit** pada item yang ingin diubah
+2. Ubah nilai yang diperlukan:
+   - **Jumlah/Hari**: Untuk komponen berbasis kehadiran
+   - **Tarif**: Nilai per unit
+   - **Nominal**: Nilai total (otomatis dihitung jika ada jumlah × tarif)
+3. **Wajib isi alasan perubahan** (untuk audit log)
+4. Klik **Simpan**
+5. Sistem otomatis menghitung ulang total
 
 ![Edit Item Slip](images/payroll/slip-edit-items.png)
 *Gambar 5.6: Edit Item Slip Gaji*
+
+**Kapan Slip Bisa Diedit:**
+
+| Status Periode | Status Slip | Bisa Edit? |
+|----------------|-------------|------------|
+| Draft | Draft | ✅ Ya |
+| Processing | Calculated | ✅ Ya |
+| Pending Approval | Calculated | ✅ Ya |
+| Approved | Approved | ✅ Ya |
+| Paid | Paid | ❌ Tidak |
+| Finalized | Paid | ❌ Tidak |
+
+> **Catatan:** Setelah periode **Paid** atau **Finalized**, slip tidak bisa diedit lagi. Jika ada kesalahan, buat periode koreksi baru.
+
+**Melihat Riwayat Perubahan (Audit Log):**
+
+1. Pada detail slip, klik tab **Riwayat Perubahan**
+2. Lihat daftar perubahan yang pernah dilakukan:
+   - Komponen yang diubah
+   - Nilai lama → Nilai baru
+   - Alasan perubahan
+   - Siapa yang mengubah
+   - Kapan diubah
+
+![Audit Log](images/payroll/slip-audit-log.png)
+*Gambar 5.6b: Riwayat Perubahan Slip Gaji*
 
 **Hitung Ulang Semua Slip:**
 
@@ -946,6 +976,8 @@ PPh21 Bulanan = PPh ÷ 12
 | `/api/v1/payroll/periods/{id}/mark-as-paid` | POST | `payroll.approve` | Tandai dibayar |
 | `/api/v1/payroll/periods/{id}/finalize` | POST | `payroll.approve` | Finalisasi |
 | `/api/v1/payroll/slips/{id}/print` | GET | `payroll.view` | Data cetak slip |
+| `/api/v1/payroll/slips/{slipId}/items/{itemId}` | PUT | `payroll.process` | Edit item dengan audit |
+| `/api/v1/payroll/slips/{id}/audits` | GET | `payroll.view` | Riwayat perubahan |
 
 **API Endpoint Laporan:**
 

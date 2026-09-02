@@ -7,6 +7,7 @@ use App\Http\Resources\Payroll\PayrollSlipResource;
 use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollPeriod;
 use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollSlip;
 use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollSlipItem;
+use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollSlipItemAudit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -163,7 +164,7 @@ class PayrollSlipController extends ApiController
     public function removeItem(PayrollSlip $payrollSlip, PayrollSlipItem $item): JsonResponse
     {
         if (!$payrollSlip->isEditable()) {
-            return $this->error('Slip gaji yang sudah disetujui tidak dapat diubah', 422);
+            return $this->error('Slip gaji yang sudah dibayar tidak dapat diubah', 422);
         }
 
         if ($item->payroll_slip_id !== $payrollSlip->id) {
@@ -181,6 +182,136 @@ class PayrollSlipController extends ApiController
             new PayrollSlipResource($payrollSlip),
             'Item berhasil dihapus'
         );
+    }
+
+    /**
+     * Update a single item with audit logging.
+     * Allows editing quantity, rate, amount with reason.
+     */
+    public function updateItem(Request $request, PayrollSlip $payrollSlip, PayrollSlipItem $item): JsonResponse
+    {
+        if (!$payrollSlip->isEditable()) {
+            return $this->error('Slip gaji yang sudah dibayar tidak dapat diubah', 422);
+        }
+
+        if ($item->payroll_slip_id !== $payrollSlip->id) {
+            return $this->error('Item tidak ditemukan di slip ini', 404);
+        }
+
+        $data = $request->validate([
+            'quantity' => ['nullable', 'numeric', 'min:0'],
+            'rate' => ['nullable', 'numeric', 'min:0'],
+            'amount' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:500'],
+            'reason' => ['required', 'string', 'max:255'],
+        ]);
+
+        $reason = $data['reason'];
+        unset($data['reason']);
+
+        // Track changes for audit
+        $audits = [];
+        $editableFields = ['quantity', 'rate', 'amount', 'notes'];
+
+        foreach ($editableFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $oldValue = $item->{$field};
+                $newValue = $data[$field];
+
+                // Only log if value actually changed
+                if ((string) $oldValue !== (string) $newValue) {
+                    $audits[] = [
+                        'payroll_slip_item_id' => $item->id,
+                        'payroll_slip_id' => $payrollSlip->id,
+                        'changed_by' => auth()->id(),
+                        'field_name' => $field,
+                        'old_value' => $oldValue,
+                        'new_value' => $newValue,
+                        'reason' => $reason,
+                    ];
+                }
+            }
+        }
+
+        if (empty($audits)) {
+            return $this->error('Tidak ada perubahan yang dilakukan', 422);
+        }
+
+        try {
+            DB::transaction(function () use ($item, $data, $audits, $payrollSlip) {
+                // If quantity or rate changed, recalculate amount
+                if (isset($data['quantity']) || isset($data['rate'])) {
+                    $quantity = $data['quantity'] ?? $item->quantity;
+                    $rate = $data['rate'] ?? $item->rate;
+
+                    if ($quantity && $rate) {
+                        $data['amount'] = (float) $quantity * (float) $rate;
+                    }
+                }
+
+                // Mark as manually edited
+                $data['is_auto_calculated'] = false;
+
+                // Update item
+                $item->update($data);
+
+                // Create audit records
+                foreach ($audits as $audit) {
+                    PayrollSlipItemAudit::create($audit);
+                }
+
+                // Recalculate totals
+                $this->recalculateSlipTotals($payrollSlip);
+            });
+
+            $payrollSlip->period->recalculateTotals();
+            $payrollSlip->load('items');
+
+            return $this->success(
+                new PayrollSlipResource($payrollSlip),
+                'Item berhasil diperbarui'
+            );
+        } catch (\Exception $e) {
+            return $this->error('Gagal memperbarui item: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get audit history for a slip.
+     */
+    public function getAudits(PayrollSlip $payrollSlip): JsonResponse
+    {
+        $audits = $payrollSlip->audits()
+            ->with(['item', 'changedByUser'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($audit) {
+                return [
+                    'id' => $audit->id,
+                    'item' => $audit->item ? [
+                        'id' => $audit->item->id,
+                        'component_code' => $audit->item->component_code,
+                        'component_name' => $audit->item->component_name,
+                    ] : null,
+                    'field' => $audit->field_name,
+                    'field_label' => $audit->getFieldLabel(),
+                    'old_value' => $audit->old_value,
+                    'new_value' => $audit->new_value,
+                    'old_value_formatted' => $audit->getFormattedOldValue(),
+                    'new_value_formatted' => $audit->getFormattedNewValue(),
+                    'reason' => $audit->reason,
+                    'changed_by' => $audit->changedByUser ? [
+                        'id' => $audit->changedByUser->id,
+                        'name' => $audit->changedByUser->name ?? $audit->changedByUser->username,
+                    ] : null,
+                    'changed_at' => $audit->created_at->format('d M Y H:i'),
+                ];
+            });
+
+        return $this->success([
+            'audits' => $audits,
+            'total' => $audits->count(),
+        ]);
     }
 
     /**

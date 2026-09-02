@@ -120,6 +120,11 @@ class PayrollSlip extends Model
         return $this->hasMany(PayrollSlipItem::class, 'payroll_slip_id');
     }
 
+    public function audits(): HasMany
+    {
+        return $this->hasMany(PayrollSlipItemAudit::class, 'payroll_slip_id');
+    }
+
     public function calculatedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'calculated_by');
@@ -168,6 +173,16 @@ class PayrollSlip extends Model
     }
 
     public function isEditable(): bool
+    {
+        // Slip bisa diedit sampai status paid (sebelum finalisasi)
+        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_CALCULATED, self::STATUS_APPROVED]);
+    }
+
+    /**
+     * Check if slip can be edited without re-approval.
+     * Only draft and calculated can be freely edited.
+     */
+    public function isFreeelyEditable(): bool
     {
         return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_CALCULATED]);
     }

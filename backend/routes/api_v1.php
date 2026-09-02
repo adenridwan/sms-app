@@ -444,7 +444,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::put('slips/{payrollSlip}/items', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateItems'])->name('slips.update-items');
         Route::post('slips/{payrollSlip}/items', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'addItem'])->name('slips.add-item');
         Route::delete('slips/{payrollSlip}/items/{item}', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'removeItem'])->name('slips.remove-item');
+        Route::put('slips/{payrollSlip}/items/{item}', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateItem'])->name('slips.update-item');
         Route::put('slips/{payrollSlip}/notes', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateNotes'])->name('slips.update-notes');
+        Route::get('slips/{payrollSlip}/audits', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'getAudits'])->name('slips.audits');
         Route::get('slips/{payrollSlip}/print', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'printData'])->name('slips.print');
 
         // Reports
