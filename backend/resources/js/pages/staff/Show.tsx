@@ -1,7 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Pencil, User, Briefcase, Mail, Phone, MapPin, Calendar } from 'lucide-react';
 import type { Staff } from '@/services/api';
