@@ -75,6 +75,14 @@ Route::middleware(['auth', 'password.current'])->group(function () {
         Route::get('/{teacher}/edit', [PageController::class, 'editTeacher'])->whereUuid('teacher')->name('edit');
     });
 
+    // Staff Module
+    Route::prefix('staff')->name('staff.')->group(function () {
+        Route::get('/', [PageController::class, 'staff'])->name('index');
+        Route::get('/create', [PageController::class, 'createStaff'])->name('create');
+        Route::get('/{staff}', [PageController::class, 'showStaff'])->whereUuid('staff')->name('show');
+        Route::get('/{staff}/edit', [PageController::class, 'editStaff'])->whereUuid('staff')->name('edit');
+    });
+
     // Academic Module
     Route::prefix('academic')->name('academic.')->group(function () {
         Route::get('/years', [PageController::class, 'academicYears'])->name('years');

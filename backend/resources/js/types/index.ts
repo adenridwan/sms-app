@@ -25,6 +25,7 @@ export interface User {
         status: string | null;
     } | null;
     staff?: {
+        id?: string;
         employee_id: string | null;
         join_date: string | null;
         employment_status: string | null;
@@ -276,6 +277,45 @@ export interface TeacherAssignment {
     homeroom_classroom: { id: string; name: string } | null;
     subjects: TeacherAssignmentSubject[];
     schedules: TeacherAssignmentSchedule[];
+}
+
+// Staff Types
+export interface Staff {
+    id: string;
+    user_id: string;
+    unique_code?: string;
+    rfid_code?: string;
+    employee_id?: string;
+    username?: string;
+    email?: string;
+    contact_email?: string;
+    email_is_generated?: boolean;
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    phone?: string;
+    avatar_url?: string | null;
+    gender?: string;
+    gender_label?: string;
+    birth_place?: string;
+    birth_date?: string;
+    religion?: string;
+    address?: string;
+    id_number?: string;
+    department_id?: string;
+    department_name?: string;
+    position_id?: string;
+    position_name?: string;
+    education_level?: string;
+    employment_status: string;
+    employment_status_label?: string;
+    join_date?: string;
+    status: string;
+    status_label?: string;
+    account_is_active?: boolean;
+    must_change_password?: boolean;
+    created_at?: string;
+    updated_at?: string;
 }
 
 // Academic Types
@@ -689,7 +729,21 @@ export interface SalaryComponent {
     default_value: number;
     default_value_formatted: string;
     percentage_of: string | null;
-    formula: string | null;
+    percentage_of_label?: string | null;
+    percentage_component_id?: string | null;
+    percentage_component?: {
+        id: string;
+        code: string;
+        name: string;
+    } | null;
+    formula: Array<{
+        type: 'component' | 'base_salary' | 'gross_salary' | 'number' | 'operator';
+        id?: string;
+        code?: string;
+        name?: string;
+        value?: number | string;
+    }> | null;
+    formula_display?: string | null;
     is_taxable: boolean;
     is_mandatory: boolean;
     is_active: boolean;

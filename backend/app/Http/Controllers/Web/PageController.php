@@ -270,6 +270,84 @@ class PageController extends Controller
     }
 
     /**
+     * Display staff list.
+     */
+    public function staff(): Response
+    {
+        $filters = request()->only(['search', 'status', 'employment_status', 'department_id']);
+
+        $staff = \App\Infrastructure\Persistence\Eloquent\Staff\Staff::with(['user.profile', 'department', 'position'])
+            ->when($filters['search'] ?? null, function ($q, $search) {
+                $q->where(function ($query) use ($search) {
+                    $query->where('employee_id', 'ilike', "%{$search}%")
+                        ->orWhereHas('user', fn ($u) => $u
+                            ->where('username', 'ilike', "%{$search}%")
+                            ->orWhere('email', 'ilike', "%{$search}%"))
+                        ->orWhereHas('user.profile', fn ($p) => $p
+                            ->where('first_name', 'ilike', "%{$search}%")
+                            ->orWhere('last_name', 'ilike', "%{$search}%"));
+                });
+            })
+            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($filters['employment_status'] ?? null, fn ($q, $es) => $q->where('employment_status', $es))
+            ->when($filters['department_id'] ?? null, fn ($q, $deptId) => $q->where('department_id', $deptId))
+            ->orderBy('employee_id')
+            ->paginate(15)
+            ->withQueryString();
+
+        return Inertia::render('staff/Index', [
+            'staff' => [
+                'data' => \App\Http\Resources\StaffResource::collection($staff->items())->resolve(),
+                'meta' => [
+                    'current_page' => $staff->currentPage(),
+                    'from' => $staff->firstItem() ?? 0,
+                    'last_page' => $staff->lastPage(),
+                    'per_page' => $staff->perPage(),
+                    'to' => $staff->lastItem() ?? 0,
+                    'total' => $staff->total(),
+                ],
+                'links' => [
+                    'prev' => $staff->previousPageUrl(),
+                    'next' => $staff->nextPageUrl(),
+                ],
+            ],
+            'filters' => $filters,
+        ]);
+    }
+
+    /**
+     * Display create staff form.
+     */
+    public function createStaff(): Response
+    {
+        return Inertia::render('staff/Create');
+    }
+
+    /**
+     * Display edit staff form.
+     */
+    public function editStaff(\App\Infrastructure\Persistence\Eloquent\Staff\Staff $staff): Response
+    {
+        $staff->load(['user.profile', 'department', 'position']);
+
+        return Inertia::render('staff/Edit', [
+            'staff' => (new \App\Http\Resources\StaffResource($staff))->resolve(),
+        ]);
+    }
+
+    /**
+     * Display staff detail.
+     */
+    public function showStaff(\App\Infrastructure\Persistence\Eloquent\Staff\Staff $staff): Response
+    {
+        $staff->load(['user.profile', 'department', 'position']);
+
+        return Inertia::render('staff/Show', [
+            'staff' => (new \App\Http\Resources\StaffResource($staff))->resolve(),
+        ]);
+    }
+
+    /**
      * Display login page.
      */
     public function login(): Response

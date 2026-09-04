@@ -178,6 +178,19 @@ class RoleSeeder extends Seeder
             ],
         ],
 
+        'staf' => [
+            'description' => 'Staf - Non-teaching staff',
+            'permissions' => [
+                'dashboard.view',
+                // Own data
+                'staff.view-own',
+                // Attendance
+                'attendance.view', 'attendance.check-in', 'attendance.check-out',
+                // Notifications
+                'notifications.view', 'announcements.view',
+            ],
+        ],
+
         'tata_usaha' => [
             'description' => 'Tata Usaha - Administrative staff',
             'permissions' => [
