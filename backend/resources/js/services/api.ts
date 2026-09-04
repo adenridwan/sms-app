@@ -247,8 +247,6 @@ export const teachersApi = {
 export interface Staff {
     id: string;
     user_id: string;
-    unique_code?: string;
-    rfid_code?: string;
     employee_id?: string;
     username?: string;
     email?: string;

@@ -26,9 +26,6 @@ class Staff extends Model
         'education_level',
         'status',
         'additional_info',
-        'unique_code',
-        'rfid_code',
-        'no_hp',
     ];
 
     protected function casts(): array

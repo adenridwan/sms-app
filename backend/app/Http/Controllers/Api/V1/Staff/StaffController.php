@@ -125,9 +125,6 @@ class StaffController extends ApiController
                 'employee_id', 'department_id', 'position_id', 'join_date',
                 'employment_status', 'status', 'education_level',
             ]));
-            if (array_key_exists('phone', $data)) {
-                $staffFields['no_hp'] = $data['phone'];
-            }
             if ($staffFields !== []) {
                 $staff->update($staffFields);
             }

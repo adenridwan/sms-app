@@ -82,7 +82,6 @@ class StaffRegistrar
                         'employee_id' => $data['employee_id'] ?? null,
                         'department_id' => $data['department_id'] ?? null,
                         'position_id' => $data['position_id'] ?? null,
-                        'no_hp' => $data['phone'] ?? null,
                         'join_date' => $data['join_date'] ?? now()->toDateString(),
                         'employment_status' => $data['employment_status'] ?? 'permanent',
                         'education_level' => $data['education_level'] ?? null,

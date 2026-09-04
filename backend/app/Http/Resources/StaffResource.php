@@ -19,8 +19,6 @@ class StaffResource extends JsonResource
         return [
             'id' => $this->id,
             'user_id' => $this->user_id,
-            'unique_code' => $this->unique_code,
-            'rfid_code' => $this->rfid_code,
             'employee_id' => $this->employee_id,
 
             // Akun & Pribadi
@@ -31,7 +29,7 @@ class StaffResource extends JsonResource
             'first_name' => $profile?->first_name,
             'last_name' => $profile?->last_name,
             'full_name' => $this->user?->full_name,
-            'phone' => $this->no_hp ?? $profile?->phone,
+            'phone' => $profile?->phone,
             'avatar_url' => $this->user?->avatar ? asset('storage/' . $this->user->avatar) : null,
             'gender' => $profile?->gender,
             'gender_label' => match ($profile?->gender) {
