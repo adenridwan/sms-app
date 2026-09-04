@@ -27,7 +27,17 @@ class SalaryComponentResource extends JsonResource
                 ? $this->default_value . '%'
                 : 'Rp ' . number_format($this->default_value, 0, ',', '.'),
             'percentage_of' => $this->percentage_of,
+            'percentage_of_label' => $this->getPercentageOfLabel(),
+            'percentage_component_id' => $this->percentage_component_id,
+            'percentage_component' => $this->whenLoaded('percentageComponent', function () {
+                return [
+                    'id' => $this->percentageComponent->id,
+                    'code' => $this->percentageComponent->code,
+                    'name' => $this->percentageComponent->name,
+                ];
+            }),
             'formula' => $this->formula,
+            'formula_display' => $this->getFormulaDisplay(),
             'is_taxable' => $this->is_taxable,
             'is_mandatory' => $this->is_mandatory,
             'is_active' => $this->is_active,
@@ -36,5 +46,57 @@ class SalaryComponentResource extends JsonResource
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
+    }
+
+    protected function getPercentageOfLabel(): ?string
+    {
+        if (!$this->percentage_of) {
+            return null;
+        }
+
+        $references = \App\Infrastructure\Persistence\Eloquent\Payroll\SalaryComponent::getPercentageReferences();
+
+        if (isset($references[$this->percentage_of])) {
+            return $references[$this->percentage_of];
+        }
+
+        // Jika percentage_component_id ada, tampilkan nama komponen
+        if ($this->percentage_component_id && $this->relationLoaded('percentageComponent') && $this->percentageComponent) {
+            return $this->percentageComponent->name;
+        }
+
+        return $this->percentage_of;
+    }
+
+    protected function getFormulaDisplay(): ?string
+    {
+        if (!$this->formula || !is_array($this->formula)) {
+            return null;
+        }
+
+        $parts = [];
+        foreach ($this->formula as $item) {
+            $type = $item['type'] ?? '';
+
+            switch ($type) {
+                case 'component':
+                    $parts[] = '{' . ($item['code'] ?? $item['id'] ?? '?') . '}';
+                    break;
+                case 'base_salary':
+                    $parts[] = '{Gaji Pokok}';
+                    break;
+                case 'gross_salary':
+                    $parts[] = '{Gaji Kotor}';
+                    break;
+                case 'number':
+                    $parts[] = $item['value'] ?? '0';
+                    break;
+                case 'operator':
+                    $parts[] = ' ' . ($item['value'] ?? '+') . ' ';
+                    break;
+            }
+        }
+
+        return implode('', $parts);
     }
 }

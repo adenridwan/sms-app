@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Infrastructure\Persistence\Eloquent\System\Setting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -30,13 +31,21 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        // Resolusi tenant aktif untuk request web/Inertia. `tenant()` (TenantService)
-        // hanya terisi bila ada middleware yang menyetelnya; untuk halaman Inertia
-        // biasa hal itu tidak terjadi, jadi kita resolusi langsung dari user yang
-        // login dan sekaligus set ke service agar konsisten di seluruh request.
-        $tenant = tenant();
-        if (! $tenant && $request->user()?->tenant_id) {
-            $tenant = \App\Models\Tenant::find($request->user()->tenant_id);
+        $user = $request->user();
+        $tenant = null;
+
+        // Eager load semua relasi yang dibutuhkan SEKALI di awal
+        // Ini mengurangi ~10 query menjadi 4 query saja
+        if ($user) {
+            $user->loadMissing([
+                'tenant',                // 1 query - untuk data tenant
+                'profile',               // 1 query - untuk full_name, first_name, dll
+                'roles.permissions',     // 2 query - roles + permissions per role
+                'permissions',           // 1 query - direct permissions
+            ]);
+
+            // Ambil tenant dari relasi yang sudah di-load (0 query tambahan)
+            $tenant = $user->tenant ?? tenant();
             if ($tenant) {
                 app('tenant')->setTenant($tenant);
             }
@@ -45,39 +54,21 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
 
-            // Auth user
+            // Auth user - semua data diambil dari relasi yang sudah eager-loaded
             'auth' => [
-                'user' => $request->user() ? [
-                    'id' => $request->user()->id,
-                    'username' => $request->user()->username,
-                    'email' => $request->user()->email,
-                    'avatar' => $request->user()->avatar,
-                    // URL siap pakai untuk <img>; `avatar` mentah hanya path
-                    // relatif di disk `public` sehingga tidak bisa dipasang langsung.
-                    // Dibuat root-relative (sama seperti logo tenant di bawah) supaya
-                    // tidak ikut host APP_URL yang bisa beda dengan host browser.
-                    'avatar_url' => $request->user()->avatar
-                        ? (parse_url(\Illuminate\Support\Facades\Storage::disk('public')->url($request->user()->avatar), PHP_URL_PATH)
-                            ?: '/storage/'.$request->user()->avatar)
-                        : null,
-                    'user_type' => $request->user()->user_type,
-                    'full_name' => $request->user()->full_name,
-                    'roles' => $request->user()->getRoleNames(),
-                    'permissions' => $request->user()->getAllPermissions()->pluck('name'),
-                    'must_change_password' => $request->user()->mustChangePassword(),
-                ] : null,
+                'user' => $user ? $this->getUserData($user) : null,
             ],
 
             // Menu yang boleh tampil untuk user ini (permission + config
             // visibilitas per-role, Opsi A). Dipakai sidebar MainLayout.tsx.
+            // Menggunakan lazy loading (fn) agar hanya dihitung jika diakses
             'menu' => [
-                'visible' => fn () => $request->user()
-                    ? app(\App\Domain\Setting\Services\MenuVisibilityService::class)
-                        ->visibleKeysFor($request->user())
+                'visible' => fn () => $user
+                    ? $this->getVisibleMenuKeys($user)
                     : [],
             ],
 
-            // Tenant
+            // Tenant - diambil dari relasi yang sudah di-load
             'tenant' => $tenant ? [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
@@ -88,7 +79,7 @@ class HandleInertiaRequests extends Middleware
             ] : null,
 
             // Tenant list for super admin (used by the tenant switcher)
-            'tenants' => fn () => $request->user()?->isSuperAdmin()
+            'tenants' => fn () => $user?->isSuperAdmin()
                 ? \App\Models\Tenant::query()
                     ->orderBy('name')
                     ->get(['id', 'name', 'logo'])
@@ -102,15 +93,89 @@ class HandleInertiaRequests extends Middleware
                 'info' => fn() => $request->session()->get('info'),
             ],
 
-            // App settings
-            'app' => [
+            // App settings - cache untuk mengurangi query Setting
+            'app' => $this->getAppSettings(),
+        ];
+    }
+
+    /**
+     * Get user data from eager-loaded relations.
+     * Tidak ada query tambahan karena semua relasi sudah di-load.
+     */
+    protected function getUserData($user): array
+    {
+        // Ambil permissions dari relasi yang sudah di-load
+        // Ini menggantikan getAllPermissions() yang trigger N+1 query
+        $permissions = $this->getPermissionsFromLoadedRelations($user);
+
+        return [
+            'id' => $user->id,
+            'username' => $user->username,
+            'email' => $user->email,
+            'avatar' => $user->avatar,
+            'avatar_url' => $user->avatar
+                ? (parse_url(\Illuminate\Support\Facades\Storage::disk('public')->url($user->avatar), PHP_URL_PATH)
+                    ?: '/storage/'.$user->avatar)
+                : null,
+            'user_type' => $user->user_type,
+            // full_name accessor akan menggunakan profile yang sudah di-load
+            'full_name' => $user->full_name,
+            // Ambil roles dari relasi yang sudah di-load
+            'roles' => $user->roles->pluck('name'),
+            // Permissions dari helper method (tanpa query)
+            'permissions' => $permissions,
+            'must_change_password' => $user->mustChangePassword(),
+        ];
+    }
+
+    /**
+     * Get all permissions from already-loaded relations.
+     * Menggantikan getAllPermissions() yang menyebabkan N+1 query.
+     */
+    protected function getPermissionsFromLoadedRelations($user): array
+    {
+        // Kumpulkan permissions dari semua roles
+        $rolePermissions = $user->roles
+            ->flatMap(fn ($role) => $role->permissions->pluck('name'));
+
+        // Gabungkan dengan direct permissions
+        $directPermissions = $user->permissions->pluck('name');
+
+        return $rolePermissions
+            ->merge($directPermissions)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Get visible menu keys with caching.
+     * Cache per user untuk mengurangi 50+ permission check per request.
+     */
+    protected function getVisibleMenuKeys($user): array
+    {
+        $cacheKey = "menu_visible:{$user->id}:" . ($user->tenant_id ?? 'global');
+
+        // Cache selama 5 menit - akan di-invalidate saat permission berubah
+        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($user) {
+            return app(\App\Domain\Setting\Services\MenuVisibilityService::class)
+                ->visibleKeysFor($user);
+        });
+    }
+
+    /**
+     * Get app settings with caching.
+     */
+    protected function getAppSettings(): array
+    {
+        // Cache app settings selama 1 jam karena jarang berubah
+        return Cache::remember('app_settings', now()->addHour(), function () {
+            return [
                 'name' => config('app.name'),
                 'locale' => app()->getLocale(),
                 'timezone' => config('app.timezone'),
-                // Diisi lewat menu Pengaturan > Backup Database ("Versi
-                // Aplikasi"), ditampilkan di footer MainLayout.tsx.
                 'version' => Setting::getGlobal('app', 'version') ?? '1.0.0',
-            ],
-        ];
+            ];
+        });
     }
 }

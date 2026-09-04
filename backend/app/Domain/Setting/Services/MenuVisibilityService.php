@@ -4,6 +4,7 @@ namespace App\Domain\Setting\Services;
 
 use App\Infrastructure\Persistence\Eloquent\Setting\MenuVisibilitySetting;
 use App\Support\MenuRegistry;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
@@ -36,6 +37,9 @@ class MenuVisibilityService
     /**
      * Daftar menu_key yang boleh tampil untuk seorang user (gabungan role-nya).
      *
+     * OPTIMIZED: Menggunakan relasi yang sudah di-eager-load di HandleInertiaRequests
+     * untuk menghindari N+1 query saat cek permission per menu item.
+     *
      * @return array<int, string>
      */
     public function visibleKeysFor($user): array
@@ -47,7 +51,18 @@ class MenuVisibilityService
             return array_keys($flat);
         }
 
-        $roles = $user->getRoleNames()->all();
+        // OPTIMIZED: Gunakan relasi yang sudah di-load, bukan getRoleNames() yang trigger query
+        // Jika relasi belum di-load, load sekali saja
+        if (!$user->relationLoaded('roles')) {
+            $user->load('roles.permissions');
+        }
+
+        $roles = $user->roles->pluck('name')->all();
+
+        // OPTIMIZED: Kumpulkan semua permission user ke dalam Set untuk O(1) lookup
+        // Ini menggantikan $user->can() yang trigger query per-cek
+        $userPermissions = $this->collectUserPermissions($user);
+
         $hidden = $this->hiddenMap($user->tenant_id); // [role => [key => true]]
 
         $visible = [];
@@ -58,7 +73,8 @@ class MenuVisibilityService
             }
 
             // (1) Cek permission (lapis keamanan). null = tak butuh permission.
-            if ($entry['permission'] !== null && ! $user->can($entry['permission'])) {
+            // OPTIMIZED: Cek di array/set lokal, bukan $user->can() yang trigger query
+            if ($entry['permission'] !== null && !isset($userPermissions[$entry['permission']])) {
                 continue;
             }
 
@@ -80,6 +96,37 @@ class MenuVisibilityService
         }
 
         return $visible;
+    }
+
+    /**
+     * Kumpulkan semua permission user ke dalam associative array untuk O(1) lookup.
+     * Menggantikan $user->can() yang bisa trigger query per-cek.
+     *
+     * @return array<string, bool>
+     */
+    private function collectUserPermissions($user): array
+    {
+        $permissions = [];
+
+        // Dari roles yang sudah di-load
+        if ($user->relationLoaded('roles')) {
+            foreach ($user->roles as $role) {
+                if ($role->relationLoaded('permissions')) {
+                    foreach ($role->permissions as $permission) {
+                        $permissions[$permission->name] = true;
+                    }
+                }
+            }
+        }
+
+        // Direct permissions
+        if ($user->relationLoaded('permissions')) {
+            foreach ($user->permissions as $permission) {
+                $permissions[$permission->name] = true;
+            }
+        }
+
+        return $permissions;
     }
 
     /**
@@ -165,6 +212,36 @@ class MenuVisibilityService
                 MenuVisibilitySetting::insert($rows);
             }
         });
+
+        // Invalidate menu cache untuk semua user di tenant ini
+        $this->clearMenuCacheForTenant($tenantId);
+    }
+
+    /**
+     * Clear menu visibility cache untuk user tertentu.
+     * Panggil ini saat role/permission user berubah.
+     */
+    public static function clearMenuCacheForUser(string $userId, ?string $tenantId = null): void
+    {
+        $cacheKey = "menu_visible:{$userId}:" . ($tenantId ?? 'global');
+        Cache::forget($cacheKey);
+    }
+
+    /**
+     * Clear menu visibility cache untuk semua user di tenant.
+     * Panggil ini saat menu visibility settings berubah.
+     */
+    public function clearMenuCacheForTenant(string $tenantId): void
+    {
+        // Karena cache key mengandung user_id, kita perlu pattern matching
+        // Untuk Redis: Cache::getRedis()->keys("menu_visible:*:{$tenantId}");
+        // Untuk file/array cache, kita perlu track user IDs atau clear all
+
+        // Solusi sederhana: clear semua menu cache dengan tag (jika driver support)
+        // Atau gunakan prefix yang bisa di-flush
+
+        // Untuk sekarang, kita rely pada TTL 5 menit
+        // TODO: Implementasi yang lebih baik jika pakai Redis dengan tags
     }
 
     /**

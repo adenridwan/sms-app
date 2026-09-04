@@ -12,6 +12,9 @@ use Illuminate\Support\Collection;
 
 class AttendancePayrollService
 {
+    public function __construct(
+        protected TeachingHoursService $teachingHoursService
+    ) {}
     /**
      * Status kehadiran yang dianggap hadir
      */
@@ -111,15 +114,19 @@ class AttendancePayrollService
      *
      * @param array $attendanceStats Hasil dari calculateAttendanceStats()
      * @param Collection<SalaryComponent> $components Komponen gaji yang berlaku
+     * @param array $teachingHours Hasil dari TeachingHoursService (opsional)
      * @return array{
-     *     items: array<int, array{component_id: string, code: string, name: string, type: string, category: string, amount: float, quantity: int, rate: float}>,
+     *     items: array<int, array{component_id: string, code: string, name: string, type: string, category: string, amount: float, quantity: int|float, rate: float}>,
      *     total_earnings: float,
      *     total_deductions: float,
      *     attendance_deduction: float
      * }
      */
-    public function calculateAttendanceComponents(array $attendanceStats, Collection $components): array
-    {
+    public function calculateAttendanceComponents(
+        array $attendanceStats,
+        Collection $components,
+        array $teachingHours = []
+    ): array {
         $items = [];
         $totalEarnings = 0;
         $totalDeductions = 0;
@@ -146,10 +153,17 @@ class AttendancePayrollService
                     break;
 
                 case 'per_hour':
-                    // Untuk per_hour, gunakan overtime_minutes atau late_minutes
-                    $minutes = $this->getMinutesForComponent($component->code, $attendanceStats);
-                    $quantity = $minutes; // dalam menit
-                    $amount = ($minutes / 60) * $rate; // konversi ke jam
+                    // Cek apakah komponen untuk jam mengajar atau overtime/telat
+                    if ($this->isTeachingHoursComponent($component->code)) {
+                        // Gunakan jam mengajar dari jadwal
+                        $quantity = $teachingHours['total_hours'] ?? 0;
+                        $amount = $quantity * $rate;
+                    } else {
+                        // Gunakan overtime_minutes atau late_minutes
+                        $minutes = $this->getMinutesForComponent($component->code, $attendanceStats);
+                        $quantity = round($minutes / 60, 2); // konversi ke jam
+                        $amount = $quantity * $rate;
+                    }
                     break;
             }
 
@@ -180,6 +194,35 @@ class AttendancePayrollService
             'total_deductions' => round($totalDeductions, 2),
             'attendance_deduction' => round($totalDeductions, 2),
         ];
+    }
+
+    /**
+     * Cek apakah komponen adalah untuk jam mengajar (bukan lembur/telat).
+     */
+    protected function isTeachingHoursComponent(string $code): bool
+    {
+        $code = strtoupper($code);
+
+        // Komponen jam mengajar
+        $teachingKeywords = ['MENGAJAR', 'TEACHING', 'JAM_AJAR', 'HONOR_JAM', 'PERJAM', 'HOURLY'];
+
+        foreach ($teachingKeywords as $keyword) {
+            if (str_contains($code, $keyword)) {
+                return true;
+            }
+        }
+
+        // Jika tidak mengandung keyword overtime/telat, anggap jam mengajar
+        $nonTeachingKeywords = ['LEMBUR', 'OVERTIME', 'TELAT', 'LATE', 'EARLY', 'AWAL'];
+
+        foreach ($nonTeachingKeywords as $keyword) {
+            if (str_contains($code, $keyword)) {
+                return false;
+            }
+        }
+
+        // Default: jam mengajar
+        return true;
     }
 
     /**
@@ -307,16 +350,19 @@ class AttendancePayrollService
      * @param Carbon $startDate
      * @param Carbon $endDate
      * @param Collection<PayrollSlip> $slips
+     * @param callable|null $progressCallback Callback untuk update progress (current, total)
      * @return array{processed: int, errors: array}
      */
     public function processAttendanceForPeriod(
         string $tenantId,
         Carbon $startDate,
         Carbon $endDate,
-        Collection $slips
+        Collection $slips,
+        ?callable $progressCallback = null
     ): array {
         $processed = 0;
         $errors = [];
+        $total = $slips->count();
 
         // Ambil semua komponen gaji bertipe per_day atau per_hour
         $attendanceComponents = SalaryComponent::where('tenant_id', $tenantId)
@@ -324,7 +370,30 @@ class AttendancePayrollService
             ->whereIn('calculation_type', ['per_day', 'per_hour'])
             ->get();
 
-        foreach ($slips as $slip) {
+        // Cek apakah ada komponen jam mengajar
+        $hasTeachingHoursComponent = $attendanceComponents->contains(function ($c) {
+            return $c->calculation_type === 'per_hour' && $this->isTeachingHoursComponent($c->code);
+        });
+
+        // Batch calculate teaching hours jika diperlukan
+        $teachingHoursMap = [];
+        if ($hasTeachingHoursComponent) {
+            $userIds = $slips->map(function ($slip) {
+                $employee = $slip->getEmployee();
+                return $employee?->user_id;
+            })->filter()->unique()->values()->toArray();
+
+            if (!empty($userIds)) {
+                $teachingHoursMap = $this->teachingHoursService->calculateTeachingHoursBatch(
+                    $userIds,
+                    $startDate,
+                    $endDate,
+                    $tenantId
+                );
+            }
+        }
+
+        foreach ($slips as $index => $slip) {
             try {
                 // Dapatkan user_id dari employee (Teacher atau Staff)
                 $employee = $slip->getEmployee();
@@ -342,13 +411,21 @@ class AttendancePayrollService
                 // Apply ke slip
                 $this->applyToSlip($slip, $stats);
 
+                // Ambil teaching hours untuk employee ini
+                $teachingHours = $teachingHoursMap[$employee->user_id] ?? [];
+
                 // Hitung dan tambahkan komponen kehadiran
                 if ($attendanceComponents->isNotEmpty()) {
-                    $attendanceResult = $this->calculateAttendanceComponents($stats, $attendanceComponents);
+                    $attendanceResult = $this->calculateAttendanceComponents($stats, $attendanceComponents, $teachingHours);
                     $this->addAttendanceItemsToSlip($slip, $attendanceResult['items']);
                 }
 
                 $processed++;
+
+                // Update progress
+                if ($progressCallback) {
+                    $progressCallback($index + 1, $total);
+                }
             } catch (\Exception $e) {
                 $errors[] = [
                     'slip_id' => $slip->id,

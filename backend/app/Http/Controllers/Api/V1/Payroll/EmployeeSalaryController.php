@@ -24,25 +24,34 @@ class EmployeeSalaryController extends ApiController
     public function index(Request $request): JsonResponse
     {
         $query = EmployeeSalary::query()
-            ->with(['salaryGrade', 'teacher.user', 'staff.user', 'components.salaryComponent'])
+            ->with(['salaryGrade', 'teacher.user.profile', 'staff.user.profile', 'components.salaryComponent'])
             ->withCount('components')
             ->when($request->search, function ($q, $search) {
-                $q->where(function ($query) use ($search) {
-                    // Search in teacher's user name
-                    $query->whereHas('teacher.user', function ($sub) use ($search) {
-                        $sub->where('full_name', 'ilike', "%{$search}%");
+                $term = "%{$search}%";
+                $q->where(function ($query) use ($term) {
+                    // Search in teacher's user profile (first_name, last_name) or username
+                    $query->whereHas('teacher.user', function ($sub) use ($term) {
+                        $sub->where('username', 'ilike', $term)
+                            ->orWhereHas('profile', function ($p) use ($term) {
+                                $p->where('first_name', 'ilike', $term)
+                                  ->orWhere('last_name', 'ilike', $term);
+                            });
                     })
-                    // Search in staff's user name
-                    ->orWhereHas('staff.user', function ($sub) use ($search) {
-                        $sub->where('full_name', 'ilike', "%{$search}%");
+                    // Search in staff's user profile (first_name, last_name) or username
+                    ->orWhereHas('staff.user', function ($sub) use ($term) {
+                        $sub->where('username', 'ilike', $term)
+                            ->orWhereHas('profile', function ($p) use ($term) {
+                                $p->where('first_name', 'ilike', $term)
+                                  ->orWhere('last_name', 'ilike', $term);
+                            });
                     })
                     // Search in teacher NIP
-                    ->orWhereHas('teacher', function ($sub) use ($search) {
-                        $sub->where('nip', 'ilike', "%{$search}%");
+                    ->orWhereHas('teacher', function ($sub) use ($term) {
+                        $sub->where('nip', 'ilike', $term);
                     })
                     // Search in staff employee_id
-                    ->orWhereHas('staff', function ($sub) use ($search) {
-                        $sub->where('employee_id', 'ilike', "%{$search}%");
+                    ->orWhereHas('staff', function ($sub) use ($term) {
+                        $sub->where('employee_id', 'ilike', $term);
                     });
                 });
             })
@@ -133,7 +142,7 @@ class EmployeeSalaryController extends ApiController
                 return $salary;
             });
 
-            $salary->load(['salaryGrade', 'teacher.user', 'staff.user', 'components.salaryComponent']);
+            $salary->load(['salaryGrade', 'teacher.user.profile', 'staff.user.profile', 'components.salaryComponent']);
 
             return $this->success(
                 new EmployeeSalaryResource($salary),
@@ -150,7 +159,7 @@ class EmployeeSalaryController extends ApiController
      */
     public function show(EmployeeSalary $employeeSalary): JsonResponse
     {
-        $employeeSalary->load(['salaryGrade', 'teacher.user', 'staff.user', 'components.salaryComponent']);
+        $employeeSalary->load(['salaryGrade', 'teacher.user.profile', 'staff.user.profile', 'components.salaryComponent']);
         $employeeSalary->loadCount('components');
 
         return $this->success(new EmployeeSalaryResource($employeeSalary));
@@ -225,7 +234,7 @@ class EmployeeSalaryController extends ApiController
                 return $employeeSalary;
             });
 
-            $salary->load(['salaryGrade', 'teacher.user', 'staff.user', 'components.salaryComponent']);
+            $salary->load(['salaryGrade', 'teacher.user.profile', 'staff.user.profile', 'components.salaryComponent']);
 
             return $this->success(new EmployeeSalaryResource($salary), 'Pengaturan gaji berhasil diperbarui');
         } catch (\Exception $e) {

@@ -51,7 +51,6 @@ const MONTHS = [
 ];
 
 const currentYear = new Date().getFullYear();
-const currentMonth = new Date().getMonth() + 1;
 const YEARS = Array.from({ length: 5 }, (_, i) => (currentYear - 2 + i).toString());
 
 interface ExpenseSummary {

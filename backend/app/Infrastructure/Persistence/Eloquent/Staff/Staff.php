@@ -5,9 +5,11 @@ namespace App\Infrastructure\Persistence\Eloquent\Staff;
 use App\Infrastructure\Persistence\Eloquent\Auth\User;
 use App\Infrastructure\Persistence\Eloquent\Concerns\BelongsToTenant;
 use App\Infrastructure\Persistence\Eloquent\Concerns\HasUuid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Staff extends Model
 {
@@ -21,12 +23,26 @@ class Staff extends Model
         'department_id',
         'position_id',
         'employee_id',
+        'unique_code',
+        'rfid_code',
+        'no_hp',
         'join_date',
         'employment_status',
         'education_level',
         'status',
         'additional_info',
     ];
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->unique_code)) {
+                $model->unique_code = 'STF-' . strtoupper(Str::random(12));
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -106,5 +122,43 @@ class Staff extends Model
             self::STATUS_RETIRED => 'Pensiun',
             self::STATUS_TERMINATED => 'Berhenti',
         ];
+    }
+
+    /**
+     * Scope for active staff
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', 'active');
+    }
+
+    /**
+     * Regenerate the unique code for this staff
+     */
+    public function regenerateUniqueCode(): string
+    {
+        $this->unique_code = 'STF-' . strtoupper(Str::random(12));
+        $this->save();
+
+        return $this->unique_code;
+    }
+
+    /**
+     * Scope to find staff by unique_code or rfid_code
+     */
+    public function scopeFindByCode(Builder $query, string $code): Builder
+    {
+        return $query->where('unique_code', $code)
+            ->orWhere('rfid_code', $code);
+    }
+
+    /**
+     * Find staff by unique_code or rfid_code
+     */
+    public static function findByCode(string $code): ?static
+    {
+        return static::where('unique_code', $code)
+            ->orWhere('rfid_code', $code)
+            ->first();
     }
 }

@@ -1333,15 +1333,17 @@ export const usersApi = {
             { params: { search } }
         ),
 
-    staffOptions: (userId?: string) =>
+    staffOptions: (userId?: string, search?: string) =>
         api.get<ApiResponse<Array<{
             id: string;
             employee_id: string | null;
             join_date: string | null;
             employment_status: string | null;
+            department_name: string | null;
+            position_name: string | null;
             user_id: string | null;
             user_name: string | null;
-        }>>>('/admin/users/staff-options', { params: { user_id: userId } }),
+        }>>>('/admin/users/staff-options', { params: { user_id: userId, search } }),
 
     activate: (id: string) =>
         api.post<ApiResponse<User>>(`/admin/users/${id}/activate`),
