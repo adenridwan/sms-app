@@ -134,7 +134,7 @@ class User extends Authenticatable implements MustVerifyEmail
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(
-            \App\Infrastructure\Persistence\Eloquent\Tenant\Tenant::class,
+            \App\Models\Tenant::class,
             'tenant_id'
         );
     }

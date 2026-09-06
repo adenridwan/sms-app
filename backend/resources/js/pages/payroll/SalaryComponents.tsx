@@ -42,9 +42,10 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, RefreshCw, Search, TrendingUp, TrendingDown } from 'lucide-react';
-import { salaryComponentsApi } from '@/services/api';
+import { Plus, Pencil, Trash2, RefreshCw, Search, TrendingUp, TrendingDown, Calculator } from 'lucide-react';
+import { salaryComponentsApi, type FormulaItem } from '@/services/api';
 import type { SalaryComponent, PaginationMeta } from '@/types';
+import FormulaBuilder from '@/components/payroll/FormulaBuilder';
 
 const COMPONENT_TYPES = [
     { value: 'earning', label: 'Pendapatan', icon: TrendingUp, color: 'text-green-600' },
@@ -62,13 +63,12 @@ const CALCULATION_TYPES = [
 interface SalaryComponentForm {
     code: string;
     name: string;
-    // Diturunkan dari tipe domain, bukan `string`, supaya payload yang
-    // dikirim ke API tetap cocok dan union-nya ikut tersinkron.
     type: NonNullable<SalaryComponent['type']>;
     calculation_type: NonNullable<SalaryComponent['calculation_type']>;
     default_value: string;
-    percentage_of: string;
-    formula: string;
+    percentage_of: string; // 'base_salary' | 'gross_salary' | 'component'
+    percentage_component_id: string;
+    formula: FormulaItem[];
     is_taxable: boolean;
     is_mandatory: boolean;
     is_active: boolean;
@@ -83,7 +83,8 @@ const emptyForm: SalaryComponentForm = {
     calculation_type: 'fixed',
     default_value: '',
     percentage_of: '',
-    formula: '',
+    percentage_component_id: '',
+    formula: [],
     is_taxable: true,
     is_mandatory: false,
     is_active: true,
@@ -117,6 +118,36 @@ export default function SalaryComponents() {
     const [deletingItem, setDeletingItem] = useState<SalaryComponent | null>(null);
     const [deleting, setDeleting] = useState(false);
 
+    // Available components for percentage reference
+    const [availableComponents, setAvailableComponents] = useState<Array<{
+        id: string;
+        code: string;
+        name: string;
+        type: string;
+        type_label: string;
+        default_value: number;
+        default_value_formatted: string;
+    }>>([]);
+    const [loadingComponents, setLoadingComponents] = useState(false);
+
+    // Load available components when form opens
+    useEffect(() => {
+        if (formOpen) {
+            const loadComponents = async () => {
+                setLoadingComponents(true);
+                try {
+                    const response = await salaryComponentsApi.availableForReference(editingItem?.id);
+                    setAvailableComponents(response.data.data);
+                } catch {
+                    // Ignore
+                } finally {
+                    setLoadingComponents(false);
+                }
+            };
+            loadComponents();
+        }
+    }, [formOpen, editingItem?.id]);
+
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
@@ -147,14 +178,22 @@ export default function SalaryComponents() {
 
     const openEdit = (item: SalaryComponent) => {
         setEditingItem(item);
+
+        // Determine percentage_of value
+        let percentageOf = item.percentage_of ?? '';
+        if (item.percentage_component_id) {
+            percentageOf = 'component';
+        }
+
         setForm({
             code: item.code,
             name: item.name,
             type: item.type ?? 'earning',
             calculation_type: item.calculation_type ?? 'fixed',
             default_value: String(item.default_value),
-            percentage_of: item.percentage_of ?? '',
-            formula: item.formula ?? '',
+            percentage_of: percentageOf,
+            percentage_component_id: item.percentage_component_id ?? '',
+            formula: Array.isArray(item.formula) ? item.formula : [],
             is_taxable: item.is_taxable,
             is_mandatory: item.is_mandatory,
             is_active: item.is_active,
@@ -176,16 +215,46 @@ export default function SalaryComponents() {
             return;
         }
 
+        // Validate percentage_of
+        if (form.calculation_type === 'percentage' && !form.percentage_of) {
+            toast.error('Persentase dari harus dipilih');
+            return;
+        }
+
+        if (form.calculation_type === 'percentage' && form.percentage_of === 'component' && !form.percentage_component_id) {
+            toast.error('Komponen referensi harus dipilih');
+            return;
+        }
+
+        // Validate formula
+        if (form.calculation_type === 'formula' && form.formula.length === 0) {
+            toast.error('Rumus harus diisi');
+            return;
+        }
+
         setSaving(true);
         try {
+            // Build percentage_of and percentage_component_id
+            let percentageOf: string | null = null;
+            let percentageComponentId: string | null = null;
+
+            if (form.calculation_type === 'percentage') {
+                if (form.percentage_of === 'component') {
+                    percentageComponentId = form.percentage_component_id || null;
+                } else {
+                    percentageOf = form.percentage_of || null;
+                }
+            }
+
             const payload = {
                 code: form.code.trim().toUpperCase(),
                 name: form.name.trim(),
                 type: form.type,
                 calculation_type: form.calculation_type,
                 default_value: value,
-                percentage_of: form.percentage_of.trim() || null,
-                formula: form.formula.trim() || null,
+                percentage_of: percentageOf,
+                percentage_component_id: percentageComponentId,
+                formula: form.calculation_type === 'formula' ? form.formula : null,
                 is_taxable: form.is_taxable,
                 is_mandatory: form.is_mandatory,
                 is_active: form.is_active,
@@ -447,27 +516,67 @@ export default function SalaryComponents() {
                             </div>
                         </div>
                         {form.calculation_type === 'percentage' && (
-                            <div className="space-y-2">
-                                <Label htmlFor="comp-percentage-of">Persentase Dari</Label>
-                                <Input
-                                    id="comp-percentage-of"
-                                    placeholder="Contoh: base_salary, gross_salary"
-                                    value={form.percentage_of}
-                                    onChange={(e) => setForm({ ...form, percentage_of: e.target.value })}
-                                />
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Persentase Dari *</Label>
+                                    <Select
+                                        value={form.percentage_of}
+                                        onValueChange={(value) => setForm({
+                                            ...form,
+                                            percentage_of: value,
+                                            percentage_component_id: value === 'component' ? form.percentage_component_id : '',
+                                        })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Pilih referensi" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="base_salary">Gaji Pokok</SelectItem>
+                                            <SelectItem value="gross_salary">Gaji Kotor (Total Pendapatan)</SelectItem>
+                                            <SelectItem value="component">Komponen Lain</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {form.percentage_of === 'component' && (
+                                    <div className="space-y-2">
+                                        <Label>Pilih Komponen *</Label>
+                                        <Select
+                                            value={form.percentage_component_id}
+                                            onValueChange={(value) => setForm({ ...form, percentage_component_id: value })}
+                                            disabled={loadingComponents}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={loadingComponents ? 'Memuat...' : 'Pilih komponen'} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableComponents.map(c => (
+                                                    <SelectItem key={c.id} value={c.id}>
+                                                        <div className="flex items-center gap-2">
+                                                            <Calculator className="h-3 w-3" />
+                                                            <span>{c.code}</span>
+                                                            <span className="text-muted-foreground">- {c.name}</span>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {form.percentage_component_id && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Nilai saat ini: {availableComponents.find(c => c.id === form.percentage_component_id)?.default_value_formatted ?? '-'}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
+
                         {form.calculation_type === 'formula' && (
-                            <div className="space-y-2">
-                                <Label htmlFor="comp-formula">Rumus</Label>
-                                <Textarea
-                                    id="comp-formula"
-                                    placeholder="Rumus kalkulasi khusus"
-                                    rows={2}
-                                    value={form.formula}
-                                    onChange={(e) => setForm({ ...form, formula: e.target.value })}
-                                />
-                            </div>
+                            <FormulaBuilder
+                                value={form.formula}
+                                onChange={(formula) => setForm({ ...form, formula })}
+                                excludeComponentId={editingItem?.id}
+                            />
                         )}
                         <div className="space-y-2">
                             <Label htmlFor="comp-description">Deskripsi</Label>

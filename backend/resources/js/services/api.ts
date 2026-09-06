@@ -243,6 +243,126 @@ export const teachersApi = {
         api.delete<ApiResponse<TeacherDocuments>>(`/teachers/${id}/documents/${mediaId}`),
 };
 
+// Staff
+export interface Staff {
+    id: string;
+    user_id: string;
+    employee_id?: string;
+    username?: string;
+    email?: string;
+    contact_email?: string;
+    email_is_generated?: boolean;
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    phone?: string;
+    avatar_url?: string | null;
+    gender?: string;
+    gender_label?: string;
+    birth_place?: string;
+    birth_date?: string;
+    religion?: string;
+    address?: string;
+    id_number?: string;
+    department_id?: string;
+    department_name?: string;
+    position_id?: string;
+    position_name?: string;
+    education_level?: string;
+    employment_status: string;
+    employment_status_label?: string;
+    join_date?: string;
+    status: string;
+    status_label?: string;
+    account_is_active?: boolean;
+    must_change_password?: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface StaffFormData {
+    first_name: string;
+    last_name: string;
+    email: string;
+    contact_email: string;
+    phone: string;
+    gender: string;
+    birth_place: string;
+    birth_date: string;
+    religion: string;
+    address: string;
+    id_number: string;
+    employee_id: string;
+    department_id: string;
+    position_id: string;
+    join_date: string;
+    employment_status: string;
+    status: string;
+    education_level: string;
+}
+
+export interface CreateStaffResponse extends Staff {
+    initial_username: string;
+    initial_password: string;
+}
+
+export interface DepartmentOption {
+    id: string;
+    name: string;
+    code: string;
+}
+
+export interface PositionOption {
+    id: string;
+    name: string;
+    code: string;
+}
+
+export interface StaffOption {
+    id: string;
+    employee_id?: string;
+    full_name?: string;
+    join_date?: string;
+    employment_status?: string;
+}
+
+export const staffApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<PaginatedResponse<Staff>>>('/staff', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<Staff>>(`/staff/${id}`),
+
+    create: (data: Partial<StaffFormData>) =>
+        api.post<ApiResponse<CreateStaffResponse>>('/staff', data),
+
+    update: (id: string, data: Partial<StaffFormData>) =>
+        api.put<ApiResponse<Staff>>(`/staff/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/staff/${id}`),
+
+    uploadPhoto: (id: string, file: File) => {
+        const formData = new FormData();
+        formData.append('photo', file);
+        return api.post<ApiResponse<{ avatar_url: string }>>(`/staff/${id}/photo`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    deletePhoto: (id: string) =>
+        api.delete<ApiResponse>(`/staff/${id}/photo`),
+
+    departments: () =>
+        api.get<ApiResponse<DepartmentOption[]>>('/staff/departments'),
+
+    positions: () =>
+        api.get<ApiResponse<PositionOption[]>>('/staff/positions'),
+
+    options: () =>
+        api.get<ApiResponse<StaffOption[]>>('/staff/options'),
+};
+
 // Class Rooms
 export const classRoomsApi = {
     list: (params?: Record<string, unknown>) =>
@@ -713,6 +833,17 @@ export const salaryGradesApi = {
         api.delete<ApiResponse>(`/payroll/salary-grades/${id}`),
 };
 
+// Formula item type for salary component calculation
+export interface FormulaItem {
+    type: 'component' | 'base_salary' | 'gross_salary' | 'number' | 'operator';
+    id?: string;
+    code?: string;
+    name?: string;
+    value?: number | string;
+    current_value?: number;
+    formatted_value?: string;
+}
+
 // Salary Components
 export const salaryComponentsApi = {
     list: (params?: Record<string, unknown>) =>
@@ -721,10 +852,10 @@ export const salaryComponentsApi = {
     get: (id: string) =>
         api.get<ApiResponse<SalaryComponent>>(`/payroll/salary-components/${id}`),
 
-    create: (data: Partial<SalaryComponent>) =>
+    create: (data: Partial<SalaryComponent> & { formula?: FormulaItem[] | null }) =>
         api.post<ApiResponse<SalaryComponent>>('/payroll/salary-components', data),
 
-    update: (id: string, data: Partial<SalaryComponent>) =>
+    update: (id: string, data: Partial<SalaryComponent> & { formula?: FormulaItem[] | null }) =>
         api.put<ApiResponse<SalaryComponent>>(`/payroll/salary-components/${id}`, data),
 
     delete: (id: string) =>
@@ -735,6 +866,31 @@ export const salaryComponentsApi = {
 
     calculationTypes: () =>
         api.get<ApiResponse<Record<string, string>>>('/payroll/salary-components/calculation-types'),
+
+    percentageReferences: () =>
+        api.get<ApiResponse<{
+            references: Record<string, string>;
+            operators: Record<string, string>;
+        }>>('/payroll/salary-components/percentage-references'),
+
+    availableForReference: (excludeId?: string) =>
+        api.get<ApiResponse<Array<{
+            id: string;
+            code: string;
+            name: string;
+            type: string;
+            type_label: string;
+            default_value: number;
+            default_value_formatted: string;
+        }>>>('/payroll/salary-components/available-for-reference', {
+            params: excludeId ? { exclude: excludeId } : undefined,
+        }),
+
+    validateFormula: (formula: FormulaItem[]) =>
+        api.post<ApiResponse<{ valid: boolean; errors: string[] }>>(
+            '/payroll/salary-components/validate-formula',
+            { formula }
+        ),
 };
 
 // BPJS Rates
@@ -935,7 +1091,25 @@ export const payrollPeriodsApi = {
         api.get<ApiResponse<{ data: Record<string, string> }>>('/payroll/periods/statuses'),
 
     generateSlips: (id: string) =>
-        api.post<ApiResponse<{ slips_created: number }>>(`/payroll/periods/${id}/generate-slips`),
+        api.post<ApiResponse<{
+            slips_created: number;
+            attendance_processed: number;
+            attendance_errors?: Array<{ slip_id: string; error: string }>;
+        }>>(`/payroll/periods/${id}/generate-slips`),
+
+    getGenerateProgress: (id: string) =>
+        api.get<ApiResponse<{
+            status: 'idle' | 'processing' | 'completed' | 'error';
+            current: number;
+            total: number;
+            percentage: number;
+            message: string;
+            result?: {
+                slips_created: number;
+                attendance_processed: number;
+                attendance_errors?: Array<{ slip_id: string; error: string }>;
+            };
+        }>>(`/payroll/periods/${id}/generate-progress`),
 
     calculate: (id: string) =>
         api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/calculate`),
@@ -952,8 +1126,63 @@ export const payrollPeriodsApi = {
     finalize: (id: string) =>
         api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/finalize`),
 
+    unfinalize: (id: string) =>
+        api.post<ApiResponse<PayrollPeriod>>(`/payroll/periods/${id}/unfinalize`),
+
+    syncEmployees: (id: string) =>
+        api.post<ApiResponse<{ added: number }>>(`/payroll/periods/${id}/sync-employees`),
+
     summary: (id: string) =>
         api.get<ApiResponse>(`/payroll/periods/${id}/summary`),
+
+    // Attendance integration
+    generateSlipsWithAttendance: (id: string) =>
+        api.post<ApiResponse<{ slips_created: number; attendance_processed: number; attendance_errors?: Array<{ slip_id: string; error: string }> }>>(
+            `/payroll/periods/${id}/generate-slips-with-attendance`
+        ),
+
+    calculateAttendance: (id: string) =>
+        api.post<ApiResponse<{ processed: number; errors: Array<{ slip_id: string; error: string }> }>>(
+            `/payroll/periods/${id}/calculate-attendance`
+        ),
+
+    // PDF Export
+    getExportPdfUrl: (id: string, employeeType?: 'teacher' | 'staff') => {
+        const params = employeeType ? `?employee_type=${employeeType}` : '';
+        return `/api/v1/payroll/periods/${id}/export-pdf${params}`;
+    },
+
+    // WhatsApp
+    previewWhatsAppRecipients: (id: string, employeeType?: 'teacher' | 'staff') =>
+        api.get<ApiResponse<{
+            recipients: Array<{
+                id: string;
+                name: string;
+                type: string;
+                type_label: string;
+                phone: string;
+                net_salary: number;
+                net_salary_formatted: string;
+            }>;
+            no_phone: Array<{
+                id: string;
+                name: string;
+                type: string;
+                type_label: string;
+            }>;
+            total: number;
+            total_no_phone: number;
+        }>>(`/payroll/periods/${id}/whatsapp-preview`, { params: { employee_type: employeeType } }),
+
+    sendWhatsAppBulk: (id: string, employeeType?: 'teacher' | 'staff') =>
+        api.post<ApiResponse<{
+            success: boolean;
+            sent: number;
+            failed: number;
+            no_phone: string[];
+            errors: Array<{ employee: string; message: string }>;
+            message: string;
+        }>>(`/payroll/periods/${id}/send-whatsapp`, { employee_type: employeeType }),
 };
 
 // Payroll Slips
@@ -981,10 +1210,10 @@ export const payrollSlipsApi = {
 
     addItem: (id: string, data: {
         salary_component_id?: string;
-        component_code: string;
-        component_name: string;
-        type: 'earning' | 'deduction';
-        category: string;
+        component_code?: string;
+        component_name?: string;
+        type?: 'earning' | 'deduction';
+        category?: string;
         amount: number;
         quantity?: number;
         rate?: number;
@@ -995,11 +1224,60 @@ export const payrollSlipsApi = {
     removeItem: (slipId: string, itemId: string) =>
         api.delete<ApiResponse<PayrollSlip>>(`/payroll/slips/${slipId}/items/${itemId}`),
 
+    updateItem: (slipId: string, itemId: string, data: {
+        quantity?: number;
+        rate?: number;
+        amount?: number;
+        notes?: string;
+        reason: string;
+    }) => api.put<ApiResponse<PayrollSlip>>(`/payroll/slips/${slipId}/items/${itemId}`, data),
+
     updateNotes: (id: string, notes: string | null) =>
         api.put<ApiResponse<PayrollSlip>>(`/payroll/slips/${id}/notes`, { notes }),
 
+    getAudits: (id: string) =>
+        api.get<ApiResponse<{ audits: Array<{
+            id: string;
+            item: { id: string; component_code: string; component_name: string } | null;
+            field: string;
+            field_label: string;
+            old_value: string | null;
+            new_value: string | null;
+            old_value_formatted: string;
+            new_value_formatted: string;
+            reason: string;
+            changed_by: { id: string; name: string } | null;
+            changed_at: string;
+        }>; total: number }>>(`/payroll/slips/${id}/audits`),
+
     printData: (id: string) =>
         api.get<ApiResponse>(`/payroll/slips/${id}/print`),
+
+    getComponents: (params?: { type?: 'earning' | 'deduction' }) =>
+        api.get<ApiResponse<Array<{
+            id: string;
+            code: string;
+            name: string;
+            type: 'earning' | 'deduction';
+            type_label: string;
+            calculation_type: string;
+            calculation_type_label: string;
+            default_value: number;
+            default_value_formatted: string;
+            is_taxable: boolean;
+            is_active: boolean;
+        }>>>('/payroll/slips/components', { params }),
+
+    // PDF Export
+    getPdfUrl: (id: string) => `/api/v1/payroll/slips/${id}/pdf`,
+    getPreviewPdfUrl: (id: string) => `/api/v1/payroll/slips/${id}/pdf/preview`,
+
+    // WhatsApp
+    getEmployeePhone: (id: string) =>
+        api.get<ApiResponse<{ phone: string | null; phone_masked: string | null; has_phone: boolean }>>(`/payroll/slips/${id}/phone`),
+
+    sendWhatsApp: (id: string, phone?: string) =>
+        api.post<ApiResponse<{ success: boolean; message: string }>>(`/payroll/slips/${id}/send-whatsapp`, { phone }),
 };
 
 // Attendance
@@ -1054,6 +1332,18 @@ export const usersApi = {
             '/admin/users/student-options',
             { params: { search } }
         ),
+
+    staffOptions: (userId?: string, search?: string) =>
+        api.get<ApiResponse<Array<{
+            id: string;
+            employee_id: string | null;
+            join_date: string | null;
+            employment_status: string | null;
+            department_name: string | null;
+            position_name: string | null;
+            user_id: string | null;
+            user_name: string | null;
+        }>>>('/admin/users/staff-options', { params: { user_id: userId, search } }),
 
     activate: (id: string) =>
         api.post<ApiResponse<User>>(`/admin/users/${id}/activate`),
@@ -1237,6 +1527,106 @@ export const payrollReportsApi = {
 
     exportBpjs: (params: { year: number; month?: number }) =>
         api.get('/payroll/reports/export/bpjs', { params, responseType: 'blob' }),
+};
+
+// Expense Reports (Laporan Pengeluaran)
+export const expenseReportsApi = {
+    monthly: (params: { year: number; month?: number }) =>
+        api.get<ApiResponse<unknown>>('/finance/reports/monthly-expense', { params }),
+
+    exportMonthly: (params: { year: number; month?: number }) =>
+        api.get('/finance/reports/export/monthly-expense', { params, responseType: 'blob' }),
+};
+
+// Device Monitor: monitoring perangkat scanner
+export interface ServerInfo {
+    status: string;
+    local_ip: string;
+    port: number;
+    base_url: string;
+    api_url: string;
+    public_url: string | null;
+    server_time: string;
+}
+
+export interface DeviceSummary {
+    total: number;
+    online: number;
+    idle: number;
+    offline: number;
+    pending_sync_total: number;
+}
+
+export interface ScannerDevice {
+    id: string;
+    device_name: string;
+    location: string | null;
+    is_active: boolean;
+    connection_status: 'online' | 'idle' | 'offline';
+    last_seen: string | null;
+    last_heartbeat_at: string | null;
+    last_scan_at: string | null;
+    pending_sync_count: number;
+    user: { id: string; name: string; email: string } | null;
+    // Detail fields (only in show)
+    app_version?: string | null;
+    os_version?: string | null;
+    device_model?: string | null;
+    battery_level?: number | null;
+    battery_charging?: boolean;
+    network_type?: string | null;
+    network_name?: string | null;
+    latency_ms?: number | null;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface DeviceTodayStats {
+    total_scans: number;
+    check_in: number;
+    check_out: number;
+    synced: number;
+    failed: number;
+    pending: number;
+}
+
+export interface DeviceProvisionQr {
+    qr_content: string;
+    provision_token: string;
+    server_url: string;
+    expires_at: string;
+    expires_in_minutes: number;
+    user: { id: string; name: string; email: string };
+    device_info: { name: string | null; location: string | null };
+}
+
+export const deviceMonitorApi = {
+    serverInfo: () =>
+        api.get<ApiResponse<ServerInfo>>('/admin/devices/server-info'),
+
+    summary: () =>
+        api.get<ApiResponse<DeviceSummary>>('/admin/devices/summary'),
+
+    list: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<{ data: ScannerDevice[]; meta: { current_page: number; last_page: number; per_page: number; total: number } }>>('/admin/devices', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<{ device: ScannerDevice; today_stats: DeviceTodayStats }>>(`/admin/devices/${id}`),
+
+    create: (data: { device_name: string; location?: string; user_id?: string }) =>
+        api.post<ApiResponse<ScannerDevice>>('/admin/devices', data),
+
+    update: (id: string, data: Partial<{ device_name: string; location: string; user_id: string; is_active: boolean }>) =>
+        api.put<ApiResponse<ScannerDevice>>(`/admin/devices/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/admin/devices/${id}`),
+
+    regenerateToken: (id: string) =>
+        api.post<ApiResponse<{ device_token: string }>>(`/admin/devices/${id}/regenerate-token`),
+
+    generateProvisionQr: (data: { user_id: string; device_name?: string; location?: string }) =>
+        api.post<ApiResponse<DeviceProvisionQr>>('/admin/devices/provision-qr', data),
 };
 
 export default api;

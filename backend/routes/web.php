@@ -75,6 +75,14 @@ Route::middleware(['auth', 'password.current'])->group(function () {
         Route::get('/{teacher}/edit', [PageController::class, 'editTeacher'])->whereUuid('teacher')->name('edit');
     });
 
+    // Staff Module
+    Route::prefix('staff')->name('staff.')->group(function () {
+        Route::get('/', [PageController::class, 'staff'])->name('index');
+        Route::get('/create', [PageController::class, 'createStaff'])->name('create');
+        Route::get('/{staff}', [PageController::class, 'showStaff'])->whereUuid('staff')->name('show');
+        Route::get('/{staff}/edit', [PageController::class, 'editStaff'])->whereUuid('staff')->name('edit');
+    });
+
     // Academic Module
     Route::prefix('academic')->name('academic.')->group(function () {
         Route::get('/years', [PageController::class, 'academicYears'])->name('years');
@@ -166,11 +174,19 @@ Route::middleware(['auth', 'password.current'])->group(function () {
         Route::get('/backups', [PageController::class, 'backups'])
             ->middleware('role:super_admin')
             ->name('backups');
+        Route::get('/devices', [PageController::class, 'devices'])
+            ->middleware('role:super_admin|admin')
+            ->name('devices');
         // Kelas & Jurusan dipindah ke menu Akademik (biar tidak dobel);
         // route lama dipertahankan sebagai redirect saja supaya tautan atau
         // bookmark yang sudah ada tidak berujung 404.
         Route::redirect('/class-rooms', '/academic/classrooms')->name('class-rooms');
         Route::redirect('/majors', '/academic/majors')->name('majors');
+    });
+
+    // Reports Module (Laporan Terpisah)
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/expense', [PageController::class, 'expenseReport'])->name('expense');
     });
 
     // Profile Routes

@@ -100,6 +100,19 @@ class EmailGenerator
     }
 
     /**
+     * Email login staf: {username}@{domain}. Username sudah unik global, jadi
+     * tidak perlu pembeda tambahan.
+     *
+     * @throws RuntimeException bila domain sekolah belum diatur
+     */
+    public function forStaff(string $tenantId, string $username): string
+    {
+        $local = preg_replace('/[^a-z0-9.]/', '', strtolower(Str::ascii($username))) ?? '';
+
+        return $this->build($tenantId, trim($local, '.') ?: 'staf');
+    }
+
+    /**
      * Pesan seragam saat domain belum diatur — dipakai form maupun import
      * supaya admin diarahkan ke tempat yang sama.
      */

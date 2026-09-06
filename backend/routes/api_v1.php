@@ -179,12 +179,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Staff Module
     // ===========================================
     Route::prefix('staff')->name('staff.')->group(function () {
+        // Static routes first
+        Route::get('options', [\App\Http\Controllers\Api\V1\Staff\StaffController::class, 'options'])->name('options');
+        Route::get('departments', [\App\Http\Controllers\Api\V1\Staff\StaffController::class, 'departments'])->name('departments');
+        Route::get('positions', [\App\Http\Controllers\Api\V1\Staff\StaffController::class, 'positions'])->name('positions');
+
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Staff\StaffController::class)->parameter('', 'staff');
-        Route::apiResource('departments', \App\Http\Controllers\Api\V1\Staff\DepartmentController::class);
-        Route::apiResource('positions', \App\Http\Controllers\Api\V1\Staff\PositionController::class);
-        Route::apiResource('leave-requests', \App\Http\Controllers\Api\V1\Staff\LeaveRequestController::class);
-        Route::post('leave-requests/{leaveRequest}/approve', [\App\Http\Controllers\Api\V1\Staff\LeaveRequestController::class, 'approve'])->name('leave-requests.approve');
-        Route::post('leave-requests/{leaveRequest}/reject', [\App\Http\Controllers\Api\V1\Staff\LeaveRequestController::class, 'reject'])->name('leave-requests.reject');
+
+        Route::post('{staff}/photo', [\App\Http\Controllers\Api\V1\Staff\StaffController::class, 'uploadPhoto'])->name('photo.upload');
+        Route::delete('{staff}/photo', [\App\Http\Controllers\Api\V1\Staff\StaffController::class, 'deletePhoto'])->name('photo.delete');
     });
 
     // ===========================================
@@ -310,6 +313,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     // ===========================================
+    // Device Monitor (heartbeat dari mobile app)
+    // Semua user yang bisa scan (operator) bisa mengirim heartbeat.
+    // ===========================================
+    Route::prefix('devices')->name('devices.')->group(function () {
+        Route::post('heartbeat', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'heartbeat'])->name('heartbeat');
+    });
+
+    // ===========================================
     // Exam & Grade Module
     // ===========================================
     Route::prefix('exams')->name('exams.')->group(function () {
@@ -373,6 +384,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('reports/export/outstanding', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportOutstanding'])->name('reports.export.outstanding');
         Route::get('reports/export/by-classroom', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportByClassroom'])->name('reports.export.by-classroom');
         Route::get('reports/export/monthly', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportMonthly'])->name('reports.export.monthly');
+
+        // Laporan Pengeluaran (integrasi dengan Payroll)
+        Route::get('reports/monthly-expense', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'monthlyExpense'])->name('reports.monthly-expense');
+        Route::get('reports/export/monthly-expense', [\App\Http\Controllers\Api\V1\Finance\ReportController::class, 'exportMonthlyExpense'])->name('reports.export.monthly-expense');
     });
 
     // ===========================================
@@ -385,6 +400,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Salary Components (static routes first)
         Route::get('salary-components/types', [\App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class, 'types'])->name('salary-components.types');
         Route::get('salary-components/calculation-types', [\App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class, 'calculationTypes'])->name('salary-components.calculation-types');
+        Route::get('salary-components/percentage-references', [\App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class, 'percentageReferences'])->name('salary-components.percentage-references');
+        Route::get('salary-components/available-for-reference', [\App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class, 'availableForReference'])->name('salary-components.available-for-reference');
+        Route::post('salary-components/validate-formula', [\App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class, 'validateFormula'])->name('salary-components.validate-formula');
         Route::apiResource('salary-components', \App\Http\Controllers\Api\V1\Payroll\SalaryComponentController::class);
 
         // BPJS Rates (static routes first)
@@ -416,22 +434,41 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Payroll Periods (static routes first)
         Route::get('periods/statuses', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'statuses'])->name('periods.statuses');
         Route::post('periods/{payrollPeriod}/generate-slips', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'generateSlips'])->name('periods.generate-slips');
+        Route::get('periods/{payrollPeriod}/generate-progress', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'generateProgress'])->name('periods.generate-progress');
+        Route::post('periods/{payrollPeriod}/generate-slips-with-attendance', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'generateSlipsWithAttendance'])->name('periods.generate-slips-with-attendance');
         Route::post('periods/{payrollPeriod}/calculate', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'calculate'])->name('periods.calculate');
+        Route::post('periods/{payrollPeriod}/calculate-attendance', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'calculateAttendance'])->name('periods.calculate-attendance');
         Route::post('periods/{payrollPeriod}/submit-for-approval', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'submitForApproval'])->name('periods.submit-for-approval');
         Route::post('periods/{payrollPeriod}/approve', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'approve'])->name('periods.approve');
         Route::post('periods/{payrollPeriod}/mark-as-paid', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'markAsPaid'])->name('periods.mark-as-paid');
         Route::post('periods/{payrollPeriod}/finalize', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'finalize'])->name('periods.finalize');
+        Route::post('periods/{payrollPeriod}/unfinalize', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'unfinalize'])->name('periods.unfinalize');
+        Route::post('periods/{payrollPeriod}/sync-employees', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'syncNewEmployees'])->name('periods.sync-employees');
         Route::get('periods/{payrollPeriod}/summary', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'summary'])->name('periods.summary');
         Route::apiResource('periods', \App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class);
 
         // Payroll Slips
+        Route::get('slips/components', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'getComponents'])->name('slips.components');
         Route::get('periods/{payrollPeriod}/slips', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'index'])->name('slips.index');
         Route::get('slips/{payrollSlip}', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'show'])->name('slips.show');
         Route::put('slips/{payrollSlip}/items', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateItems'])->name('slips.update-items');
         Route::post('slips/{payrollSlip}/items', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'addItem'])->name('slips.add-item');
         Route::delete('slips/{payrollSlip}/items/{item}', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'removeItem'])->name('slips.remove-item');
+        Route::put('slips/{payrollSlip}/items/{item}', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateItem'])->name('slips.update-item');
         Route::put('slips/{payrollSlip}/notes', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'updateNotes'])->name('slips.update-notes');
+        Route::get('slips/{payrollSlip}/audits', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'getAudits'])->name('slips.audits');
         Route::get('slips/{payrollSlip}/print', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'printData'])->name('slips.print');
+
+        // PDF Export
+        Route::get('slips/{payrollSlip}/pdf', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'downloadPdf'])->name('slips.pdf');
+        Route::get('slips/{payrollSlip}/pdf/preview', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'previewPdf'])->name('slips.pdf.preview');
+        Route::get('periods/{payrollPeriod}/export-pdf', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'exportPdfZip'])->name('periods.export-pdf');
+
+        // WhatsApp
+        Route::get('slips/{payrollSlip}/phone', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'getEmployeePhone'])->name('slips.phone');
+        Route::post('slips/{payrollSlip}/send-whatsapp', [\App\Http\Controllers\Api\V1\Payroll\PayrollSlipController::class, 'sendWhatsApp'])->name('slips.send-whatsapp');
+        Route::get('periods/{payrollPeriod}/whatsapp-preview', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'previewWhatsAppRecipients'])->name('periods.whatsapp-preview');
+        Route::post('periods/{payrollPeriod}/send-whatsapp', [\App\Http\Controllers\Api\V1\Payroll\PayrollPeriodController::class, 'sendWhatsAppBulk'])->name('periods.send-whatsapp');
 
         // Reports
         Route::get('reports/dashboard', [\App\Http\Controllers\Api\V1\Payroll\ReportController::class, 'dashboard'])->name('reports.dashboard');
@@ -528,6 +565,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::middleware(['role:super_admin'])->group(function () {
             Route::get('users/roles', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'roles'])->name('users.roles');
             Route::get('users/student-options', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'studentOptions'])->name('users.student-options');
+            Route::get('users/staff-options', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'staffOptions'])->name('users.staff-options');
             Route::apiResource('users', \App\Http\Controllers\Api\V1\Admin\UserController::class);
             Route::post('users/{user}/activate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'activate'])->name('users.activate');
             Route::post('users/{user}/deactivate', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'deactivate'])->name('users.deactivate');
@@ -562,6 +600,19 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::get('users/{user}', [\App\Http\Controllers\Api\V1\Auth\ProvisionController::class, 'history'])->name('history');
         });
         Route::get('audit-logs/{auditLog}', [\App\Http\Controllers\Api\V1\Admin\AuditLogController::class, 'show'])->name('audit-logs.show');
+
+        // Device Monitor: kelola perangkat scanner, monitoring koneksi.
+        Route::prefix('devices')->name('devices.')->group(function () {
+            Route::get('server-info', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'serverInfo'])->name('server-info');
+            Route::get('summary', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'summary'])->name('summary');
+            Route::get('/', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'store'])->name('store');
+            Route::post('provision-qr', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'generateProvisionQr'])->name('provision-qr');
+            Route::get('{device}', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'show'])->name('show');
+            Route::put('{device}', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'update'])->name('update');
+            Route::delete('{device}', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'destroy'])->name('destroy');
+            Route::post('{device}/regenerate-token', [\App\Http\Controllers\Api\V1\Attendance\DeviceMonitorController::class, 'regenerateToken'])->name('regenerate-token');
+        });
 
         // Activity Logs
         Route::get('activity-logs', [\App\Http\Controllers\Api\V1\Admin\ActivityLogController::class, 'index'])->name('activity-logs.index');

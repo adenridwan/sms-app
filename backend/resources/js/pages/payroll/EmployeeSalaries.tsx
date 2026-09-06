@@ -300,7 +300,7 @@ export default function EmployeeSalaries() {
             const params: Record<string, string> = {};
             if (type) params.type = type;
             const response = await employeeSalariesApi.availableEmployees(params);
-            setAvailableEmployees(response.data.data.data ?? []);
+            setAvailableEmployees(response.data.data?.data ?? []);
         } catch {
             console.error('Failed to load available employees');
         }
@@ -536,14 +536,14 @@ export default function EmployeeSalaries() {
             <Head title="Payroll - Gaji Karyawan" />
 
             <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Gaji Karyawan</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Gaji Karyawan</h1>
+                        <p className="text-sm text-muted-foreground sm:text-base">
                             Kelola pengaturan gaji untuk guru dan staf
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
+                    <Button onClick={openCreate} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Tambah Gaji
                     </Button>
@@ -551,7 +551,7 @@ export default function EmployeeSalaries() {
 
                 {/* Summary Cards */}
                 {summary && (
-                    <div className="grid gap-4 md:grid-cols-4">
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Total Karyawan</CardTitle>
@@ -605,8 +605,8 @@ export default function EmployeeSalaries() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="relative w-full max-w-sm">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <div className="relative w-full sm:max-w-sm">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     placeholder="Cari nama atau NIP..."
@@ -618,30 +618,32 @@ export default function EmployeeSalaries() {
                                     }}
                                 />
                             </div>
-                            <Select value={filterType} onValueChange={(v) => { setFilterType(v); setPage(1); }}>
-                                <SelectTrigger className="w-[150px]">
-                                    <SelectValue placeholder="Semua Tipe" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="">Semua Tipe</SelectItem>
-                                    <SelectItem value="teacher">Guru</SelectItem>
-                                    <SelectItem value="staff">Staf</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Select value={filterGrade} onValueChange={(v) => { setFilterGrade(v); setPage(1); }}>
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="Semua Golongan" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="">Semua Golongan</SelectItem>
-                                    {grades.map((g) => (
-                                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
-                                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Select value={filterType} onValueChange={(v) => { setFilterType(v); setPage(1); }}>
+                                    <SelectTrigger className="w-full sm:w-[150px]">
+                                        <SelectValue placeholder="Semua Tipe" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="">Semua Tipe</SelectItem>
+                                        <SelectItem value="teacher">Guru</SelectItem>
+                                        <SelectItem value="staff">Staf</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Select value={filterGrade} onValueChange={(v) => { setFilterGrade(v); setPage(1); }}>
+                                    <SelectTrigger className="w-full sm:w-[180px]">
+                                        <SelectValue placeholder="Semua Golongan" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="">Semua Golongan</SelectItem>
+                                        {grades.map((g) => (
+                                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
+                                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                                </Button>
+                            </div>
                         </div>
 
                         {loading ? (
@@ -651,17 +653,17 @@ export default function EmployeeSalaries() {
                                 Tidak ada data gaji karyawan
                             </div>
                         ) : (
-                            <div className="rounded-md border">
+                            <div className="overflow-x-auto rounded-md border">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Karyawan</TableHead>
-                                            <TableHead>Tipe</TableHead>
-                                            <TableHead>Golongan</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Tipe</TableHead>
+                                            <TableHead className="hidden md:table-cell">Golongan</TableHead>
                                             <TableHead className="text-right">Gaji Pokok</TableHead>
-                                            <TableHead>Status PTKP</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="w-[140px]">Aksi</TableHead>
+                                            <TableHead className="hidden lg:table-cell">Status PTKP</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Status</TableHead>
+                                            <TableHead className="w-[100px] sm:w-[140px]">Aksi</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -675,12 +677,12 @@ export default function EmployeeSalaries() {
                                                         </div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className="hidden sm:table-cell">
                                                     <Badge variant={item.employee_type === 'teacher' ? 'default' : 'secondary'}>
                                                         {item.employee_type_label}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className="hidden md:table-cell">
                                                     <div>
                                                         <div className="font-mono text-sm">{item.salary_grade?.code}</div>
                                                         <div className="text-sm text-muted-foreground">{item.salary_grade?.name}</div>
@@ -689,8 +691,8 @@ export default function EmployeeSalaries() {
                                                 <TableCell className="text-right font-mono">
                                                     {item.base_salary_formatted}
                                                 </TableCell>
-                                                <TableCell>{item.ptkp_status}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="hidden lg:table-cell">{item.ptkp_status}</TableCell>
+                                                <TableCell className="hidden sm:table-cell">
                                                     <Badge variant={item.is_current ? 'default' : 'outline'}>
                                                         {item.is_current ? 'Aktif' : 'Nonaktif'}
                                                     </Badge>
@@ -745,17 +747,17 @@ export default function EmployeeSalaries() {
 
             {/* Create/Edit Dialog */}
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-hidden sm:w-full">
                     <DialogHeader>
                         <DialogTitle>{editingItem ? 'Edit Gaji Karyawan' : 'Tambah Gaji Karyawan'}</DialogTitle>
                         <DialogDescription>
                             {editingItem ? 'Perbarui pengaturan gaji karyawan' : 'Tambahkan pengaturan gaji baru untuk karyawan'}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
+                    <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-4 py-4">
                         {!editingItem && (
                             <>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label>Tipe Karyawan *</Label>
                                         <Select value={form.employee_type} onValueChange={(v) => handleEmployeeTypeChange(v as 'teacher' | 'staff')}>
@@ -791,7 +793,7 @@ export default function EmployeeSalaries() {
                             </>
                         )}
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <Label>Golongan Gaji *</Label>
                                 <Select value={form.salary_grade_id} onValueChange={handleGradeChange}>
@@ -817,7 +819,7 @@ export default function EmployeeSalaries() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <Label>Status PTKP</Label>
                                 <Select value={form.ptkp_status} onValueChange={(v) => setForm(prev => ({ ...prev, ptkp_status: v }))}>
@@ -843,7 +845,7 @@ export default function EmployeeSalaries() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <Label>Tanggal Berakhir</Label>
                                 <DatePicker
@@ -852,7 +854,7 @@ export default function EmployeeSalaries() {
                                     placeholder="Pilih tanggal"
                                 />
                             </div>
-                            <div className="flex items-center space-x-2 pt-6">
+                            <div className="flex items-center space-x-2 sm:pt-6">
                                 <Switch
                                     id="is_current"
                                     checked={form.is_current}
@@ -920,9 +922,9 @@ export default function EmployeeSalaries() {
                             )}
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>Batal</Button>
-                        <Button onClick={handleSubmit} disabled={saving}>
+                    <DialogFooter className="flex-col gap-2 sm:flex-row">
+                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className="w-full sm:w-auto">Batal</Button>
+                        <Button onClick={handleSubmit} disabled={saving} className="w-full sm:w-auto">
                             {saving ? 'Menyimpan...' : editingItem ? 'Perbarui' : 'Simpan'}
                         </Button>
                     </DialogFooter>
@@ -1043,14 +1045,14 @@ export default function EmployeeSalaries() {
 
             {/* Components Dialog */}
             <Dialog open={componentsOpen} onOpenChange={setComponentsOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="w-[95vw] max-w-lg sm:w-full max-h-[90vh] overflow-hidden">
                     <DialogHeader>
                         <DialogTitle>Komponen Gaji</DialogTitle>
                         <DialogDescription>
                             Kelola komponen gaji untuk {detailItem?.employee?.name}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-3 py-4">
+                    <div className="max-h-[50vh] overflow-y-auto space-y-3 py-4 pr-2">
                         <div className="flex justify-end">
                             <Button type="button" variant="outline" size="sm" onClick={addComponentToList}>
                                 <Plus className="h-4 w-4 mr-1" /> Tambah
@@ -1059,9 +1061,9 @@ export default function EmployeeSalaries() {
                         {componentsList.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-4">Belum ada komponen</p>
                         ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {componentsList.map((comp, index) => (
-                                    <div key={index} className="flex items-center gap-2">
+                                    <div key={index} className="flex flex-col gap-2 rounded-md border p-2 sm:flex-row sm:items-center sm:border-0 sm:p-0">
                                         <Select
                                             value={comp.salary_component_id}
                                             onValueChange={(v) => updateComponentInList(index, 'salary_component_id', v)}
@@ -1077,27 +1079,29 @@ export default function EmployeeSalaries() {
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        <Input
-                                            className="w-28"
-                                            value={comp.value}
-                                            onChange={(e) => updateComponentInList(index, 'value', formatCurrency(e.target.value))}
-                                            placeholder="Nilai"
-                                        />
-                                        <Switch
-                                            checked={comp.is_active}
-                                            onCheckedChange={(checked) => updateComponentInList(index, 'is_active', checked)}
-                                        />
-                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeComponentFromList(index)}>
-                                            <Minus className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                className="flex-1 sm:w-28"
+                                                value={comp.value}
+                                                onChange={(e) => updateComponentInList(index, 'value', formatCurrency(e.target.value))}
+                                                placeholder="Nilai"
+                                            />
+                                            <Switch
+                                                checked={comp.is_active}
+                                                onCheckedChange={(checked) => updateComponentInList(index, 'is_active', checked)}
+                                            />
+                                            <Button type="button" variant="ghost" size="icon" onClick={() => removeComponentFromList(index)}>
+                                                <Minus className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setComponentsOpen(false)} disabled={savingComponents}>Batal</Button>
-                        <Button onClick={handleSaveComponents} disabled={savingComponents}>
+                    <DialogFooter className="flex-col gap-2 sm:flex-row">
+                        <Button variant="outline" onClick={() => setComponentsOpen(false)} disabled={savingComponents} className="w-full sm:w-auto">Batal</Button>
+                        <Button onClick={handleSaveComponents} disabled={savingComponents} className="w-full sm:w-auto">
                             {savingComponents ? 'Menyimpan...' : 'Simpan'}
                         </Button>
                     </DialogFooter>

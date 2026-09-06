@@ -83,6 +83,7 @@ class PermissionSeeder extends Seeder
         // Staff
         'staff' => [
             'staff.view' => 'Lihat Data Staff',
+            'staff.view-own' => 'Lihat Data Staff Sendiri',
             'staff.create' => 'Tambah Staff',
             'staff.update' => 'Edit Staff',
             'staff.delete' => 'Hapus Staff',

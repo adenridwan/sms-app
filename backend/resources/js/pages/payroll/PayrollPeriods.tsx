@@ -1,8 +1,9 @@
 import { Head, router } from '@inertiajs/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -55,13 +56,21 @@ import {
     Play,
     CheckCircle,
     Lock,
+    LockOpen,
     Eye,
     Trash2,
     Calculator,
     Send,
     DollarSign,
+    CalendarCheck,
+    Users,
+    UserPlus,
+    FileDown,
+    MessageCircle,
+    Loader2,
 } from 'lucide-react';
 import { payrollPeriodsApi } from '@/services/api';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { PaginationMeta } from '@/types';
 
 interface PayrollPeriod {
@@ -153,6 +162,8 @@ function getStatusColor(status: string): 'default' | 'secondary' | 'destructive'
 }
 
 export default function PayrollPeriods() {
+    const { can } = usePermissions();
+
     const [items, setItems] = useState<PayrollPeriod[]>([]);
     const [meta, setMeta] = useState<PaginationMeta | null>(null);
     const [loading, setLoading] = useState(false);
@@ -170,6 +181,34 @@ export default function PayrollPeriods() {
     const [actionItem, setActionItem] = useState<PayrollPeriod | null>(null);
     const [actionType, setActionType] = useState<string>('');
     const [actionLoading, setActionLoading] = useState(false);
+
+    // Bulk WhatsApp state
+    const [bulkWhatsAppItem, setBulkWhatsAppItem] = useState<PayrollPeriod | null>(null);
+    const [bulkWhatsAppPreview, setBulkWhatsAppPreview] = useState<{
+        recipients: Array<{ id: string; name: string; type_label: string; phone: string; net_salary_formatted: string }>;
+        no_phone: Array<{ id: string; name: string; type_label: string }>;
+        total: number;
+        total_no_phone: number;
+    } | null>(null);
+    const [loadingWhatsAppPreview, setLoadingWhatsAppPreview] = useState(false);
+    const [sendingBulkWhatsApp, setSendingBulkWhatsApp] = useState(false);
+
+    // Progress tracking state
+    const [progressOpen, setProgressOpen] = useState(false);
+    const [progressPeriod, setProgressPeriod] = useState<PayrollPeriod | null>(null);
+    const [progress, setProgress] = useState<{
+        status: 'idle' | 'processing' | 'completed' | 'error';
+        current: number;
+        total: number;
+        percentage: number;
+        message: string;
+        result?: {
+            slips_created: number;
+            attendance_processed: number;
+            attendance_errors?: Array<{ slip_id: string; error: string }>;
+        };
+    } | null>(null);
+    const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -257,16 +296,96 @@ export default function PayrollPeriods() {
         }
     };
 
+    // Start polling for progress
+    const startProgressPolling = (periodId: string) => {
+        // Clear existing interval
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+        }
+
+        // Poll every 500ms
+        progressIntervalRef.current = setInterval(async () => {
+            try {
+                const response = await payrollPeriodsApi.getGenerateProgress(periodId);
+                const data = response.data.data;
+                setProgress(data);
+
+                // Stop polling when completed or error
+                if (data.status === 'completed' || data.status === 'error') {
+                    if (progressIntervalRef.current) {
+                        clearInterval(progressIntervalRef.current);
+                        progressIntervalRef.current = null;
+                    }
+
+                    if (data.status === 'completed') {
+                        toast.success(data.message || 'Slip gaji berhasil di-generate');
+                        fetchData();
+                    } else {
+                        toast.error(data.message || 'Gagal generate slip gaji');
+                    }
+                }
+            } catch {
+                // Ignore polling errors
+            }
+        }, 500);
+    };
+
+    // Stop polling
+    const stopProgressPolling = () => {
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+        }
+    };
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => stopProgressPolling();
+    }, []);
+
     const handleAction = async () => {
         if (!actionItem || !actionType || actionLoading) return;
+
+        // For generate actions, use progress dialog
+        if (actionType === 'generate' || actionType === 'generate_with_attendance' || actionType === 'calculate_attendance') {
+            setActionItem(null);
+            setActionType('');
+            setProgressPeriod(actionItem);
+            setProgress({
+                status: 'processing',
+                current: 0,
+                total: 0,
+                percentage: 0,
+                message: 'Memulai proses...',
+            });
+            setProgressOpen(true);
+
+            try {
+                // Start the operation
+                if (actionType === 'generate' || actionType === 'generate_with_attendance') {
+                    // Start polling before the API call
+                    startProgressPolling(actionItem.id);
+                    await payrollPeriodsApi.generateSlips(actionItem.id);
+                } else {
+                    startProgressPolling(actionItem.id);
+                    await payrollPeriodsApi.calculateAttendance(actionItem.id);
+                }
+            } catch (error) {
+                stopProgressPolling();
+                setProgress({
+                    status: 'error',
+                    current: 0,
+                    total: 0,
+                    percentage: 0,
+                    message: getErrorMessage(error, 'Gagal memproses'),
+                });
+            }
+            return;
+        }
 
         setActionLoading(true);
         try {
             switch (actionType) {
-                case 'generate':
-                    await payrollPeriodsApi.generateSlips(actionItem.id);
-                    toast.success('Slip gaji berhasil di-generate');
-                    break;
                 case 'calculate':
                     await payrollPeriodsApi.calculate(actionItem.id);
                     toast.success('Perhitungan gaji berhasil diperbarui');
@@ -287,6 +406,19 @@ export default function PayrollPeriods() {
                     await payrollPeriodsApi.finalize(actionItem.id);
                     toast.success('Periode gaji berhasil difinalisasi');
                     break;
+                case 'unfinalize':
+                    await payrollPeriodsApi.unfinalize(actionItem.id);
+                    toast.success('Finalisasi periode berhasil dibatalkan');
+                    break;
+                case 'sync':
+                    const syncResult = await payrollPeriodsApi.syncEmployees(actionItem.id);
+                    const added = syncResult.data.data?.added ?? 0;
+                    if (added > 0) {
+                        toast.success(`Berhasil menambahkan ${added} slip karyawan baru`);
+                    } else {
+                        toast.info('Tidak ada karyawan baru yang perlu ditambahkan');
+                    }
+                    break;
             }
             fetchData();
         } catch (error) {
@@ -298,6 +430,46 @@ export default function PayrollPeriods() {
         }
     };
 
+    const openBulkWhatsApp = async (item: PayrollPeriod) => {
+        setBulkWhatsAppItem(item);
+        setLoadingWhatsAppPreview(true);
+        setBulkWhatsAppPreview(null);
+
+        try {
+            const response = await payrollPeriodsApi.previewWhatsAppRecipients(item.id);
+            setBulkWhatsAppPreview(response.data.data);
+        } catch {
+            toast.error('Gagal memuat preview penerima');
+            setBulkWhatsAppItem(null);
+        } finally {
+            setLoadingWhatsAppPreview(false);
+        }
+    };
+
+    const handleBulkWhatsApp = async () => {
+        if (!bulkWhatsAppItem) return;
+
+        setSendingBulkWhatsApp(true);
+        try {
+            const response = await payrollPeriodsApi.sendWhatsAppBulk(bulkWhatsAppItem.id);
+            const data = response.data.data;
+
+            if (data.sent > 0) {
+                toast.success(`Berhasil mengirim ${data.sent} slip gaji`);
+            }
+            if (data.failed > 0) {
+                toast.warning(`${data.failed} gagal dikirim`);
+            }
+
+            setBulkWhatsAppItem(null);
+            setBulkWhatsAppPreview(null);
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Gagal mengirim slip gaji'));
+        } finally {
+            setSendingBulkWhatsApp(false);
+        }
+    };
+
     const confirmAction = (item: PayrollPeriod, type: string) => {
         setActionItem(item);
         setActionType(type);
@@ -306,11 +478,15 @@ export default function PayrollPeriods() {
     const getActionLabel = () => {
         switch (actionType) {
             case 'generate': return 'Generate Slip Gaji';
+            case 'generate_with_attendance': return 'Generate + Kehadiran';
             case 'calculate': return 'Hitung Ulang';
+            case 'calculate_attendance': return 'Hitung Kehadiran';
             case 'submit': return 'Ajukan Persetujuan';
             case 'approve': return 'Setujui';
             case 'paid': return 'Tandai Dibayar';
             case 'finalize': return 'Finalisasi';
+            case 'unfinalize': return 'Batal Final';
+            case 'sync': return 'Sinkronisasi Karyawan';
             default: return 'Konfirmasi';
         }
     };
@@ -318,11 +494,15 @@ export default function PayrollPeriods() {
     const getActionDescription = () => {
         switch (actionType) {
             case 'generate': return 'Ini akan membuat slip gaji untuk semua karyawan dengan pengaturan gaji aktif.';
+            case 'generate_with_attendance': return 'Ini akan membuat slip gaji DAN menghitung tunjangan/potongan kehadiran berdasarkan data absensi dalam periode.';
             case 'calculate': return 'Ini akan menghitung ulang semua slip gaji termasuk BPJS dan PPh 21.';
+            case 'calculate_attendance': return 'Ini akan menghitung data kehadiran (hadir, absen, telat) dari modul absensi dan menerapkan tunjangan/potongan kehadiran.';
             case 'submit': return 'Periode akan diajukan untuk persetujuan atasan.';
             case 'approve': return 'Anda yakin ingin menyetujui periode gaji ini?';
             case 'paid': return 'Ini menandakan bahwa gaji sudah dibayarkan ke semua karyawan.';
             case 'finalize': return 'Periode yang sudah final tidak dapat diubah lagi.';
+            case 'unfinalize': return 'Ini akan membatalkan finalisasi dan mengembalikan status ke "Dibayar". Slip gaji dapat diedit kembali.';
+            case 'sync': return 'Ini akan menambahkan slip gaji untuk karyawan baru yang belum ada dalam periode ini. Slip yang sudah ada tidak akan terpengaruh.';
             default: return 'Apakah Anda yakin?';
         }
     };
@@ -343,10 +523,12 @@ export default function PayrollPeriods() {
                             Kelola periode dan proses penggajian bulanan
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Buat Periode
-                    </Button>
+                    {can('payroll.manage') && (
+                        <Button onClick={openCreate}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Buat Periode
+                        </Button>
+                    )}
                 </div>
 
                 <Card>
@@ -429,47 +611,86 @@ export default function PayrollPeriods() {
                                                     {item.total_net_formatted}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" size="icon">
-                                                                <MoreHorizontal className="h-4 w-4" />
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {/* Sync button - hanya muncul jika sudah ada slip dan belum final */}
+                                                        {!item.is_finalized && item.employee_count > 0 && can('payroll.process') && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                title="Sinkronisasi karyawan baru"
+                                                                onClick={() => confirmAction(item, 'sync')}
+                                                            >
+                                                                <UserPlus className="h-4 w-4" />
                                                             </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => viewSlips(item.id)}>
-                                                                <Eye className="mr-2 h-4 w-4" /> Lihat Slip
-                                                            </DropdownMenuItem>
-                                                            {item.can_generate_slips && (
-                                                                <DropdownMenuItem onClick={() => confirmAction(item, 'generate')}>
-                                                                    <Play className="mr-2 h-4 w-4" /> Generate Slip
+                                                        )}
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" size="icon">
+                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem onClick={() => viewSlips(item.id)}>
+                                                                    <Eye className="mr-2 h-4 w-4" /> Lihat Slip
                                                                 </DropdownMenuItem>
+                                                            {item.employee_count > 0 && (
+                                                                <>
+                                                                    <DropdownMenuItem asChild>
+                                                                        <a href={payrollPeriodsApi.getExportPdfUrl(item.id)} download>
+                                                                            <FileDown className="mr-2 h-4 w-4" /> Export Semua PDF
+                                                                        </a>
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => openBulkWhatsApp(item)}>
+                                                                        <MessageCircle className="mr-2 h-4 w-4 text-green-600" /> Kirim Semua ke WA
+                                                                    </DropdownMenuItem>
+                                                                </>
                                                             )}
-                                                            {item.is_editable && item.employee_count > 0 && (
-                                                                <DropdownMenuItem onClick={() => confirmAction(item, 'calculate')}>
-                                                                    <Calculator className="mr-2 h-4 w-4" /> Hitung Ulang
-                                                                </DropdownMenuItem>
+                                                            {item.can_generate_slips && can('payroll.process') && (
+                                                                <>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'generate')}>
+                                                                        <Play className="mr-2 h-4 w-4" /> Generate Slip
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'generate_with_attendance')}>
+                                                                        <CalendarCheck className="mr-2 h-4 w-4" /> Generate + Kehadiran
+                                                                    </DropdownMenuItem>
+                                                                </>
                                                             )}
-                                                            {item.status === 'processing' && (
+                                                            {item.is_editable && item.employee_count > 0 && can('payroll.process') && (
+                                                                <>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'calculate')}>
+                                                                        <Calculator className="mr-2 h-4 w-4" /> Hitung Ulang
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => confirmAction(item, 'calculate_attendance')}>
+                                                                        <Users className="mr-2 h-4 w-4" /> Hitung Kehadiran
+                                                                    </DropdownMenuItem>
+                                                                </>
+                                                            )}
+                                                            {item.status === 'processing' && can('payroll.process') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'submit')}>
                                                                     <Send className="mr-2 h-4 w-4" /> Ajukan Persetujuan
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.can_approve && (
+                                                            {item.can_approve && can('payroll.approve') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'approve')}>
                                                                     <CheckCircle className="mr-2 h-4 w-4" /> Setujui
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.status === 'approved' && (
+                                                            {item.status === 'approved' && can('payroll.approve') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'paid')}>
                                                                     <DollarSign className="mr-2 h-4 w-4" /> Tandai Dibayar
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.can_finalize && (
+                                                            {item.can_finalize && can('payroll.approve') && (
                                                                 <DropdownMenuItem onClick={() => confirmAction(item, 'finalize')}>
                                                                     <Lock className="mr-2 h-4 w-4" /> Finalisasi
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {item.is_draft && (
+                                                            {item.is_finalized && can('payroll.approve') && (
+                                                                <DropdownMenuItem onClick={() => confirmAction(item, 'unfinalize')}>
+                                                                    <LockOpen className="mr-2 h-4 w-4" /> Batal Final
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {item.is_draft && can('payroll.manage') && (
                                                                 <>
                                                                     <DropdownMenuSeparator />
                                                                     <DropdownMenuItem
@@ -482,6 +703,7 @@ export default function PayrollPeriods() {
                                                             )}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -631,6 +853,182 @@ export default function PayrollPeriods() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Bulk WhatsApp Dialog */}
+            <Dialog open={!!bulkWhatsAppItem} onOpenChange={() => { setBulkWhatsAppItem(null); setBulkWhatsAppPreview(null); }}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <MessageCircle className="h-5 w-5 text-green-600" />
+                            Kirim Slip Gaji via WhatsApp
+                        </DialogTitle>
+                        <DialogDescription>
+                            Periode: {bulkWhatsAppItem?.period_label}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        {loadingWhatsAppPreview ? (
+                            <div className="py-8 text-center text-muted-foreground">
+                                Memuat preview penerima...
+                            </div>
+                        ) : bulkWhatsAppPreview ? (
+                            <>
+                                <div className="grid grid-cols-2 gap-4 text-center">
+                                    <div className="rounded-md border p-3 bg-green-50">
+                                        <p className="text-2xl font-bold text-green-600">{bulkWhatsAppPreview.total}</p>
+                                        <p className="text-xs text-muted-foreground">Siap dikirim</p>
+                                    </div>
+                                    <div className="rounded-md border p-3 bg-yellow-50">
+                                        <p className="text-2xl font-bold text-yellow-600">{bulkWhatsAppPreview.total_no_phone}</p>
+                                        <p className="text-xs text-muted-foreground">Tanpa nomor HP</p>
+                                    </div>
+                                </div>
+
+                                {bulkWhatsAppPreview.total > 0 && (
+                                    <div className="rounded-md border max-h-48 overflow-y-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Nama</TableHead>
+                                                    <TableHead>Tipe</TableHead>
+                                                    <TableHead className="text-right">Gaji Bersih</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {bulkWhatsAppPreview.recipients.slice(0, 10).map((r) => (
+                                                    <TableRow key={r.id}>
+                                                        <TableCell className="font-medium">{r.name}</TableCell>
+                                                        <TableCell>{r.type_label}</TableCell>
+                                                        <TableCell className="text-right">{r.net_salary_formatted}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                                {bulkWhatsAppPreview.recipients.length > 10 && (
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                                                            ... dan {bulkWhatsAppPreview.recipients.length - 10} lainnya
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                )}
+
+                                {bulkWhatsAppPreview.total_no_phone > 0 && (
+                                    <div className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+                                        <p className="font-medium">Tidak akan menerima ({bulkWhatsAppPreview.total_no_phone}):</p>
+                                        <p className="text-xs mt-1">
+                                            {bulkWhatsAppPreview.no_phone.slice(0, 5).map(p => p.name).join(', ')}
+                                            {bulkWhatsAppPreview.no_phone.length > 5 && ` dan ${bulkWhatsAppPreview.no_phone.length - 5} lainnya`}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <p className="text-xs text-muted-foreground">
+                                    Slip gaji akan dikirim dalam format teks ke WhatsApp masing-masing karyawan.
+                                </p>
+                            </>
+                        ) : (
+                            <div className="py-8 text-center text-muted-foreground">
+                                Tidak ada data
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => { setBulkWhatsAppItem(null); setBulkWhatsAppPreview(null); }}
+                            disabled={sendingBulkWhatsApp}
+                        >
+                            Batal
+                        </Button>
+                        <Button
+                            onClick={handleBulkWhatsApp}
+                            disabled={sendingBulkWhatsApp || loadingWhatsAppPreview || !bulkWhatsAppPreview || bulkWhatsAppPreview.total === 0}
+                            className="bg-green-600 hover:bg-green-700"
+                        >
+                            {sendingBulkWhatsApp ? 'Mengirim...' : `Kirim ke ${bulkWhatsAppPreview?.total ?? 0} Penerima`}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Progress Dialog */}
+            <Dialog open={progressOpen} onOpenChange={(open) => {
+                if (!open && progress?.status !== 'processing') {
+                    setProgressOpen(false);
+                    setProgressPeriod(null);
+                    setProgress(null);
+                    stopProgressPolling();
+                }
+            }}>
+                <DialogContent className="max-w-md" onPointerDownOutside={(e) => {
+                    if (progress?.status === 'processing') e.preventDefault();
+                }}>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            {progress?.status === 'processing' && <Loader2 className="h-5 w-5 animate-spin text-blue-600" />}
+                            {progress?.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-600" />}
+                            {progress?.status === 'error' && <span className="h-5 w-5 text-red-600">!</span>}
+                            Generate Slip Gaji
+                        </DialogTitle>
+                        <DialogDescription>
+                            Periode: {progressPeriod?.period_label}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        {/* Progress Bar */}
+                        <div className="space-y-2">
+                            <Progress value={progress?.percentage ?? 0} className="h-3" />
+                            <div className="flex justify-between text-sm text-muted-foreground">
+                                <span>{progress?.message ?? 'Memulai...'}</span>
+                                <span>{progress?.percentage ?? 0}%</span>
+                            </div>
+                        </div>
+
+                        {/* Result Summary */}
+                        {progress?.status === 'completed' && progress.result && (
+                            <div className="grid grid-cols-2 gap-4 text-center">
+                                <div className="rounded-md border p-3 bg-green-50">
+                                    <p className="text-2xl font-bold text-green-600">{progress.result.slips_created}</p>
+                                    <p className="text-xs text-muted-foreground">Slip dibuat</p>
+                                </div>
+                                <div className="rounded-md border p-3 bg-blue-50">
+                                    <p className="text-2xl font-bold text-blue-600">{progress.result.attendance_processed}</p>
+                                    <p className="text-xs text-muted-foreground">Kehadiran dihitung</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Errors */}
+                        {progress?.status === 'completed' && progress.result?.attendance_errors && progress.result.attendance_errors.length > 0 && (
+                            <div className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+                                <p className="font-medium">{progress.result.attendance_errors.length} error saat menghitung kehadiran</p>
+                            </div>
+                        )}
+
+                        {/* Error Message */}
+                        {progress?.status === 'error' && (
+                            <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+                                <p>{progress.message}</p>
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            onClick={() => {
+                                setProgressOpen(false);
+                                setProgressPeriod(null);
+                                setProgress(null);
+                                stopProgressPolling();
+                            }}
+                            disabled={progress?.status === 'processing'}
+                        >
+                            {progress?.status === 'processing' ? 'Memproses...' : 'Tutup'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </MainLayout>
     );
 }

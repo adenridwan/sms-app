@@ -15,7 +15,7 @@ const SIDEBAR_WIDTH_ICON = '3.5rem';
 type SidebarContextType = {
     state: 'expanded' | 'collapsed';
     open: boolean;
-    setOpen: (open: boolean) => void;
+    setOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
     openMobile: boolean;
     setOpenMobile: (open: boolean) => void;
     isMobile: boolean;
@@ -32,12 +32,31 @@ function useSidebar() {
     return context;
 }
 
+const SIDEBAR_STORAGE_KEY = 'sidebar-open';
+
 const SidebarProvider = React.forwardRef<
     HTMLDivElement,
     React.ComponentProps<'div'> & { defaultOpen?: boolean }
 >(({ defaultOpen = true, className, children, ...props }, ref) => {
     const isMobile = useIsMobile();
-    const [open, setOpen] = React.useState(defaultOpen);
+
+    // Initialize dari localStorage jika ada
+    const [open, setOpenState] = React.useState(() => {
+        if (typeof window === 'undefined') return defaultOpen;
+        const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+        if (stored !== null) return stored === 'true';
+        return defaultOpen;
+    });
+
+    // Wrapper setOpen yang juga menyimpan ke localStorage
+    const setOpen = React.useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+        setOpenState((prev) => {
+            const newValue = typeof value === 'function' ? value(prev) : value;
+            localStorage.setItem(SIDEBAR_STORAGE_KEY, String(newValue));
+            return newValue;
+        });
+    }, []);
+
     // The mobile drawer must always start closed - it is a separate overlay
     // from the desktop sidebar's expanded/collapsed state.
     const [openMobile, setOpenMobile] = React.useState(false);
@@ -48,13 +67,13 @@ const SidebarProvider = React.forwardRef<
         } else {
             setOpen((prev) => !prev);
         }
-    }, [isMobile]);
+    }, [isMobile, setOpen]);
 
     const state = open ? 'expanded' : 'collapsed';
 
     const contextValue = React.useMemo<SidebarContextType>(
         () => ({ state, open, setOpen, openMobile, setOpenMobile, isMobile, toggleSidebar }),
-        [state, open, openMobile, isMobile, toggleSidebar]
+        [state, open, setOpen, openMobile, isMobile, toggleSidebar]
     );
 
     return (

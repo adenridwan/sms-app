@@ -7,6 +7,7 @@ use App\Infrastructure\Persistence\Eloquent\Academic\AcademicYear;
 use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
 use App\Infrastructure\Persistence\Eloquent\Finance\Payment;
 use App\Infrastructure\Persistence\Eloquent\Finance\StudentFee;
+use App\Infrastructure\Persistence\Eloquent\Payroll\PayrollPeriod;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -668,6 +669,208 @@ class ReportController extends Controller
                 ],
                 'fees' => $fees,
             ],
+        ]);
+    }
+
+    /**
+     * Get monthly expense report (including payroll).
+     *
+     * Laporan pengeluaran bulanan yang menggabungkan data penggajian
+     * dengan data keuangan (jika ada pengeluaran lain).
+     */
+    public function monthlyExpense(Request $request): JsonResponse
+    {
+        $request->validate([
+            'year' => 'required|integer|min:2000|max:2100',
+            'month' => 'nullable|integer|min:1|max:12',
+        ]);
+
+        $year = $request->year;
+        $month = $request->month;
+
+        // Query payroll periods
+        $payrollQuery = PayrollPeriod::where('year', $year)
+            ->whereIn('status', [
+                PayrollPeriod::STATUS_APPROVED,
+                PayrollPeriod::STATUS_PAID,
+                PayrollPeriod::STATUS_FINALIZED,
+            ]);
+
+        if ($month) {
+            $payrollQuery->where('month', $month);
+        }
+
+        $payrollPeriods = $payrollQuery->orderBy('month')->get();
+
+        // Calculate payroll totals
+        $payrollData = $payrollPeriods->map(function ($period) {
+            return [
+                'id' => $period->id,
+                'period' => $period->name,
+                'month' => $period->month,
+                'year' => $period->year,
+                'status' => $period->status,
+                'status_label' => $period->getStatusLabel(),
+                'employee_count' => $period->employee_count,
+                'total_gross' => (float) $period->total_gross,
+                'total_gross_formatted' => 'Rp ' . number_format($period->total_gross, 0, ',', '.'),
+                'total_deductions' => (float) $period->total_deductions,
+                'total_deductions_formatted' => 'Rp ' . number_format($period->total_deductions, 0, ',', '.'),
+                'total_net' => (float) $period->total_net,
+                'total_net_formatted' => 'Rp ' . number_format($period->total_net, 0, ',', '.'),
+                'payment_date' => $period->payment_date?->format('d M Y'),
+                'approved_at' => $period->approved_at?->format('d M Y'),
+            ];
+        });
+
+        // Summary
+        $totalGross = $payrollData->sum('total_gross');
+        $totalDeductions = $payrollData->sum('total_deductions');
+        $totalNet = $payrollData->sum('total_net');
+        $totalEmployees = $payrollData->sum('employee_count');
+
+        // Get income data for comparison (from student fees/payments)
+        $incomeQuery = Payment::completed()
+            ->whereYear('paid_at', $year);
+
+        if ($month) {
+            $incomeQuery->whereMonth('paid_at', $month);
+        }
+
+        $totalIncome = $incomeQuery->sum('grand_total');
+
+        // Monthly breakdown if no specific month requested
+        $monthlyBreakdown = [];
+        if (!$month) {
+            for ($m = 1; $m <= 12; $m++) {
+                $periodData = $payrollData->firstWhere('month', $m);
+                $monthlyIncome = Payment::completed()
+                    ->whereYear('paid_at', $year)
+                    ->whereMonth('paid_at', $m)
+                    ->sum('grand_total');
+
+                $monthlyBreakdown[] = [
+                    'month' => $m,
+                    'month_name' => $this->getMonthName($m),
+                    'income' => (float) $monthlyIncome,
+                    'income_formatted' => 'Rp ' . number_format($monthlyIncome, 0, ',', '.'),
+                    'payroll_expense' => $periodData ? (float) $periodData['total_net'] : 0,
+                    'payroll_expense_formatted' => 'Rp ' . number_format($periodData['total_net'] ?? 0, 0, ',', '.'),
+                    'net_balance' => (float) $monthlyIncome - ($periodData['total_net'] ?? 0),
+                    'net_balance_formatted' => 'Rp ' . number_format($monthlyIncome - ($periodData['total_net'] ?? 0), 0, ',', '.'),
+                    'has_payroll' => $periodData !== null,
+                ];
+            }
+        }
+
+        return response()->json([
+            'data' => [
+                'period' => $month
+                    ? $this->getMonthName($month) . ' ' . $year
+                    : 'Tahun ' . $year,
+                'summary' => [
+                    'total_income' => (float) $totalIncome,
+                    'total_income_formatted' => 'Rp ' . number_format($totalIncome, 0, ',', '.'),
+                    'total_payroll_gross' => $totalGross,
+                    'total_payroll_gross_formatted' => 'Rp ' . number_format($totalGross, 0, ',', '.'),
+                    'total_payroll_deductions' => $totalDeductions,
+                    'total_payroll_deductions_formatted' => 'Rp ' . number_format($totalDeductions, 0, ',', '.'),
+                    'total_payroll_net' => $totalNet,
+                    'total_payroll_net_formatted' => 'Rp ' . number_format($totalNet, 0, ',', '.'),
+                    'total_employees' => $totalEmployees,
+                    'net_balance' => (float) $totalIncome - $totalNet,
+                    'net_balance_formatted' => 'Rp ' . number_format($totalIncome - $totalNet, 0, ',', '.'),
+                    'expense_ratio' => $totalIncome > 0 ? round(($totalNet / $totalIncome) * 100, 1) : 0,
+                ],
+                'payroll_periods' => $payrollData,
+                'monthly_breakdown' => $monthlyBreakdown,
+            ],
+        ]);
+    }
+
+    /**
+     * Export monthly expense report to CSV.
+     */
+    public function exportMonthlyExpense(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $request->validate([
+            'year' => 'required|integer|min:2000|max:2100',
+        ]);
+
+        $year = $request->year;
+
+        $filename = 'laporan_pengeluaran_' . $year . '_' . now()->format('Ymd_His') . '.csv';
+
+        return response()->streamDownload(function () use ($year) {
+            $handle = fopen('php://output', 'w');
+
+            // BOM for Excel UTF-8
+            fprintf($handle, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            // Header
+            fputcsv($handle, [
+                'Bulan',
+                'Pendapatan (SPP)',
+                'Gaji Kotor',
+                'Potongan (BPJS+Pajak)',
+                'Gaji Bersih',
+                'Jumlah Karyawan',
+                'Saldo Bersih',
+                'Status Payroll',
+            ], ';');
+
+            for ($m = 1; $m <= 12; $m++) {
+                $income = Payment::completed()
+                    ->whereYear('paid_at', $year)
+                    ->whereMonth('paid_at', $m)
+                    ->sum('grand_total');
+
+                $payroll = PayrollPeriod::where('year', $year)
+                    ->where('month', $m)
+                    ->whereIn('status', [
+                        PayrollPeriod::STATUS_APPROVED,
+                        PayrollPeriod::STATUS_PAID,
+                        PayrollPeriod::STATUS_FINALIZED,
+                    ])
+                    ->first();
+
+                $netBalance = $income - ($payroll->total_net ?? 0);
+
+                fputcsv($handle, [
+                    $this->getMonthName($m),
+                    $income,
+                    $payroll->total_gross ?? 0,
+                    $payroll->total_deductions ?? 0,
+                    $payroll->total_net ?? 0,
+                    $payroll->employee_count ?? 0,
+                    $netBalance,
+                    $payroll ? $payroll->getStatusLabel() : 'Belum ada',
+                ], ';');
+            }
+
+            // Total row
+            $totalIncome = Payment::completed()->whereYear('paid_at', $year)->sum('grand_total');
+            $totalPayroll = PayrollPeriod::where('year', $year)
+                ->whereIn('status', [
+                    PayrollPeriod::STATUS_APPROVED,
+                    PayrollPeriod::STATUS_PAID,
+                    PayrollPeriod::STATUS_FINALIZED,
+                ]);
+
+            fputcsv($handle, [
+                'TOTAL',
+                $totalIncome,
+                $totalPayroll->sum('total_gross'),
+                $totalPayroll->sum('total_deductions'),
+                $totalPayroll->sum('total_net'),
+                $totalPayroll->sum('employee_count'),
+                $totalIncome - $totalPayroll->sum('total_net'),
+                '-',
+            ], ';');
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
     }
 

@@ -231,6 +231,23 @@ export default function SettingsUsers() {
     >([]);
     const [searchingStudents, setSearchingStudents] = useState(false);
 
+    // Pemilih staf untuk penautan data staf
+    const [staffOptions, setStaffOptions] = useState<
+        Array<{
+            id: string;
+            employee_id: string | null;
+            join_date: string | null;
+            employment_status: string | null;
+            department_name: string | null;
+            position_name: string | null;
+            user_id: string | null;
+            user_name: string | null;
+        }>
+    >([]);
+    const [loadingStaff, setLoadingStaff] = useState(false);
+    const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+    const [staffSearch, setStaffSearch] = useState('');
+
     const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
@@ -279,6 +296,35 @@ export default function SettingsUsers() {
         return () => clearTimeout(timer);
     }, [isSuperAdmin, formOpen, form.role, studentSearch]);
 
+    // Load staff options ketika form dibuka dan staffEnabled aktif (dengan debounce search)
+    useEffect(() => {
+        if (!isSuperAdmin || !formOpen || !form.staffEnabled) {
+            setStaffOptions([]);
+            setSelectedStaffId(null);
+            return;
+        }
+        const timer = setTimeout(() => {
+            setLoadingStaff(true);
+            usersApi
+                .staffOptions(editingUser?.id, staffSearch.trim() || undefined)
+                .then((response) => {
+                    setStaffOptions(response.data.data ?? []);
+                    // Jika edit mode dan user sudah punya staff, set selected
+                    if (editingUser && !staffSearch.trim()) {
+                        const linkedStaff = (response.data.data ?? []).find(
+                            (s) => s.user_id === editingUser.id
+                        );
+                        if (linkedStaff) {
+                            setSelectedStaffId(linkedStaff.id);
+                        }
+                    }
+                })
+                .catch(() => setStaffOptions([]))
+                .finally(() => setLoadingStaff(false));
+        }, staffSearch.trim() ? 350 : 0);
+        return () => clearTimeout(timer);
+    }, [isSuperAdmin, formOpen, form.staffEnabled, editingUser, staffSearch]);
+
     if (!isSuperAdmin) {
         return (
             <MainLayout title="Pengguna">
@@ -301,6 +347,8 @@ export default function SettingsUsers() {
         setForm(emptyForm);
         setLinkedTeacher(null);
         setStudentSearch('');
+        setSelectedStaffId(null);
+        setStaffSearch('');
         setFormOpen(true);
     };
 
@@ -316,7 +364,9 @@ export default function SettingsUsers() {
     const openEdit = async (user: User) => {
         setEditingUser(user);
         setStudentSearch('');
+        setStaffSearch('');
         setLinkedTeacher(null);
+        setSelectedStaffId(null);
         const base: UserForm = {
             ...emptyForm,
             first_name: user.first_name ?? '',
@@ -336,6 +386,10 @@ export default function SettingsUsers() {
             const response = await usersApi.get(user.id);
             const detail = response.data.data;
             setLinkedTeacher(detail.teacher ?? null);
+            // Set staff ID jika sudah tertaut
+            if (detail.staff?.id) {
+                setSelectedStaffId(detail.staff.id);
+            }
             setForm((f) => ({
                 ...f,
                 staffEnabled: !!detail.staff,
@@ -392,6 +446,8 @@ export default function SettingsUsers() {
                 ...(form.staffEnabled
                     ? {
                           staff: {
+                              // Jika link ke existing staff, kirim id-nya
+                              ...(selectedStaffId ? { id: selectedStaffId } : {}),
                               employee_id: form.staffEmployeeId.trim() || null,
                               join_date: form.staffJoinDate || null,
                               employment_status: form.staffEmployment,
@@ -478,14 +534,14 @@ export default function SettingsUsers() {
 
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Pengguna</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Pengguna</h1>
+                        <p className="text-sm text-muted-foreground sm:text-base">
                             Kelola akun pengguna dan hak akses sistem
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
+                    <Button onClick={openCreate} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Tambah Pengguna
                     </Button>
@@ -500,8 +556,8 @@ export default function SettingsUsers() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="relative w-full max-w-sm">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <div className="relative w-full sm:max-w-sm">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     placeholder="Cari nama, username, atau email..."
@@ -513,6 +569,7 @@ export default function SettingsUsers() {
                                     }}
                                 />
                             </div>
+                            <div className="flex items-center gap-2">
                             <Select
                                 value={roleFilter}
                                 onValueChange={(value) => {
@@ -520,7 +577,7 @@ export default function SettingsUsers() {
                                     setPage(1);
                                 }}
                             >
-                                <SelectTrigger className="w-[180px]">
+                                <SelectTrigger className="w-full sm:w-[180px]">
                                     <SelectValue placeholder="Semua Role" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -535,6 +592,7 @@ export default function SettingsUsers() {
                             <Button variant="outline" size="icon" onClick={fetchUsers} disabled={loading}>
                                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                             </Button>
+                            </div>
                         </div>
 
                         {loading ? (
@@ -549,10 +607,10 @@ export default function SettingsUsers() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Pengguna</TableHead>
-                                            <TableHead>Username</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Username</TableHead>
                                             <TableHead>Role</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Login Terakhir</TableHead>
+                                            <TableHead className="hidden md:table-cell">Status</TableHead>
+                                            <TableHead className="hidden lg:table-cell">Login Terakhir</TableHead>
                                             <TableHead className="w-[60px]"></TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -576,7 +634,7 @@ export default function SettingsUsers() {
                                                         </div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="font-mono text-sm">
+                                                <TableCell className="hidden font-mono text-sm sm:table-cell">
                                                     {user.username}
                                                 </TableCell>
                                                 <TableCell>
@@ -599,12 +657,12 @@ export default function SettingsUsers() {
                                                         )}
                                                     </div>
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className="hidden md:table-cell">
                                                     <Badge variant={user.is_active ? 'default' : 'outline'}>
                                                         {user.is_active ? 'Aktif' : 'Nonaktif'}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell className="text-sm text-muted-foreground">
+                                                <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
                                                     {formatDate(user.last_login_at)}
                                                 </TableCell>
                                                 <TableCell>
@@ -694,7 +752,7 @@ export default function SettingsUsers() {
 
             {/* Create/Edit Dialog */}
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-hidden sm:w-full">
                     <DialogHeader>
                         <DialogTitle>
                             {editingUser ? 'Edit Pengguna' : 'Tambah Pengguna'}
@@ -705,6 +763,7 @@ export default function SettingsUsers() {
                                 : 'Isi data akun pengguna baru'}
                         </DialogDescription>
                     </DialogHeader>
+                    <div className="max-h-[60vh] overflow-y-auto pr-2">
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="user-first-name">Nama Depan *</Label>
@@ -827,43 +886,143 @@ export default function SettingsUsers() {
                                 </p>
 
                                 {form.staffEnabled && (
-                                    <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-3">
+                                        {/* Pilih dari master staff */}
                                         <div className="space-y-1.5">
-                                            <Label htmlFor="staff-empid">No. Pegawai</Label>
-                                            <Input
-                                                id="staff-empid"
-                                                placeholder="Contoh: STF-001"
-                                                value={form.staffEmployeeId}
-                                                onChange={(e) => setForm({ ...form, staffEmployeeId: e.target.value })}
-                                            />
+                                            <Label>Pilih Data Staf</Label>
+                                            <div className="relative">
+                                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                <Input
+                                                    placeholder="Cari no. pegawai, nama, bidang, jabatan..."
+                                                    className="pl-8"
+                                                    value={staffSearch}
+                                                    onChange={(e) => setStaffSearch(e.target.value)}
+                                                />
+                                            </div>
+                                            {loadingStaff ? (
+                                                <p className="text-sm text-muted-foreground">Memuat data staf...</p>
+                                            ) : staffOptions.length === 0 && !staffSearch.trim() ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Tidak ada data staf yang tersedia. Data staf baru akan dibuat.
+                                                </p>
+                                            ) : staffOptions.length === 0 && staffSearch.trim() ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Tidak ditemukan staf dengan kata kunci "{staffSearch}".
+                                                </p>
+                                            ) : (
+                                                <>
+                                                    <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-1">
+                                                        <button
+                                                            type="button"
+                                                            className={`flex w-full items-center rounded px-2 py-1.5 text-left text-sm ${
+                                                                selectedStaffId === null ? 'bg-primary/10 font-medium' : 'hover:bg-muted'
+                                                            }`}
+                                                            onClick={() => {
+                                                                setSelectedStaffId(null);
+                                                                setForm({
+                                                                    ...form,
+                                                                    staffEmployeeId: '',
+                                                                    staffJoinDate: '',
+                                                                    staffEmployment: 'permanent',
+                                                                });
+                                                            }}
+                                                        >
+                                                            + Buat Data Staf Baru
+                                                        </button>
+                                                        {staffOptions.map((staff) => (
+                                                            <button
+                                                                key={staff.id}
+                                                                type="button"
+                                                                className={`flex w-full flex-col rounded px-2 py-1.5 text-left text-sm ${
+                                                                    selectedStaffId === staff.id ? 'bg-primary/10' : 'hover:bg-muted'
+                                                                }`}
+                                                                onClick={() => {
+                                                                    setSelectedStaffId(staff.id);
+                                                                    setForm({
+                                                                        ...form,
+                                                                        staffEmployeeId: staff.employee_id ?? '',
+                                                                        staffJoinDate: staff.join_date ?? '',
+                                                                        staffEmployment: staff.employment_status ?? 'permanent',
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <span className="font-medium">
+                                                                    {staff.employee_id ?? '(Tanpa No. Pegawai)'}
+                                                                    {staff.user_name && (
+                                                                        <span className="ml-2 font-normal text-muted-foreground">
+                                                                            - {staff.user_name}
+                                                                        </span>
+                                                                    )}
+                                                                </span>
+                                                                {(staff.position_name || staff.department_name) && (
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        {[staff.position_name, staff.department_name].filter(Boolean).join(' - ')}
+                                                                    </span>
+                                                                )}
+                                                                {staff.user_id && (
+                                                                    <Badge variant="secondary" className="mt-1 text-xs">
+                                                                        Sudah Tertaut
+                                                                    </Badge>
+                                                                )}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    {selectedStaffId && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Staf terpilih: {staffOptions.find((s) => s.id === selectedStaffId)?.employee_id ?? '(Tanpa No. Pegawai)'}
+                                                        </p>
+                                                    )}
+                                                </>
+                                            )}
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="staff-join">Tanggal Masuk</Label>
-                                            <Input
-                                                id="staff-join"
-                                                type="date"
-                                                value={form.staffJoinDate}
-                                                onChange={(e) => setForm({ ...form, staffJoinDate: e.target.value })}
-                                            />
+
+                                        {/* Detail staf (read-only jika pilih existing, editable jika baru) */}
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="staff-empid">No. Pegawai</Label>
+                                                <Input
+                                                    id="staff-empid"
+                                                    placeholder="Contoh: STF-001"
+                                                    value={form.staffEmployeeId}
+                                                    onChange={(e) => setForm({ ...form, staffEmployeeId: e.target.value })}
+                                                    disabled={!!selectedStaffId}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="staff-join">Tanggal Masuk</Label>
+                                                <Input
+                                                    id="staff-join"
+                                                    type="date"
+                                                    value={form.staffJoinDate}
+                                                    onChange={(e) => setForm({ ...form, staffJoinDate: e.target.value })}
+                                                    disabled={!!selectedStaffId}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label>Status Kepegawaian</Label>
+                                                <Select
+                                                    value={form.staffEmployment}
+                                                    onValueChange={(v) => setForm({ ...form, staffEmployment: v })}
+                                                    disabled={!!selectedStaffId}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {Object.entries(employmentLabels).map(([value, label]) => (
+                                                            <SelectItem key={value} value={value}>
+                                                                {label}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <Label>Status Kepegawaian</Label>
-                                            <Select
-                                                value={form.staffEmployment}
-                                                onValueChange={(v) => setForm({ ...form, staffEmployment: v })}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {Object.entries(employmentLabels).map(([value, label]) => (
-                                                        <SelectItem key={value} value={value}>
-                                                            {label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        {selectedStaffId && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Data staf akan ditautkan ke akun ini. Edit data staf dilakukan di menu Data Staf.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -1011,11 +1170,12 @@ export default function SettingsUsers() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>
+                    </div>
+                    <DialogFooter className="flex-col gap-2 sm:flex-row">
+                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleSubmit} disabled={saving}>
+                        <Button onClick={handleSubmit} disabled={saving} className="w-full sm:w-auto">
                             {saving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             {editingUser ? 'Simpan Perubahan' : 'Simpan'}
                         </Button>
@@ -1033,7 +1193,7 @@ export default function SettingsUsers() {
                     }
                 }}
             >
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-[95vw] max-w-md sm:w-full">
                     <DialogHeader>
                         <DialogTitle>Reset Password</DialogTitle>
                         <DialogDescription>
@@ -1051,7 +1211,7 @@ export default function SettingsUsers() {
                             onChange={(e) => setNewPassword(e.target.value)}
                         />
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="flex-col gap-2 sm:flex-row">
                         <Button
                             variant="outline"
                             onClick={() => {
@@ -1059,10 +1219,11 @@ export default function SettingsUsers() {
                                 setNewPassword('');
                             }}
                             disabled={resetting}
+                            className="w-full sm:w-auto"
                         >
                             Batal
                         </Button>
-                        <Button onClick={handleResetPassword} disabled={resetting}>
+                        <Button onClick={handleResetPassword} disabled={resetting} className="w-full sm:w-auto">
                             {resetting && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             <KeyRound className="mr-2 h-4 w-4" />
                             Reset Password

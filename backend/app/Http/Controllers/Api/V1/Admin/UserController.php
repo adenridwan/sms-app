@@ -209,6 +209,7 @@ class UserController extends ApiController
             'teacher.employment_status' => ['nullable', Rule::in(['permanent', 'contract', 'honorary', 'part_time'])],
             'teacher.education_level' => ['nullable', 'string', 'max:20'],
             'staff' => ['nullable', 'array'],
+            'staff.id' => ['nullable', 'uuid', 'exists:staff,id'], // Link ke existing staff
             'staff.employee_id' => ['nullable', 'string', 'max:50'],
             'staff.join_date' => ['nullable', 'date'],
             'staff.employment_status' => ['nullable', Rule::in(['permanent', 'contract', 'honorary', 'part_time'])],
@@ -257,16 +258,29 @@ class UserController extends ApiController
         if (array_key_exists('staff', $data) && $data['staff'] !== null) {
             $s = $data['staff'];
 
-            Staff::withoutTenant()->updateOrCreate(
-                ['user_id' => $user->id],
-                [
-                    'tenant_id' => $tenantId,
-                    'employee_id' => $s['employee_id'] ?? null,
-                    'join_date' => $s['join_date'] ?? now()->toDateString(),
-                    'employment_status' => $s['employment_status'] ?? 'permanent',
-                    'status' => 'active',
-                ]
-            );
+            // Jika ada staff.id, link ke existing staff record
+            if (! empty($s['id'])) {
+                $existingStaff = Staff::withoutTenant()->find($s['id']);
+                if ($existingStaff) {
+                    // Pastikan staff belum tertaut ke user lain
+                    if ($existingStaff->user_id && $existingStaff->user_id !== $user->id) {
+                        abort(422, 'Data staf sudah tertaut ke pengguna lain.');
+                    }
+                    $existingStaff->update(['user_id' => $user->id]);
+                }
+            } else {
+                // Buat atau update staff baru
+                Staff::withoutTenant()->updateOrCreate(
+                    ['user_id' => $user->id],
+                    [
+                        'tenant_id' => $tenantId,
+                        'employee_id' => $s['employee_id'] ?? null,
+                        'join_date' => $s['join_date'] ?? now()->toDateString(),
+                        'employment_status' => $s['employment_status'] ?? 'permanent',
+                        'status' => 'active',
+                    ]
+                );
+            }
         }
 
         if (array_key_exists('guardian_students', $data) && is_array($data['guardian_students'])) {
@@ -332,6 +346,50 @@ class UserController extends ApiController
         StudentGuardian::where('user_id', $user->id)
             ->whereNotIn('student_id', $keptStudentIds)
             ->update(['user_id' => null]);
+    }
+
+    /**
+     * Opsi staf yang belum tertaut ke akun (untuk dropdown pemilihan).
+     * Jika $userId diberikan (edit mode), staf yang sudah tertaut ke user tsb juga dikembalikan.
+     */
+    public function staffOptions(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->get('search', ''));
+        $currentUserId = $request->get('user_id'); // Untuk edit: tampilkan staf yg sudah tertaut
+
+        $staff = Staff::query()
+            ->with(['user.profile', 'department', 'position'])
+            ->where(function ($q) use ($currentUserId) {
+                $q->whereNull('user_id');
+                if ($currentUserId) {
+                    $q->orWhere('user_id', $currentUserId);
+                }
+            })
+            ->when($search !== '', function ($q) use ($search) {
+                $q->where(function ($query) use ($search) {
+                    $query->where('employee_id', 'ilike', "%{$search}%")
+                        ->orWhereHas('user.profile', fn ($p) => $p
+                            ->where('first_name', 'ilike', "%{$search}%")
+                            ->orWhere('last_name', 'ilike', "%{$search}%"))
+                        ->orWhereHas('department', fn ($d) => $d->where('name', 'ilike', "%{$search}%"))
+                        ->orWhereHas('position', fn ($p) => $p->where('name', 'ilike', "%{$search}%"));
+                });
+            })
+            ->orderByRaw('employee_id IS NULL, employee_id ASC')
+            ->limit(50)
+            ->get()
+            ->map(fn (Staff $s) => [
+                'id' => $s->id,
+                'employee_id' => $s->employee_id,
+                'join_date' => $s->join_date?->format('Y-m-d'),
+                'employment_status' => $s->employment_status,
+                'department_name' => $s->department?->name,
+                'position_name' => $s->position?->name,
+                'user_id' => $s->user_id,
+                'user_name' => $s->user?->full_name,
+            ]);
+
+        return $this->success($staff);
     }
 
     /**

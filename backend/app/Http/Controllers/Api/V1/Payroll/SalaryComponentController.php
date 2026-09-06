@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Payroll;
 
+use App\Domain\Payroll\Services\ComponentCalculationService;
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Resources\Payroll\SalaryComponentResource;
 use App\Infrastructure\Persistence\Eloquent\Payroll\SalaryComponent;
@@ -10,12 +11,16 @@ use Illuminate\Http\Request;
 
 class SalaryComponentController extends ApiController
 {
+    public function __construct(
+        protected ComponentCalculationService $calculationService
+    ) {}
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
     {
-        $query = SalaryComponent::query()
+        $query = SalaryComponent::with('percentageComponent')
             ->when($request->search, function ($q, $search) {
                 $q->where('name', 'ilike', "%{$search}%")
                     ->orWhere('code', 'ilike', "%{$search}%");
@@ -48,7 +53,11 @@ class SalaryComponentController extends ApiController
             'calculation_type' => ['required', 'in:fixed,percentage,per_day,per_hour,formula'],
             'default_value' => ['required', 'numeric', 'min:0'],
             'percentage_of' => ['nullable', 'string', 'max:50'],
-            'formula' => ['nullable', 'string', 'max:255'],
+            'percentage_component_id' => ['nullable', 'uuid', 'exists:salary_components,id'],
+            'formula' => ['nullable', 'array'],
+            'formula.*.type' => ['required_with:formula', 'in:component,base_salary,gross_salary,number,operator'],
+            'formula.*.id' => ['nullable', 'uuid'],
+            'formula.*.value' => ['nullable'],
             'is_taxable' => ['boolean'],
             'is_mandatory' => ['boolean'],
             'is_active' => ['boolean'],
@@ -64,7 +73,27 @@ class SalaryComponentController extends ApiController
             return $this->error('Nilai persentase tidak boleh lebih dari 100%', 422);
         }
 
+        // Validate percentage_of untuk calculation_type = percentage
+        if ($data['calculation_type'] === 'percentage') {
+            if (empty($data['percentage_of']) && empty($data['percentage_component_id'])) {
+                return $this->error('Persentase dari harus diisi untuk tipe persentase', 422);
+            }
+        }
+
+        // Validate formula untuk calculation_type = formula
+        if ($data['calculation_type'] === 'formula') {
+            if (empty($data['formula'])) {
+                return $this->error('Rumus harus diisi untuk tipe rumus khusus', 422);
+            }
+
+            $errors = $this->calculationService->validateFormula($data['formula']);
+            if (!empty($errors)) {
+                return $this->error('Rumus tidak valid: ' . implode(', ', $errors), 422);
+            }
+        }
+
         $component = SalaryComponent::create($data);
+        $component->load('percentageComponent');
 
         return $this->success(
             new SalaryComponentResource($component),
@@ -78,6 +107,7 @@ class SalaryComponentController extends ApiController
      */
     public function show(SalaryComponent $salaryComponent): JsonResponse
     {
+        $salaryComponent->load('percentageComponent');
         return $this->success(new SalaryComponentResource($salaryComponent));
     }
 
@@ -93,7 +123,11 @@ class SalaryComponentController extends ApiController
             'calculation_type' => ['sometimes', 'in:fixed,percentage,per_day,per_hour,formula'],
             'default_value' => ['sometimes', 'numeric', 'min:0'],
             'percentage_of' => ['nullable', 'string', 'max:50'],
-            'formula' => ['nullable', 'string', 'max:255'],
+            'percentage_component_id' => ['nullable', 'uuid', 'exists:salary_components,id'],
+            'formula' => ['nullable', 'array'],
+            'formula.*.type' => ['required_with:formula', 'in:component,base_salary,gross_salary,number,operator'],
+            'formula.*.id' => ['nullable', 'uuid'],
+            'formula.*.value' => ['nullable'],
             'is_taxable' => ['boolean'],
             'is_mandatory' => ['boolean'],
             'is_active' => ['boolean'],
@@ -108,7 +142,37 @@ class SalaryComponentController extends ApiController
             return $this->error('Nilai persentase tidak boleh lebih dari 100%', 422);
         }
 
+        // Validate percentage_of untuk calculation_type = percentage
+        if ($calculationType === 'percentage') {
+            $percentageOf = $data['percentage_of'] ?? $salaryComponent->percentage_of;
+            $percentageComponentId = $data['percentage_component_id'] ?? $salaryComponent->percentage_component_id;
+            if (empty($percentageOf) && empty($percentageComponentId)) {
+                return $this->error('Persentase dari harus diisi untuk tipe persentase', 422);
+            }
+        }
+
+        // Validate formula untuk calculation_type = formula
+        if ($calculationType === 'formula') {
+            $formula = $data['formula'] ?? $salaryComponent->formula;
+            if (empty($formula)) {
+                return $this->error('Rumus harus diisi untuk tipe rumus khusus', 422);
+            }
+
+            if (isset($data['formula'])) {
+                $errors = $this->calculationService->validateFormula($data['formula']);
+                if (!empty($errors)) {
+                    return $this->error('Rumus tidak valid: ' . implode(', ', $errors), 422);
+                }
+            }
+        }
+
+        // Prevent self-reference in percentage
+        if (isset($data['percentage_component_id']) && $data['percentage_component_id'] === $salaryComponent->id) {
+            return $this->error('Komponen tidak dapat mereferensikan dirinya sendiri', 422);
+        }
+
         $salaryComponent->update($data);
+        $salaryComponent->load('percentageComponent');
 
         return $this->success(new SalaryComponentResource($salaryComponent), 'Komponen gaji berhasil diperbarui');
     }
@@ -141,5 +205,68 @@ class SalaryComponentController extends ApiController
     public function calculationTypes(): JsonResponse
     {
         return $this->success(SalaryComponent::getCalculationTypes());
+    }
+
+    /**
+     * Get available percentage references.
+     */
+    public function percentageReferences(): JsonResponse
+    {
+        return $this->success([
+            'references' => SalaryComponent::getPercentageReferences(),
+            'operators' => ComponentCalculationService::FORMULA_OPERATORS,
+        ]);
+    }
+
+    /**
+     * Get components available for formula/percentage reference.
+     * Excludes the given component ID to prevent self-reference.
+     */
+    public function availableForReference(Request $request): JsonResponse
+    {
+        $excludeId = $request->query('exclude');
+
+        $components = SalaryComponent::query()
+            ->where('is_active', true)
+            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->orderBy('type')
+            ->orderBy('order')
+            ->get(['id', 'code', 'name', 'type', 'default_value']);
+
+        return $this->success($components->map(fn($c) => [
+            'id' => $c->id,
+            'code' => $c->code,
+            'name' => $c->name,
+            'type' => $c->type,
+            'type_label' => $c->type === 'earning' ? 'Pendapatan' : 'Potongan',
+            'default_value' => (float) $c->default_value,
+            'default_value_formatted' => 'Rp ' . number_format($c->default_value, 0, ',', '.'),
+        ]));
+    }
+
+    /**
+     * Validate a formula structure.
+     */
+    public function validateFormula(Request $request): JsonResponse
+    {
+        $formula = $request->input('formula', []);
+
+        if (!is_array($formula)) {
+            return $this->error('Formula harus berupa array', 422);
+        }
+
+        $errors = $this->calculationService->validateFormula($formula);
+
+        if (!empty($errors)) {
+            return $this->success([
+                'valid' => false,
+                'errors' => $errors,
+            ]);
+        }
+
+        return $this->success([
+            'valid' => true,
+            'errors' => [],
+        ]);
     }
 }

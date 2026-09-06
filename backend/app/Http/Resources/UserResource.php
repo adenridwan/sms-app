@@ -40,6 +40,7 @@ class UserResource extends JsonResource
                 'status' => $this->teacher->status,
             ] : null),
             'staff' => $this->whenLoaded('staff', fn() => $this->staff ? [
+                'id' => $this->staff->id,
                 'employee_id' => $this->staff->employee_id,
                 'join_date' => $this->staff->join_date?->toDateString(),
                 'employment_status' => $this->staff->employment_status,

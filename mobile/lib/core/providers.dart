@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/attendance/data/class_attendance_queue_store.dart';
+import '../features/attendance/data/offline_queue_store.dart';
 import '../features/auth/data/auth_repository.dart';
 import 'network/api_client.dart';
 import 'network/api_exception.dart';
 import 'network/backend_status.dart';
+import 'services/heartbeat_service.dart';
 import 'storage/offline_credential_store.dart';
 import 'storage/token_storage.dart';
 import 'storage/user_cache_store.dart';
@@ -19,6 +22,14 @@ final userCacheStoreProvider =
 /// Bukti kredensial untuk login saat server mati.
 final offlineCredentialStoreProvider =
     Provider<OfflineCredentialStore>((ref) => OfflineCredentialStore());
+
+/// Antrean scan offline (individual).
+final offlineQueueStoreProvider =
+    Provider<OfflineQueueStore>((ref) => OfflineQueueStore());
+
+/// Antrean absen kelas offline.
+final classAttendanceQueueStoreProvider =
+    Provider<ClassAttendanceQueueStore>((ref) => ClassAttendanceQueueStore());
 
 /// Instance Dio terkonfigurasi (base URL, header, Bearer interceptor, +
 /// pelaporan status backend ke [backendStatusProvider] tiap request).
@@ -77,5 +88,15 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     tokenStorage: ref.watch(tokenStorageProvider),
     userCache: ref.watch(userCacheStoreProvider),
     offlineCredentials: ref.watch(offlineCredentialStoreProvider),
+  );
+});
+
+/// Service heartbeat untuk monitoring device di dashboard admin.
+final heartbeatServiceProvider = Provider<HeartbeatService>((ref) {
+  return HeartbeatService(
+    dio: ref.watch(dioProvider),
+    tokenStorage: ref.watch(tokenStorageProvider),
+    offlineQueueStore: ref.watch(offlineQueueStoreProvider),
+    classQueueStore: ref.watch(classAttendanceQueueStoreProvider),
   );
 });

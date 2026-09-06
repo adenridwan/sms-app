@@ -101,6 +101,7 @@ class MenuRegistry
             [
                 'key' => 'reports', 'title' => 'Laporan', 'permission' => 'reports.view',
                 'children' => [
+                    ['key' => 'reports.expense', 'title' => 'Pengeluaran', 'permission' => 'finance.report'],
                     ['key' => 'reports.report-cards', 'title' => 'Rapor', 'permission' => null],
                     ['key' => 'reports.generate', 'title' => 'Generate Laporan', 'permission' => null],
                 ],
@@ -114,6 +115,7 @@ class MenuRegistry
                     ['key' => 'settings.menu', 'title' => 'Pengaturan Menu', 'permission' => 'settings.manage', 'protected' => true],
                     ['key' => 'settings.users', 'title' => 'Pengguna', 'permission' => null, 'super_admin_only' => true],
                     ['key' => 'settings.login-security', 'title' => 'Keamanan Login', 'permission' => 'settings.manage'],
+                    ['key' => 'settings.devices', 'title' => 'Monitor Device', 'permission' => 'settings.manage'],
                     ['key' => 'settings.backups', 'title' => 'Backup Database', 'permission' => null, 'super_admin_only' => true],
                 ],
             ],

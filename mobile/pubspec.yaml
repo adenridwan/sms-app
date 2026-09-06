@@ -57,6 +57,12 @@ dependencies:
   # Deep linking untuk QR provisioning (smsapp://provision?token=xxx)
   app_links: ^6.3.2
 
+  # Heartbeat service — info device untuk monitoring
+  device_info_plus: ^10.1.0
+  package_info_plus: ^8.0.0
+  connectivity_plus: ^6.0.3
+  network_info_plus: ^5.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -67,6 +73,35 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^4.0.0
+
+  # Pembangkit ikon peluncur dari satu berkas sumber.
+  flutter_launcher_icons: ^0.14.1
+
+# Ikon peluncur SMS-APP. Regenerasi setelah mengubah berkas di assets/branding:
+#   flutter pub run flutter_launcher_icons
+#
+# `image_path` dipakai untuk ikon legacy (Android < 8, iOS, web) — logo penuh
+# tepi ke tepi. Android 8+ memakai adaptive icon: sistem memotong bentuknya
+# (bulat/squircle) sesuai peluncur, jadi `..._foreground` adalah logo yang sudah
+# diperkecil supaya jatuh di dalam *safe zone*. Perhitungannya: paket ini
+# membungkus foreground dengan inset 16% (menyisakan 68% kanvas), sedangkan safe
+# zone adaptive icon 66/108 = 61%; berkasnya karena itu digambar pada skala
+# 0,61/0,68 = 0,90 (lihat catatan di assets/branding).
+# Warna latar disamakan dengan warna dasar logo agar sambungannya tak terlihat.
+flutter_launcher_icons:
+  image_path: assets/branding/logo.png
+  android: true
+  min_sdk_android: 21
+  adaptive_icon_background: "#292929"
+  adaptive_icon_foreground: assets/branding/logo_foreground.png
+  ios: true
+  # iOS menolak ikon bertransparansi; ratakan ke warna dasar logo.
+  remove_alpha_ios: true
+  background_color_ios: "#292929"
+  web:
+    generate: true
+    background_color: "#292929"
+    theme_color: "#292929"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

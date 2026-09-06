@@ -5,13 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, GraduationCap, Loader2 } from 'lucide-react';
 import { authApi } from '@/services/api';
 
 export default function Login() {
-    const [data, setData] = useState({ email: '', password: '', remember: false });
+    const [data, setData] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [processing, setProcessing] = useState(false);
@@ -107,17 +106,6 @@ export default function Login() {
                                 {errors.password && (
                                     <p className="text-sm text-destructive">{errors.password}</p>
                                 )}
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id="remember"
-                                    checked={data.remember}
-                                    onCheckedChange={(checked) => setData({ ...data, remember: checked as boolean })}
-                                />
-                                <Label htmlFor="remember" className="text-sm font-normal">
-                                    Ingat saya
-                                </Label>
                             </div>
                         </CardContent>
 

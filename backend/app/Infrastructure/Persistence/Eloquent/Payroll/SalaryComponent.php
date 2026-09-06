@@ -7,6 +7,7 @@ use App\Infrastructure\Persistence\Eloquent\Concerns\HasUuid;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -24,6 +25,7 @@ class SalaryComponent extends Model
         'calculation_type',
         'default_value',
         'percentage_of',
+        'percentage_component_id',
         'formula',
         'is_taxable',
         'is_mandatory',
@@ -40,6 +42,19 @@ class SalaryComponent extends Model
             'is_mandatory' => 'boolean',
             'is_active' => 'boolean',
             'order' => 'integer',
+            'formula' => 'array', // JSON formula untuk GUI builder
+        ];
+    }
+
+    // Constants for percentage references
+    public const PERCENTAGE_BASE_SALARY = 'base_salary';
+    public const PERCENTAGE_GROSS_SALARY = 'gross_salary';
+
+    public static function getPercentageReferences(): array
+    {
+        return [
+            self::PERCENTAGE_BASE_SALARY => 'Gaji Pokok',
+            self::PERCENTAGE_GROSS_SALARY => 'Gaji Kotor (Total Pendapatan)',
         ];
     }
 
@@ -78,6 +93,22 @@ class SalaryComponent extends Model
     public function employeeSalaryComponents(): HasMany
     {
         return $this->hasMany(EmployeeSalaryComponent::class, 'salary_component_id');
+    }
+
+    /**
+     * Komponen yang direferensikan untuk perhitungan persentase.
+     */
+    public function percentageComponent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'percentage_component_id');
+    }
+
+    /**
+     * Komponen yang mereferensikan komponen ini untuk persentase.
+     */
+    public function referencedByComponents(): HasMany
+    {
+        return $this->hasMany(self::class, 'percentage_component_id');
     }
 
     // Scopes

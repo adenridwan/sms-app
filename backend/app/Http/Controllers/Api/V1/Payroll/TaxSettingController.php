@@ -53,6 +53,11 @@ class TaxSettingController extends ApiController
 
         $data['tenant_id'] = auth()->user()->tenant_id;
 
+        // Default effective_from ke 1 Januari tahun efektif jika tidak diisi
+        if (empty($data['effective_from'])) {
+            $data['effective_from'] = $data['effective_year'] . '-01-01';
+        }
+
         // Check for duplicate key in the same year
         $exists = TaxSetting::where('setting_key', $data['setting_key'])
             ->where('effective_year', $data['effective_year'])

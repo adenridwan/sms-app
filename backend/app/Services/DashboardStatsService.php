@@ -9,6 +9,7 @@ use App\Infrastructure\Persistence\Eloquent\Attendance\StudentAttendance;
 use App\Infrastructure\Persistence\Eloquent\Auth\User;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -42,7 +43,13 @@ class DashboardStatsService
 
     public function resolvePackage(User $user): string
     {
-        $roles = $user->getRoleNames();
+        // OPTIMIZED: Gunakan relasi yang sudah di-load jika ada
+        // Hindari getRoleNames() yang trigger query
+        if ($user->relationLoaded('roles')) {
+            $roles = $user->roles->pluck('name');
+        } else {
+            $roles = $user->getRoleNames();
+        }
 
         foreach (self::ROLE_PACKAGE as $role => $package) {
             if ($roles->contains($role)) {
@@ -78,20 +85,60 @@ class DashboardStatsService
 
     private function schoolStats(bool $withFinance): array
     {
+        $tenantId = tenant()?->id ?? 'global';
+
+        // OPTIMIZED: Cache stats dasar selama 5 menit
+        // Dashboard tidak perlu real-time, cukup near-real-time
+        $basicStats = Cache::remember(
+            "dashboard:school_stats:{$tenantId}",
+            now()->addMinutes(5),
+            fn () => $this->getSchoolBasicStats()
+        );
+
         $stats = [
-            'total_students' => Student::where('status', 'active')->count(),
-            'total_teachers' => Teacher::where('status', 'active')->count(),
-            'total_staff' => DB::table('staff')->whereNull('deleted_at')->where('status', 'active')->count(),
-            'total_classrooms' => Classroom::where('is_active', true)->count(),
-            'active_academic_year' => AcademicYear::where('is_active', true)->value('name'),
+            'total_students' => $basicStats['total_students'],
+            'total_teachers' => $basicStats['total_teachers'],
+            'total_staff' => $basicStats['total_staff'],
+            'total_classrooms' => $basicStats['total_classrooms'],
+            'active_academic_year' => $basicStats['active_academic_year'],
+            // Attendance today tidak di-cache karena berubah sepanjang hari
             'attendance_today' => $this->attendanceToday(),
         ];
 
         if ($withFinance) {
-            $stats['finance_summary'] = $this->financeSummary();
+            // Finance summary di-cache terpisah
+            $stats['finance_summary'] = Cache::remember(
+                "dashboard:finance_summary:{$tenantId}",
+                now()->addMinutes(5),
+                fn () => $this->financeSummary()
+            );
         }
 
         return $stats;
+    }
+
+    /**
+     * OPTIMIZED: Gabung semua count query menjadi 1 query dengan subquery
+     * Mengurangi 5 query terpisah menjadi 1 query
+     */
+    private function getSchoolBasicStats(): array
+    {
+        // Gunakan 1 query dengan subquery untuk semua count
+        $counts = DB::selectOne("
+            SELECT
+                (SELECT COUNT(*) FROM students WHERE status = 'active' AND deleted_at IS NULL) as total_students,
+                (SELECT COUNT(*) FROM teachers WHERE status = 'active' AND deleted_at IS NULL) as total_teachers,
+                (SELECT COUNT(*) FROM staff WHERE status = 'active' AND deleted_at IS NULL) as total_staff,
+                (SELECT COUNT(*) FROM classrooms WHERE is_active = true AND deleted_at IS NULL) as total_classrooms
+        ");
+
+        return [
+            'total_students' => (int) $counts->total_students,
+            'total_teachers' => (int) $counts->total_teachers,
+            'total_staff' => (int) $counts->total_staff,
+            'total_classrooms' => (int) $counts->total_classrooms,
+            'active_academic_year' => AcademicYear::where('is_active', true)->value('name'),
+        ];
     }
 
     private function financeStats(): array
@@ -359,5 +406,18 @@ class DashboardStatsService
             'total_collected' => (float) $totals->collected,
             'total_outstanding' => (float) $totals->outstanding,
         ];
+    }
+
+    // ---------- cache management ----------
+
+    /**
+     * Clear dashboard cache untuk tenant tertentu.
+     * Panggil ini saat data berubah (student/teacher/staff/classroom ditambah/dihapus).
+     */
+    public static function clearCache(?string $tenantId = null): void
+    {
+        $key = $tenantId ?? tenant()?->id ?? 'global';
+        Cache::forget("dashboard:school_stats:{$key}");
+        Cache::forget("dashboard:finance_summary:{$key}");
     }
 }

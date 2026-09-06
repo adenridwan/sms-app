@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/backend_status.dart';
 import '../../../core/providers.dart';
+import '../../../core/services/heartbeat_service.dart';
 import '../data/auth_repository.dart';
 import '../models/user.dart';
 
@@ -45,11 +47,12 @@ class AuthState {
 }
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repo) : super(const AuthState()) {
+  AuthController(this._repo, this._heartbeat) : super(const AuthState()) {
     _bootstrap();
   }
 
   final AuthRepository _repo;
+  final HeartbeatService _heartbeat;
 
   /// Dipanggil sekali saat start: tentukan sesi dari token tersimpan.
   ///
@@ -66,6 +69,7 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final user = await _repo.me();
       state = AuthState(status: AuthStatus.authenticated, user: user);
+      _heartbeat.start(); // Mulai heartbeat setelah sesi diverifikasi
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
         await _repo.clearToken();
@@ -109,6 +113,7 @@ class AuthController extends StateNotifier<AuthState> {
         _pendingEmail = null;
         _pendingPassword = null;
         state = AuthState(status: AuthStatus.authenticated, user: user);
+        _heartbeat.start(); // Mulai heartbeat setelah sesi offline diverifikasi
       } on ApiException {
         // Masih gagal (jaringan belum stabil / password sudah diubah di server)
         // — biarkan sesi offline berjalan, dicoba lagi saat status online
@@ -120,6 +125,7 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final user = await _repo.me();
       state = AuthState(status: AuthStatus.authenticated, user: user);
+      _heartbeat.start(); // Mulai heartbeat setelah sesi direvalidasi
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
         await _repo.clearToken();
@@ -176,6 +182,7 @@ class AuthController extends StateNotifier<AuthState> {
       _pendingPassword = null;
       _pendingEmail = null;
       state = AuthState(status: AuthStatus.authenticated, user: user);
+      _heartbeat.start(); // Mulai heartbeat setelah login online berhasil
     } on ApiException catch (e) {
       if (e.isNetwork) {
         await _loginOffline(email: email, password: password);
@@ -266,14 +273,26 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _signIn(Future<User> Function() authenticate) async {
     state = const AuthState(status: AuthStatus.authenticating);
     try {
+      debugPrint('[Auth] _signIn: calling authenticate...');
       await authenticate();
+      debugPrint('[Auth] _signIn: authenticate success, calling me()...');
       final user = await _repo.me();
+      debugPrint('[Auth] _signIn: me() success, user: ${user.email}');
 
-      if (await _rejectIfNotStaff(user)) return;
+      if (await _rejectIfNotStaff(user)) {
+        debugPrint('[Auth] _signIn: rejected - not staff');
+        return;
+      }
 
       state = AuthState(status: AuthStatus.authenticated, user: user);
+      debugPrint('[Auth] _signIn: state set to authenticated');
+      _heartbeat.start(); // Mulai heartbeat setelah login OTP/provision
     } on ApiException catch (e) {
+      debugPrint('[Auth] _signIn: ApiException: ${e.message}');
       state = AuthState(status: AuthStatus.unauthenticated, error: e.message);
+    } catch (e) {
+      debugPrint('[Auth] _signIn: unexpected error: $e');
+      state = AuthState(status: AuthStatus.unauthenticated, error: e.toString());
     }
   }
 
@@ -283,6 +302,7 @@ class AuthController extends StateNotifier<AuthState> {
   /// keluar lalu masuk lagi saat server mati menjadi mustahil, yaitu persis
   /// keadaan yang harus ditangani aplikasi ini.
   Future<void> logout() async {
+    _heartbeat.stop(); // Hentikan heartbeat saat logout
     _pendingEmail = null;
     _pendingPassword = null;
     await _repo.logout();
@@ -291,6 +311,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Dibersihkan saat mendeteksi 401 di tempat lain.
   Future<void> forceLogout() async {
+    _heartbeat.stop(); // Hentikan heartbeat saat force logout
     await _repo.clearToken();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
@@ -298,7 +319,10 @@ class AuthController extends StateNotifier<AuthState> {
 
 final authControllerProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {
-  final controller = AuthController(ref.watch(authRepositoryProvider));
+  final controller = AuthController(
+    ref.watch(authRepositoryProvider),
+    ref.watch(heartbeatServiceProvider),
+  );
 
   // Backend baru terjangkau lagi → coba sinkronkan ulang sesi yang tadinya
   // dipulihkan dari cache (lihat AuthController._bootstrap/revalidateSession).
