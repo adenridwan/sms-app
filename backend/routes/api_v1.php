@@ -247,16 +247,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         Route::middleware('permission:settings.attendance')->group(function () {
             Route::get('qr/teachers/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkTeachers'])->name('qr.teachers.bulk');
+            Route::get('qr/staff/bulk', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'bulkStaff'])->name('qr.staff.bulk');
         });
 
         Route::get('qr/students/{student}', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'student'])->name('qr.student');
         Route::get('qr/teachers/{teacher}', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'teacher'])->name('qr.teacher');
 
         Route::middleware('permission:settings.attendance')->group(function () {
+            Route::get('qr/staff/{staff}', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'staff'])->name('qr.staff');
+        });
+
+        Route::middleware('permission:settings.attendance')->group(function () {
             Route::post('qr/students/{student}/regenerate', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'regenerateStudent'])->name('qr.student.regenerate');
             Route::get('qr/students/{student}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadStudent'])->name('qr.student.download');
             Route::post('qr/teachers/{teacher}/regenerate', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'regenerateTeacher'])->name('qr.teacher.regenerate');
             Route::get('qr/teachers/{teacher}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadTeacher'])->name('qr.teacher.download');
+            Route::post('qr/staff/{staff}/regenerate', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'regenerateStaff'])->name('qr.staff.regenerate');
+            Route::get('qr/staff/{staff}/download', [\App\Http\Controllers\Api\V1\Attendance\QrCodeController::class, 'downloadStaff'])->name('qr.staff.download');
 
             // Export QR/RFID untuk pembuatan kartu (Excel / ZIP gambar / PDF)
             Route::get('qr/export', [\App\Http\Controllers\Api\V1\Attendance\QrExportController::class, 'export'])->name('qr.export');

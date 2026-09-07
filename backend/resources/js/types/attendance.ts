@@ -284,12 +284,19 @@ export interface ScannerBootstrap {
 export interface QrCodeData {
     student_id?: string;
     teacher_id?: string;
+    staff_id?: string;
     nis?: string;
     nip?: string;
+    /** NIP/nomor induk pegawai staf (staff.employee_id) */
+    employee_id?: string;
     name: string;
     /** Nama kelas siswa (untuk kartu cetak) */
     classroom?: string | null;
-    /** Label status kepegawaian guru: Tetap/Kontrak/Honorer/Paruh Waktu */
+    /** Nama jabatan staf — mengisi baris bawah kartu, sejajar `classroom` */
+    position?: string | null;
+    /** Nama unit/bagian staf */
+    department?: string | null;
+    /** Label status kepegawaian guru/staf: Tetap/Kontrak/Honorer/Paruh Waktu */
     employment_status_label?: string | null;
     /** URL foto profil (users.avatar); null bila belum diunggah */
     photo_url?: string | null;

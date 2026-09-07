@@ -2,6 +2,7 @@
 
 namespace App\Domain\Attendance\Services;
 
+use App\Infrastructure\Persistence\Eloquent\Staff\Staff;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
 use Illuminate\Support\Str;
@@ -39,6 +40,23 @@ class QrCodeGeneratorService
         }
 
         $teacher->update(['unique_code' => $code]);
+
+        return $code;
+    }
+
+    /**
+     * Generate a new unique code for a staff member
+     */
+    public function generateStaffCode(Staff $staff): string
+    {
+        $code = 'STF-' . strtoupper(Str::random(12));
+
+        // Ensure uniqueness
+        while (Staff::where('unique_code', $code)->exists()) {
+            $code = 'STF-' . strtoupper(Str::random(12));
+        }
+
+        $staff->update(['unique_code' => $code]);
 
         return $code;
     }
@@ -109,6 +127,20 @@ class QrCodeGeneratorService
     }
 
     /**
+     * Generate QR code image for a staff member
+     */
+    public function generateStaffQrCode(Staff $staff, int $size = 300): string
+    {
+        $code = $staff->unique_code;
+
+        if (empty($code)) {
+            $code = $this->generateStaffCode($staff);
+        }
+
+        return $this->generateQrImage($code, $size);
+    }
+
+    /**
      * Generate QR code SVG string
      */
     public function generateQrSvg(string $code, int $size = 300): string
@@ -165,15 +197,28 @@ class QrCodeGeneratorService
     {
         $results = [];
 
+        // `user.profile` WAJIB ikut: `name` di bawah membaca `full_name`, yang
+        // dirakit dari `user_profiles` — tanpa ini setiap kartu memicu query
+        // profil sendiri-sendiri (N+1), dan begitu pemanggilnya mengambil model
+        // lewat koleksi (`->get()`) Eloquent strict mode melemparnya sebagai
+        // LazyLoadingViolationException. Lihat bug tab "Guru" pada bulkTeachers().
+        $students = Student::with('user.profile')
+            ->whereIn('id', $studentIds)
+            ->get()
+            ->keyBy('id');
+
         foreach ($studentIds as $studentId) {
-            $student = Student::with('user')->find($studentId);
+            $student = $students->get($studentId);
             if (!$student) {
                 continue;
             }
 
+            // Tanpa refresh(): generateStudentCode() sudah menulis kode baru ke
+            // instance ini lewat update(). refresh() justru memuat ulang relasi
+            // yang sudah ter-eager-load secara dangkal (hanya `user`, tanpa
+            // `user.profile`) sehingga `full_name` di bawah balik lazy-load.
             if (empty($student->unique_code)) {
                 $this->generateStudentCode($student);
-                $student->refresh();
             }
 
             $results[] = [
@@ -211,6 +256,21 @@ class QrCodeGeneratorService
     {
         $oldCode = $teacher->unique_code;
         $newCode = $this->generateTeacherCode($teacher);
+
+        return [
+            'old_code' => $oldCode,
+            'new_code' => $newCode,
+            'qr_code' => $this->generateQrImage($newCode, $size),
+        ];
+    }
+
+    /**
+     * Regenerate QR code for a staff member (generates new unique_code)
+     */
+    public function regenerateStaffQrCode(Staff $staff, int $size = 300): array
+    {
+        $oldCode = $staff->unique_code;
+        $newCode = $this->generateStaffCode($staff);
 
         return [
             'old_code' => $oldCode,

@@ -201,6 +201,18 @@ export const qrCodeApi = {
     downloadTeacher: (id: string, size?: number) =>
         api.get<ApiResponse<QrCodeData>>(`/attendance/qr/teachers/${id}/download`, { params: { size } }),
 
+    staff: (id: string) =>
+        api.get<ApiResponse<QrCodeData>>(`/attendance/qr/staff/${id}`),
+
+    regenerateStaff: (id: string) =>
+        api.post<ApiResponse<{ old_code: string; new_code: string; qr_code: string }>>(`/attendance/qr/staff/${id}/regenerate`),
+
+    bulkStaff: (size?: number) =>
+        api.get<ApiResponse<{ count: number; staff: QrCodeData[] }>>('/attendance/qr/staff/bulk', { params: { size } }),
+
+    downloadStaff: (id: string, size?: number) =>
+        api.get<ApiResponse<QrCodeData>>(`/attendance/qr/staff/${id}/download`, { params: { size } }),
+
     // Export QR/RFID untuk pembuatan kartu (Excel / ZIP gambar / PDF)
     export: (params: {
         type: 'student' | 'teacher';

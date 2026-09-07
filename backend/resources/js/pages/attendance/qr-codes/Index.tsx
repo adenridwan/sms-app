@@ -1,6 +1,6 @@
 import { Head, usePage } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
-import { printAttendanceCardsWithTemplate } from '@/lib/attendanceCardPrint';
+import { printAttendanceCards, printAttendanceCardsWithTemplate } from '@/lib/attendanceCardPrint';
 import type { PageProps } from '@/types';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Download, RefreshCw, Printer, QrCode, Users, GraduationCap, FileDown, FileSpreadsheet, FileArchive, FileText } from 'lucide-react';
+import { Download, RefreshCw, Printer, QrCode, Users, GraduationCap, Briefcase, FileDown, FileSpreadsheet, FileArchive, FileText } from 'lucide-react';
 import { qrCodeApi } from '@/services/attendance';
 import type { QrCodeData } from '@/types/attendance';
 import type { ClassRoom } from '@/types';
@@ -45,6 +45,7 @@ export default function QrCodeIndex({ classrooms }: Props) {
     const [classroomId, setClassroomId] = useState('');
     const [studentQrCodes, setStudentQrCodes] = useState<QrCodeData[]>([]);
     const [teacherQrCodes, setTeacherQrCodes] = useState<QrCodeData[]>([]);
+    const [staffQrCodes, setStaffQrCodes] = useState<QrCodeData[]>([]);
     const [loading, setLoading] = useState(false);
     const [regenerating, setRegenerating] = useState<string | null>(null);
     const [selectedQr, setSelectedQr] = useState<QrCodeData | null>(null);
@@ -143,11 +144,27 @@ export default function QrCodeIndex({ classrooms }: Props) {
         }
     };
 
+    const fetchStaffQrCodes = async () => {
+        setLoading(true);
+        try {
+            const response = await qrCodeApi.bulkStaff();
+            if (response.data.data) {
+                setStaffQrCodes(response.data.data.staff);
+            }
+        } catch (error) {
+            toast.error('Gagal memuat QR Code staf');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'students' && classroomId) {
             fetchStudentQrCodes();
         } else if (activeTab === 'teachers') {
             fetchTeacherQrCodes();
+        } else if (activeTab === 'staff') {
+            fetchStaffQrCodes();
         }
     }, [activeTab, classroomId]);
 
@@ -170,6 +187,19 @@ export default function QrCodeIndex({ classrooms }: Props) {
             await qrCodeApi.regenerateTeacher(teacherId);
             toast.success('QR Code berhasil diperbarui');
             fetchTeacherQrCodes();
+        } catch (error) {
+            toast.error('Gagal regenerate QR Code');
+        } finally {
+            setRegenerating(null);
+        }
+    };
+
+    const handleRegenerateStaff = async (staffId: string) => {
+        setRegenerating(staffId);
+        try {
+            await qrCodeApi.regenerateStaff(staffId);
+            toast.success('QR Code berhasil diperbarui');
+            fetchStaffQrCodes();
         } catch (error) {
             toast.error('Gagal regenerate QR Code');
         } finally {
@@ -209,7 +239,7 @@ export default function QrCodeIndex({ classrooms }: Props) {
         });
 
     const handleDownload = async (qrCode: QrCodeData) => {
-        const base = `qr-${qrCode.nis || qrCode.nip || qrCode.name}`;
+        const base = `qr-${qrCode.nis || qrCode.nip || qrCode.employee_id || qrCode.name}`;
         const link = document.createElement('a');
 
         try {
@@ -231,23 +261,32 @@ export default function QrCodeIndex({ classrooms }: Props) {
     };
 
     const handlePrintAll = async () => {
-        const qrCodes = activeTab === 'students' ? studentQrCodes : teacherQrCodes;
-        const title = activeTab === 'students'
-            ? `Kartu Siswa - ${classrooms.find(c => c.id === classroomId)?.name || 'Kelas'}`
-            : 'Kartu Guru';
-
-        const opened = await printAttendanceCardsWithTemplate(activeTab === 'students' ? 'student' : 'teacher', qrCodes, {
-            title,
+        const options = {
+            title: activeTab === 'students'
+                ? `Kartu Siswa - ${classrooms.find(c => c.id === classroomId)?.name || 'Kelas'}`
+                : activeTab === 'teachers' ? 'Kartu Guru' : 'Kartu Staf',
             schoolName: tenant?.name,
             schoolLogo: tenant?.logo,
-        });
+        };
+
+        // Template Editor (card_templates.type) baru mengenal 'student' dan
+        // 'teacher' — kolomnya enum, jadi 'staff' belum bisa disimpan di sana.
+        // Kartu staf memakai layout fixed bawaan supaya tetap bisa dicetak,
+        // bukan menembak endpoint template yang pasti 404.
+        const opened = activeTab === 'staff'
+            ? printAttendanceCards(staffQrCodes, { ...options, layout: null })
+            : await printAttendanceCardsWithTemplate(
+                activeTab === 'students' ? 'student' : 'teacher',
+                activeTab === 'students' ? studentQrCodes : teacherQrCodes,
+                options,
+            );
 
         if (!opened) {
             toast.error('Gagal menyiapkan halaman cetak. Coba lagi.');
         }
     };
 
-    const QrCard = ({ qr, type }: { qr: QrCodeData; type: 'student' | 'teacher' }) => (
+    const QrCard = ({ qr, type }: { qr: QrCodeData; type: 'student' | 'teacher' | 'staff' }) => (
         <Card className="overflow-hidden">
             <CardContent className="p-4">
                 <div className="flex flex-col items-center">
@@ -264,8 +303,11 @@ export default function QrCodeIndex({ classrooms }: Props) {
                     <div className="mt-3 text-center">
                         <div className="font-medium">{qr.name}</div>
                         <div className="text-sm text-muted-foreground">
-                            {qr.nis || qr.nip || '-'}
+                            {qr.nis || qr.nip || qr.employee_id || '-'}
                         </div>
+                        {qr.position && (
+                            <div className="text-xs text-muted-foreground">{qr.position}</div>
+                        )}
                     </div>
                     <div className="mt-3 flex gap-2">
                         <Button
@@ -279,13 +321,14 @@ export default function QrCodeIndex({ classrooms }: Props) {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => type === 'student'
-                                    ? handleRegenerateStudent(qr.student_id!)
-                                    : handleRegenerateTeacher(qr.teacher_id!)
-                                }
-                                disabled={regenerating === (qr.student_id || qr.teacher_id)}
+                                onClick={() => {
+                                    if (type === 'student') return handleRegenerateStudent(qr.student_id!);
+                                    if (type === 'teacher') return handleRegenerateTeacher(qr.teacher_id!);
+                                    return handleRegenerateStaff(qr.staff_id!);
+                                }}
+                                disabled={regenerating === (qr.student_id || qr.teacher_id || qr.staff_id)}
                             >
-                                <RefreshCw className={`h-4 w-4 ${regenerating === (qr.student_id || qr.teacher_id) ? 'animate-spin' : ''}`} />
+                                <RefreshCw className={`h-4 w-4 ${regenerating === (qr.student_id || qr.teacher_id || qr.staff_id) ? 'animate-spin' : ''}`} />
                             </Button>
                         )}
                     </div>
@@ -304,7 +347,7 @@ export default function QrCodeIndex({ classrooms }: Props) {
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">QR Code</h1>
                         <p className="text-muted-foreground">
-                            Generate dan kelola QR Code untuk siswa dan guru
+                            Generate dan kelola QR Code untuk siswa, guru, dan staf
                         </p>
                     </div>
                 </div>
@@ -323,17 +366,27 @@ export default function QrCodeIndex({ classrooms }: Props) {
                                     Guru
                                 </TabsTrigger>
                             )}
+                            {canManageAll && (
+                                <TabsTrigger value="staff" className="gap-2">
+                                    <Briefcase className="h-4 w-4" />
+                                    Staf
+                                </TabsTrigger>
+                            )}
                         </TabsList>
 
                         <div className="flex gap-2">
-                            {canManageAll && (
+                            {/* Export QR/RFID backend baru menerima type student|teacher
+                                (QrExportController), jadi tombolnya disembunyikan di tab Staf
+                                daripada memunculkan tombol yang pasti gagal 422. */}
+                            {canManageAll && activeTab !== 'staff' && (
                                 <Button variant="outline" onClick={() => setExportOpen(true)}>
                                     <FileDown className="mr-2 h-4 w-4" />
                                     Export
                                 </Button>
                             )}
                             {((activeTab === 'students' && studentQrCodes.length > 0) ||
-                              (activeTab === 'teachers' && teacherQrCodes.length > 0)) && (
+                              (activeTab === 'teachers' && teacherQrCodes.length > 0) ||
+                              (activeTab === 'staff' && staffQrCodes.length > 0)) && (
                                 <Button onClick={handlePrintAll}>
                                     <Printer className="mr-2 h-4 w-4" />
                                     Cetak Semua
@@ -448,6 +501,53 @@ export default function QrCodeIndex({ classrooms }: Props) {
                             </div>
                         )}
                     </TabsContent>
+
+                    {/* Staff Tab — sumber datanya master data Staff (menu Data
+                        Staff), terpisah dari guru: pegawai non-pengajar seperti
+                        TU, keamanan, kebersihan. */}
+                    <TabsContent value="staff" className="space-y-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>QR Code Staf</CardTitle>
+                                <CardDescription>
+                                    {staffQrCodes.length} staf aktif terdaftar
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Button onClick={fetchStaffQrCodes} variant="outline" disabled={loading}>
+                                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                                    Refresh
+                                </Button>
+                            </CardContent>
+                        </Card>
+
+                        {loading ? (
+                            <Card>
+                                <CardContent className="py-16 text-center">
+                                    <RefreshCw className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+                                    <p className="mt-4 text-muted-foreground">Memuat...</p>
+                                </CardContent>
+                            </Card>
+                        ) : staffQrCodes.length === 0 ? (
+                            <Card>
+                                <CardContent className="py-16 text-center">
+                                    <Briefcase className="mx-auto h-12 w-12 text-muted-foreground" />
+                                    <p className="mt-4 text-muted-foreground">
+                                        Belum ada data staf aktif
+                                    </p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Tambahkan lewat menu Data Staff terlebih dahulu.
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                                {staffQrCodes.map((qr) => (
+                                    <QrCard key={qr.staff_id} qr={qr} type="staff" />
+                                ))}
+                            </div>
+                        )}
+                    </TabsContent>
                 </Tabs>
             </div>
 
@@ -457,7 +557,7 @@ export default function QrCodeIndex({ classrooms }: Props) {
                     <DialogHeader>
                         <DialogTitle>{selectedQr?.name}</DialogTitle>
                         <DialogDescription>
-                            {selectedQr?.nis || selectedQr?.nip || 'QR Code'}
+                            {selectedQr?.nis || selectedQr?.nip || selectedQr?.employee_id || 'QR Code'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex flex-col items-center py-4">

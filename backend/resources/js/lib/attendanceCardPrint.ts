@@ -145,8 +145,8 @@ function buildFixedCard(
     options: CardPrintOptions,
     esc: (value: string | null | undefined) => string
 ): string {
-    const idNumber = person.nis ?? person.nip ?? '';
-    const subLine = person.classroom ?? person.employment_status_label ?? '';
+    const idNumber = person.nis ?? person.nip ?? person.employee_id ?? '';
+    const subLine = person.classroom ?? person.position ?? person.employment_status_label ?? '';
     const logoHtml = options.schoolLogo
         ? `<img class="card-logo" src="${esc(options.schoolLogo)}" alt="" />`
         : '';
@@ -211,8 +211,8 @@ function buildCustomCard(person: QrCodeData, options: CardPrintOptions, layout: 
     const esc = (value: string | null | undefined): string =>
         (value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-    const idNumber = person.nis ?? person.nip ?? '';
-    const subLine = person.classroom ?? person.employment_status_label ?? '';
+    const idNumber = person.nis ?? person.nip ?? person.employee_id ?? '';
+    const subLine = person.classroom ?? person.position ?? person.employment_status_label ?? '';
 
     const positioned = (key: CardElementKey, inner: string, extraStyle = ''): string => {
         const el = layout.elements[key];
