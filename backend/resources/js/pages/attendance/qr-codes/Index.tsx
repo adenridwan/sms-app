@@ -177,10 +177,54 @@ export default function QrCodeIndex({ classrooms }: Props) {
         }
     };
 
-    const handleDownload = (qrCode: QrCodeData) => {
+    /**
+     * QR dari server berupa **SVG** (`data:image/svg+xml;base64,...`) meskipun
+     * field-nya bernama `qr_code` dan method pembuatnya bernama
+     * `generateQrImage`. Menyimpannya apa adanya dengan ekstensi `.png`
+     * menghasilkan berkas berisi SVG — Windows Photos menolaknya dengan
+     * "we don't support this file format". Jadi digambar dulu ke canvas, lalu
+     * diekspor sebagai PNG sungguhan supaya isinya cocok dengan namanya.
+     */
+    const svgDataUriToPng = (dataUri: string, size = 600): Promise<string> =>
+        new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    reject(new Error('Canvas tidak tersedia'));
+                    return;
+                }
+                // Latar putih eksplisit: PNG transparan sulit dipindai kalau
+                // tercetak di atas kertas berwarna atau ditempel di layar gelap.
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, size, size);
+                ctx.drawImage(img, 0, 0, size, size);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => reject(new Error('QR tidak bisa dimuat'));
+            img.src = dataUri;
+        });
+
+    const handleDownload = async (qrCode: QrCodeData) => {
+        const base = `qr-${qrCode.nis || qrCode.nip || qrCode.name}`;
         const link = document.createElement('a');
-        link.href = qrCode.qr_code;
-        link.download = `qr-${qrCode.nis || qrCode.nip || qrCode.name}.png`;
+
+        try {
+            link.href = await svgDataUriToPng(qrCode.qr_code);
+            link.download = `${base}.png`;
+        } catch {
+            // Konversi gagal — simpan SVG aslinya dengan ekstensi yang benar,
+            // jangan berkas .png yang tak bisa dibuka siapa pun.
+            link.href = qrCode.qr_code;
+            link.download = `${base}.svg`;
+            toast.message('QR diunduh sebagai SVG', {
+                description: 'Konversi ke PNG gagal di peramban ini.',
+            });
+        }
+
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

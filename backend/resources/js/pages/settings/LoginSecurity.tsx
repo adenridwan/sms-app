@@ -7,9 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { RefreshCw, KeyRound, ShieldOff, Copy, QrCode, Download, Smartphone } from 'lucide-react';
-import { loginSecurityApi, usersApi, provisionApi, type LoginLogEntry, type ProvisionTokenResponse } from '@/services/api';
+import {
+    loginSecurityApi,
+    provisionApi,
+    type LoginLogEntry,
+    type LoginSecurityUser,
+    type ProvisionTokenResponse,
+} from '@/services/api';
 import { QRCodeSVG } from 'qrcode.react';
-import type { User } from '@/types';
 
 const formatDateTime = (value: string) =>
     new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
@@ -34,7 +39,7 @@ export default function LoginSecurity() {
     const [emailFilter, setEmailFilter] = useState('');
 
     const [userQuery, setUserQuery] = useState('');
-    const [users, setUsers] = useState<User[]>([]);
+    const [users, setUsers] = useState<LoginSecurityUser[]>([]);
     const [searching, setSearching] = useState(false);
     const [issuedCode, setIssuedCode] = useState<{ code: string; name: string; minutes: number } | null>(null);
 
@@ -62,7 +67,7 @@ export default function LoginSecurity() {
         if (!userQuery.trim()) return;
         setSearching(true);
         try {
-            const res = await usersApi.list({ search: userQuery.trim(), per_page: 10 });
+            const res = await loginSecurityApi.users(userQuery.trim());
             setUsers(res.data.data?.data ?? []);
         } catch {
             toast.error('Gagal mencari pengguna');
@@ -71,7 +76,7 @@ export default function LoginSecurity() {
         }
     };
 
-    const generateOtp = async (user: User) => {
+    const generateOtp = async (user: LoginSecurityUser) => {
         try {
             const res = await loginSecurityApi.generateOtp(user.id);
             const data = res.data.data;
@@ -83,7 +88,7 @@ export default function LoginSecurity() {
         }
     };
 
-    const revokeSessions = async (user: User) => {
+    const revokeSessions = async (user: LoginSecurityUser) => {
         if (!confirm(`Cabut semua sesi perangkat milik ${user.full_name}? Semua perangkatnya akan ter-logout.`)) {
             return;
         }
@@ -95,7 +100,7 @@ export default function LoginSecurity() {
         }
     };
 
-    const generateProvisionQr = async (user: User) => {
+    const generateProvisionQr = async (user: LoginSecurityUser) => {
         setGeneratingQr(user.id);
         try {
             const res = await provisionApi.generate(user.id);

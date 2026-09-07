@@ -20,6 +20,53 @@ class LoginSecurityController extends ApiController
         protected OtpService $otp,
     ) {}
 
+    /**
+     * GET /admin/login-security/users?search=
+     *
+     * Pencarian user seadanya untuk halaman ini saja. Sengaja tidak memakai
+     * /admin/users: endpoint itu khusus super admin dan mengembalikan seluruh
+     * profil, sedangkan admin di sini hanya perlu memilih siapa yang diberi
+     * kode akses atau dicabut sesinya.
+     */
+    public function users(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->input('search', ''));
+
+        if (mb_strlen($search) < 2) {
+            return $this->success(['data' => []]);
+        }
+
+        $term = '%' . $search . '%';
+
+        // Query lewat kelas dasar, BUKAN App\Models\User: relasi role bersifat
+        // polymorphic dan model_has_roles.model_type menyimpan nama kelas dasar,
+        // sehingga subclass selalu mengembalikan roles kosong.
+        $users = \App\Infrastructure\Persistence\Eloquent\Auth\User::query()
+            ->with(['roles:id,name', 'profile'])
+            ->leftJoin('user_profiles as up', 'users.id', '=', 'up.user_id')
+            ->where(function ($q) use ($term) {
+                $q->where('users.username', 'ilike', $term)
+                    ->orWhere('users.email', 'ilike', $term)
+                    ->orWhere('up.first_name', 'ilike', $term)
+                    ->orWhere('up.last_name', 'ilike', $term)
+                    ->orWhereRaw("concat(up.first_name, ' ', up.last_name) ilike ?", [$term]);
+            })
+            ->select('users.*')
+            ->orderBy('users.username')
+            ->limit((int) min($request->input('per_page', 10), 25))
+            ->get()
+            ->map(fn ($user) => [
+                'id' => $user->id,
+                'full_name' => $user->full_name,
+                'username' => $user->username,
+                'email' => $user->email,
+                'status' => $user->status,
+                'roles' => $user->roles->pluck('name')->all(),
+            ]);
+
+        return $this->success(['data' => $users]);
+    }
+
     /** GET /admin/login-security/logs */
     public function logs(Request $request): JsonResponse
     {

@@ -1430,7 +1430,25 @@ export interface LoginLogEntry {
     user?: { id: string; full_name: string; email: string } | null;
 }
 
+export interface LoginSecurityUser {
+    id: string;
+    full_name: string;
+    username: string;
+    email: string;
+    status: string;
+    roles: string[];
+}
+
 export const loginSecurityApi = {
+    /**
+     * Pencarian user khusus halaman Keamanan Login. Endpoint /admin/users
+     * hanya untuk super admin, jadi admin sekolah memakai yang ini.
+     */
+    users: (search: string, perPage = 10) =>
+        api.get<ApiResponse<{ data: LoginSecurityUser[] }>>('/admin/login-security/users', {
+            params: { search, per_page: perPage },
+        }),
+
     logs: (params?: Record<string, unknown>) =>
         api.get<ApiResponse<PaginatedResponse<LoginLogEntry>>>('/admin/login-security/logs', { params }),
 

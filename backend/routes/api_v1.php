@@ -589,6 +589,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Keamanan Login: riwayat login, kode akses sekali-pakai, cabut sesi.
         Route::prefix('login-security')->name('login-security.')->group(function () {
             Route::get('logs', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'logs'])->name('logs');
+            Route::get('users', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'users'])->name('users');
             Route::post('users/{user}/otp', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'generateOtp'])->name('otp.generate');
             Route::delete('users/{user}/otp', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'revokeOtp'])->name('otp.revoke');
             Route::post('users/{user}/revoke-sessions', [\App\Http\Controllers\Api\V1\Admin\LoginSecurityController::class, 'revokeSessions'])->name('sessions.revoke');
