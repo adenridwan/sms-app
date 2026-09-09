@@ -35,6 +35,7 @@ class FeeTypeResource extends JsonResource
     {
         return match ($this->frequency) {
             'once' => 'Sekali',
+            'weekly' => 'Mingguan',
             'monthly' => 'Bulanan',
             'semester' => 'Per Semester',
             'yearly' => 'Tahunan',

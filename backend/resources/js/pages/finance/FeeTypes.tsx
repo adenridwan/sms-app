@@ -48,6 +48,7 @@ import type { FeeType, PaginationMeta } from '@/types';
 
 const FREQUENCIES = [
     { value: 'once', label: 'Sekali' },
+    { value: 'weekly', label: 'Mingguan' },
     { value: 'monthly', label: 'Bulanan' },
     { value: 'semester', label: 'Per Semester' },
     { value: 'yearly', label: 'Tahunan' },
@@ -190,15 +191,15 @@ export default function FeeTypes() {
         <MainLayout title="Jenis Biaya">
             <Head title="Keuangan - Jenis Biaya" />
 
-            <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Jenis Biaya</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Jenis Biaya</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground">
                             Kelola jenis-jenis biaya sekolah (SPP, uang gedung, dll)
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
+                    <Button onClick={openCreate} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Tambah Jenis Biaya
                     </Button>
@@ -237,45 +238,45 @@ export default function FeeTypes() {
                                 Tidak ada data jenis biaya
                             </div>
                         ) : (
-                            <div className="rounded-md border">
-                                <Table>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table className="min-w-[600px]">
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-[100px]">Kode</TableHead>
-                                            <TableHead>Nama</TableHead>
-                                            <TableHead className="w-[120px]">Frekuensi</TableHead>
-                                            <TableHead className="w-[100px]">Wajib</TableHead>
-                                            <TableHead className="w-[100px]">Status</TableHead>
-                                            <TableHead className="w-[100px]">Aksi</TableHead>
+                                            <TableHead className="w-[80px] sm:w-[100px] whitespace-nowrap">Kode</TableHead>
+                                            <TableHead className="whitespace-nowrap">Nama</TableHead>
+                                            <TableHead className="w-[100px] sm:w-[120px] whitespace-nowrap hidden sm:table-cell">Frekuensi</TableHead>
+                                            <TableHead className="w-[80px] sm:w-[100px] whitespace-nowrap hidden md:table-cell">Wajib</TableHead>
+                                            <TableHead className="w-[80px] sm:w-[100px] whitespace-nowrap">Status</TableHead>
+                                            <TableHead className="w-[80px] sm:w-[100px]">Aksi</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {feeTypes.map((item) => (
                                             <TableRow key={item.id}>
-                                                <TableCell className="font-mono text-muted-foreground">{item.code}</TableCell>
-                                                <TableCell className="font-medium">{item.name}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline">{item.frequency_label}</Badge>
+                                                <TableCell className="font-mono text-muted-foreground text-sm">{item.code}</TableCell>
+                                                <TableCell className="font-medium text-sm">{item.name}</TableCell>
+                                                <TableCell className="hidden sm:table-cell">
+                                                    <Badge variant="outline" className="text-xs">{item.frequency_label}</Badge>
                                                 </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={item.is_mandatory ? 'default' : 'secondary'}>
+                                                <TableCell className="hidden md:table-cell">
+                                                    <Badge variant={item.is_mandatory ? 'default' : 'secondary'} className="text-xs">
                                                         {item.is_mandatory ? 'Wajib' : 'Opsional'}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant={item.is_active ? 'default' : 'secondary'}>
+                                                    <Badge variant={item.is_active ? 'default' : 'secondary'} className="text-xs">
                                                         {item.is_active ? 'Aktif' : 'Nonaktif'}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
+                                                    <div className="flex items-center gap-0.5 sm:gap-1">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
                                                             <Pencil className="h-4 w-4" />
                                                         </Button>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="text-muted-foreground hover:text-red-600"
+                                                            className="h-8 w-8 text-muted-foreground hover:text-red-600"
                                                             onClick={() => setDeletingItem(item)}
                                                         >
                                                             <Trash2 className="h-4 w-4" />
@@ -290,16 +291,17 @@ export default function FeeTypes() {
                         )}
 
                         {meta && meta.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
                                     Menampilkan {meta.from}-{meta.to} dari {meta.total} data
                                 </p>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 justify-center sm:justify-end">
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         disabled={page <= 1 || loading}
                                         onClick={() => setPage((p) => p - 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Sebelumnya
                                     </Button>
@@ -308,6 +310,7 @@ export default function FeeTypes() {
                                         size="sm"
                                         disabled={page >= meta.last_page || loading}
                                         onClick={() => setPage((p) => p + 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Berikutnya
                                     </Button>
@@ -319,15 +322,15 @@ export default function FeeTypes() {
             </div>
 
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-full max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>{editingItem ? 'Edit Jenis Biaya' : 'Tambah Jenis Biaya'}</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg">{editingItem ? 'Edit Jenis Biaya' : 'Tambah Jenis Biaya'}</DialogTitle>
+                        <DialogDescription className="text-sm">
                             {editingItem ? 'Perbarui data jenis biaya' : 'Isi data jenis biaya baru'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="fee-code">Kode *</Label>
                                 <Input
@@ -376,9 +379,9 @@ export default function FeeTypes() {
                             />
                         </div>
                         <div className="flex items-center justify-between rounded-md border p-3">
-                            <div>
+                            <div className="flex-1 min-w-0 mr-3">
                                 <Label htmlFor="fee-mandatory">Wajib</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                     Biaya wajib akan otomatis ditagihkan ke semua siswa
                                 </p>
                             </div>
@@ -389,9 +392,9 @@ export default function FeeTypes() {
                             />
                         </div>
                         <div className="flex items-center justify-between rounded-md border p-3">
-                            <div>
+                            <div className="flex-1 min-w-0 mr-3">
                                 <Label htmlFor="fee-active">Aktif</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                     Jenis biaya aktif dapat digunakan pada struktur biaya
                                 </p>
                             </div>
@@ -402,11 +405,11 @@ export default function FeeTypes() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0 mt-4">
+                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleSubmit} disabled={saving}>
+                        <Button onClick={handleSubmit} disabled={saving} className="w-full sm:w-auto">
                             {saving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             {editingItem ? 'Simpan Perubahan' : 'Simpan'}
                         </Button>
@@ -415,16 +418,16 @@ export default function FeeTypes() {
             </Dialog>
 
             <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && !deleting && setDeletingItem(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="w-[95vw] max-w-md p-4 sm:p-6">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Hapus Jenis Biaya</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="text-lg">Hapus Jenis Biaya</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
                             Apakah Anda yakin ingin menghapus jenis biaya{' '}
                             <span className="font-medium">{deletingItem?.name}</span>? Tindakan ini tidak dapat dibatalkan.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting}>
+                    <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting} className="w-full sm:w-auto">
                             Batal
                         </AlertDialogCancel>
                         <AlertDialogAction
@@ -433,7 +436,7 @@ export default function FeeTypes() {
                                 handleDelete();
                             }}
                             disabled={deleting}
-                            className="bg-red-600 hover:bg-red-700"
+                            className="w-full sm:w-auto bg-red-600 hover:bg-red-700"
                         >
                             {deleting ? 'Menghapus...' : 'Hapus'}
                         </AlertDialogAction>

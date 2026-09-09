@@ -150,6 +150,8 @@ class RoleSeeder extends Seeder
                 // Exams & Grades
                 'exams.view', 'exams.create', 'exams.update',
                 'grades.view', 'grades.input', 'grades.update',
+                // Finance - untuk kas mingguan/tabungan siswa
+                'finance.view', 'fees.view', 'payments.view', 'payments.create',
                 // Reports
                 'report-cards.view',
                 // Notifications
@@ -171,6 +173,8 @@ class RoleSeeder extends Seeder
                 'attendance.view', 'attendance.record', 'attendance.report',
                 // Grades
                 'grades.view', 'grades.input', 'grades.update',
+                // Finance - untuk kas kelas/tabungan siswa
+                'finance.view', 'fees.view', 'payments.view', 'payments.create',
                 // Reports
                 'reports.view', 'report-cards.view', 'report-cards.generate',
                 // Notifications

@@ -208,21 +208,28 @@ class StudentFeeController extends ApiController
             return $this->error('Tidak ada struktur biaya yang ditemukan untuk kriteria yang dipilih', 422);
         }
 
-        // Get students
+        // Get students with active enrollment
         $studentsQuery = Student::query()
-            ->where('status', 'active');
+            ->where('status', 'active')
+            ->whereHas('enrollments', fn($q) => $q->where('status', 'active'));
 
         if (!empty($data['classroom_id'])) {
-            $studentsQuery->whereHas('classrooms', function ($q) use ($data) {
-                $q->where('classrooms.id', $data['classroom_id']);
+            $studentsQuery->whereHas('enrollments', function ($q) use ($data) {
+                $q->where('status', 'active')
+                    ->where('classroom_id', $data['classroom_id']);
             });
         } elseif (!empty($data['grade_level_id'])) {
-            $studentsQuery->whereHas('classrooms', function ($q) use ($data) {
-                $q->where('grade_level_id', $data['grade_level_id']);
+            $studentsQuery->whereHas('enrollments', function ($q) use ($data) {
+                $q->where('status', 'active')
+                    ->whereHas('classroom', fn($cq) => $cq->where('grade_level_id', $data['grade_level_id']));
             });
         }
 
-        $students = $studentsQuery->with(['classrooms.gradeLevel', 'classrooms.major'])->get();
+        $students = $studentsQuery->with([
+            'enrollments' => fn($q) => $q->where('status', 'active'),
+            'enrollments.classroom.gradeLevel',
+            'enrollments.classroom.major',
+        ])->get();
 
         if ($students->isEmpty()) {
             return $this->error('Tidak ada siswa aktif yang ditemukan', 422);
@@ -235,8 +242,9 @@ class StudentFeeController extends ApiController
         DB::beginTransaction();
         try {
             foreach ($students as $student) {
-                // Get the student's current classroom
-                $classroom = $student->classrooms->first();
+                // Get the student's current classroom from active enrollment
+                $activeEnrollment = $student->enrollments->first();
+                $classroom = $activeEnrollment?->classroom;
                 if (!$classroom) {
                     $skipped++;
                     continue;

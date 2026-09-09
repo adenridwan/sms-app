@@ -43,7 +43,7 @@ class FeeTypeController extends ApiController
             'code' => ['required', 'string', 'max:20', 'unique:fee_types,code'],
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:500'],
-            'frequency' => ['required', 'in:once,monthly,semester,yearly'],
+            'frequency' => ['required', 'in:once,weekly,monthly,semester,yearly'],
             'is_mandatory' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
@@ -76,7 +76,7 @@ class FeeTypeController extends ApiController
             'code' => ['sometimes', 'string', 'max:20', 'unique:fee_types,code,' . $feeType->id],
             'name' => ['sometimes', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:500'],
-            'frequency' => ['sometimes', 'in:once,monthly,semester,yearly'],
+            'frequency' => ['sometimes', 'in:once,weekly,monthly,semester,yearly'],
             'is_mandatory' => ['boolean'],
             'is_active' => ['boolean'],
         ]);

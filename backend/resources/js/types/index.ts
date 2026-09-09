@@ -616,7 +616,7 @@ export interface FeeType {
     code: string;
     name: string;
     description: string | null;
-    frequency: 'once' | 'monthly' | 'semester' | 'yearly';
+    frequency: 'once' | 'weekly' | 'monthly' | 'semester' | 'yearly';
     frequency_label: string;
     is_mandatory: boolean;
     is_active: boolean;
