@@ -162,17 +162,32 @@ class DemoFinanceSeeder extends Seeder
 
     protected function generatePayments(string $tenantId): void
     {
-        // Get paid/partial fees
+        // Get paid/partial fees that don't already have payments
         $paidFees = DB::table('student_fees')
             ->where('tenant_id', $tenantId)
             ->where('paid_amount', '>', 0)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('payment_items')
+                    ->whereColumn('payment_items.student_fee_id', 'student_fees.id');
+            })
             ->get();
+
+        if ($paidFees->isEmpty()) {
+            $this->command->info("No new payments to generate.");
+            return;
+        }
 
         $paymentMethods = DB::table('payment_methods')
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->pluck('id')
             ->toArray();
+
+        if (empty($paymentMethods)) {
+            $this->command->warn("No active payment methods found. Skipping payment generation.");
+            return;
+        }
 
         $bendahara = DB::table('users')
             ->where('tenant_id', $tenantId)
@@ -182,33 +197,36 @@ class DemoFinanceSeeder extends Seeder
         $paymentCount = 0;
         foreach ($paidFees as $fee) {
             $paymentId = Str::uuid()->toString();
-            $invoiceNumber = 'INV-' . date('Ymd', strtotime($fee->due_date)) . '-' . strtoupper(Str::random(4));
+            $invoiceNumber = 'INV-' . date('Ymd', strtotime($fee->due_date)) . '-' . strtoupper(Str::random(6));
 
-            DB::table('payments')->insertOrIgnore([
-                'id' => $paymentId,
-                'tenant_id' => $tenantId,
-                'invoice_number' => $invoiceNumber,
-                'student_id' => $fee->student_id,
-                'payment_method_id' => $paymentMethods[array_rand($paymentMethods)],
-                'total_amount' => $fee->paid_amount,
-                'admin_fee' => 0,
-                'grand_total' => $fee->paid_amount,
-                'status' => 'completed',
-                'paid_at' => Carbon::parse($fee->due_date)->addDays(rand(0, 15)),
-                'verified_by' => $bendahara?->id,
-                'verified_at' => Carbon::parse($fee->due_date)->addDays(rand(0, 15)),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            // Use transaction to ensure payment and payment_item are created together
+            DB::transaction(function () use ($tenantId, $paymentId, $invoiceNumber, $fee, $paymentMethods, $bendahara) {
+                DB::table('payments')->insert([
+                    'id' => $paymentId,
+                    'tenant_id' => $tenantId,
+                    'invoice_number' => $invoiceNumber,
+                    'student_id' => $fee->student_id,
+                    'payment_method_id' => $paymentMethods[array_rand($paymentMethods)],
+                    'total_amount' => $fee->paid_amount,
+                    'admin_fee' => 0,
+                    'grand_total' => $fee->paid_amount,
+                    'status' => 'completed',
+                    'paid_at' => Carbon::parse($fee->due_date)->addDays(rand(0, 15)),
+                    'verified_by' => $bendahara?->id,
+                    'verified_at' => Carbon::parse($fee->due_date)->addDays(rand(0, 15)),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
 
-            DB::table('payment_items')->insertOrIgnore([
-                'id' => Str::uuid()->toString(),
-                'payment_id' => $paymentId,
-                'student_fee_id' => $fee->id,
-                'amount' => $fee->paid_amount,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+                DB::table('payment_items')->insert([
+                    'id' => Str::uuid()->toString(),
+                    'payment_id' => $paymentId,
+                    'student_fee_id' => $fee->id,
+                    'amount' => $fee->paid_amount,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            });
 
             $paymentCount++;
         }
