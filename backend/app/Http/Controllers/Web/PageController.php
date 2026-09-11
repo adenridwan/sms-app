@@ -9,6 +9,7 @@ use App\Infrastructure\Persistence\Eloquent\Academic\AcademicYear;
 use App\Infrastructure\Persistence\Eloquent\Academic\Classroom;
 use App\Infrastructure\Persistence\Eloquent\Student\Student;
 use App\Infrastructure\Persistence\Eloquent\Teacher\Teacher;
+use App\Models\Tenant;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -352,7 +353,9 @@ class PageController extends Controller
      */
     public function login(): Response
     {
-        return Inertia::render('auth/Login');
+        return Inertia::render('auth/Login', [
+            'branding' => Tenant::getLoginBranding(),
+        ]);
     }
 
     /**

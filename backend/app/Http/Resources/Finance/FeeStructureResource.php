@@ -33,7 +33,7 @@ class FeeStructureResource extends JsonResource
             'grade_level' => $this->whenLoaded('gradeLevel', fn() => [
                 'id' => $this->gradeLevel->id,
                 'name' => $this->gradeLevel->name,
-                'level' => $this->gradeLevel->level,
+                'code' => $this->gradeLevel->code,
             ]),
             'major_id' => $this->major_id,
             'major' => $this->whenLoaded('major', fn() => $this->major ? [

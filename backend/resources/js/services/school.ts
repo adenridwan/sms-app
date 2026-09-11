@@ -21,6 +21,13 @@ export interface SchoolListItem {
     level: string | null;
     status: string;
     logo_url: string | null;
+    is_login_brand: boolean;
+}
+
+export interface LoginBrand {
+    id: string;
+    name: string;
+    logo_url: string | null;
 }
 
 export const schoolApi = {
@@ -46,4 +53,11 @@ export const schoolApi = {
     deactivate: (id: string) => api.post<ApiResponse>(`/admin/schools/${id}/deactivate`),
 
     remove: (id: string) => api.delete<ApiResponse>(`/admin/schools/${id}`),
+
+    /** Get current login page branding (khusus super admin). */
+    getLoginBrand: () => api.get<ApiResponse<LoginBrand | null>>('/admin/login-brand'),
+
+    /** Set login page branding to a school, or null to use system default (khusus super admin). */
+    setLoginBrand: (schoolId: string | null) =>
+        api.put<ApiResponse<LoginBrand | null>>('/admin/login-brand', { school_id: schoolId }),
 };

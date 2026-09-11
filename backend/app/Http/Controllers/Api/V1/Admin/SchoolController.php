@@ -26,7 +26,7 @@ class SchoolController extends ApiController
     {
         $schools = Tenant::query()
             ->orderBy('name')
-            ->get(['id', 'name', 'npsn', 'level', 'status', 'logo'])
+            ->get(['id', 'name', 'npsn', 'level', 'status', 'logo', 'is_login_brand'])
             ->map(fn (Tenant $t) => [
                 'id' => $t->id,
                 'name' => $t->name,
@@ -34,6 +34,7 @@ class SchoolController extends ApiController
                 'level' => $t->level,
                 'status' => $t->status,
                 'logo_url' => $t->logo ? $this->logoUrl($t->logo) : null,
+                'is_login_brand' => $t->is_login_brand,
             ]);
 
         return $this->success($schools);
@@ -131,9 +132,66 @@ class SchoolController extends ApiController
             return $this->error('Tidak bisa menghapus satu-satunya sekolah.', 422);
         }
 
+        // If this school was the login brand, clear it
+        if ($tenant->is_login_brand) {
+            Tenant::clearLoginBrand();
+        }
+
         $tenant->delete();
 
         return $this->deleted('Sekolah berhasil dihapus');
+    }
+
+    /**
+     * Get the school currently used for login page branding.
+     */
+    public function getLoginBrand(): JsonResponse
+    {
+        $tenant = Tenant::where('is_login_brand', true)->first();
+
+        if (! $tenant) {
+            return $this->success(null);
+        }
+
+        return $this->success([
+            'id' => $tenant->id,
+            'name' => $tenant->name,
+            'logo_url' => $tenant->logo ? $this->logoUrl($tenant->logo) : null,
+        ]);
+    }
+
+    /**
+     * Set a school as the login page branding (or clear if id is null/empty).
+     */
+    public function setLoginBrand(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'school_id' => ['nullable', 'string'],
+        ]);
+
+        $schoolId = $data['school_id'] ?? null;
+
+        // Clear login brand
+        if (empty($schoolId)) {
+            Tenant::clearLoginBrand();
+
+            return $this->success(null, 'Branding halaman login direset ke bawaan sistem');
+        }
+
+        // Set login brand
+        $tenant = Tenant::find($schoolId);
+
+        if (! $tenant) {
+            return $this->error('Sekolah tidak ditemukan', 404);
+        }
+
+        $tenant->setAsLoginBrand();
+
+        return $this->success([
+            'id' => $tenant->id,
+            'name' => $tenant->name,
+            'logo_url' => $tenant->logo ? $this->logoUrl($tenant->logo) : null,
+        ], 'Branding halaman login diperbarui');
     }
 
     /**

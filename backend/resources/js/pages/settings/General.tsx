@@ -48,7 +48,7 @@ import {
     Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { schoolApi, type SchoolListItem, type SchoolProfile } from '@/services/school';
+import { schoolApi, type LoginBrand, type SchoolListItem, type SchoolProfile } from '@/services/school';
 import type { PageProps } from '@/types';
 
 const LEVELS: { value: string; label: string }[] = [
@@ -302,6 +302,11 @@ export default function GeneralSettings() {
     const [actioningId, setActioningId] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<SchoolListItem | null>(null);
 
+    // --- Branding halaman login (super admin) ---
+    const [loginBrand, setLoginBrand] = useState<LoginBrand | null>(null);
+    const [loginBrandLoading, setLoginBrandLoading] = useState(true);
+    const [loginBrandSaving, setLoginBrandSaving] = useState(false);
+
     const applyProfile = (p: SchoolProfile) => {
         setForm({
             name: p.name ?? '',
@@ -341,6 +346,43 @@ export default function GeneralSettings() {
     useEffect(() => {
         if (isSuperAdmin) fetchSchools();
     }, [isSuperAdmin, fetchSchools]);
+
+    // Fetch login brand for super admin
+    useEffect(() => {
+        if (!isSuperAdmin) {
+            setLoginBrandLoading(false);
+            return;
+        }
+        schoolApi
+            .getLoginBrand()
+            .then((res) => setLoginBrand(res.data.data ?? null))
+            .catch(() => toast.error('Gagal memuat branding halaman login'))
+            .finally(() => setLoginBrandLoading(false));
+    }, [isSuperAdmin]);
+
+    const handleLoginBrandChange = async (schoolId: string) => {
+        setLoginBrandSaving(true);
+        try {
+            const res = await schoolApi.setLoginBrand(schoolId === '' ? null : schoolId);
+            setLoginBrand(res.data.data ?? null);
+            // Update local schools state to reflect the change
+            setSchools((prev) =>
+                prev?.map((s) => ({
+                    ...s,
+                    is_login_brand: s.id === schoolId,
+                })) ?? null
+            );
+            toast.success(
+                schoolId === ''
+                    ? 'Halaman login akan menampilkan bawaan sistem'
+                    : 'Branding halaman login diperbarui'
+            );
+        } catch (err: unknown) {
+            toast.error(errorMessage(err, 'Gagal mengubah branding halaman login'));
+        } finally {
+            setLoginBrandSaving(false);
+        }
+    };
 
     const pickLogo = (file: File) => {
         setLogoFile(file);
@@ -624,6 +666,77 @@ export default function GeneralSettings() {
                                         </div>
                                     );
                                 })
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Branding Halaman Login (super admin) */}
+                {isSuperAdmin && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Branding Halaman Login</CardTitle>
+                            <CardDescription>
+                                Pilih sekolah yang logo dan namanya ditampilkan di halaman login (/login).
+                                Ini tidak mengubah status aktif sekolah — sekolah lain tetap bisa diakses.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {loginBrandLoading ? (
+                                <div className="flex h-12 items-center justify-center">
+                                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-4">
+                                    <div className="min-w-[200px] flex-1">
+                                        <Select
+                                            value={loginBrand?.id ?? ''}
+                                            onValueChange={handleLoginBrandChange}
+                                            disabled={loginBrandSaving || !schools}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih sekolah...">
+                                                    {loginBrand ? (
+                                                        <span className="flex items-center gap-2">
+                                                            {loginBrand.logo_url && (
+                                                                <img
+                                                                    src={loginBrand.logo_url}
+                                                                    alt=""
+                                                                    className="h-5 w-5 rounded object-cover"
+                                                                />
+                                                            )}
+                                                            {loginBrand.name}
+                                                        </span>
+                                                    ) : (
+                                                        'Gunakan bawaan sistem'
+                                                    )}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="">
+                                                    <span className="text-muted-foreground">Gunakan bawaan sistem</span>
+                                                </SelectItem>
+                                                {schools?.map((s) => (
+                                                    <SelectItem key={s.id} value={s.id}>
+                                                        <span className="flex items-center gap-2">
+                                                            {s.logo_url && (
+                                                                <img
+                                                                    src={s.logo_url}
+                                                                    alt=""
+                                                                    className="h-5 w-5 rounded object-cover"
+                                                                />
+                                                            )}
+                                                            {s.name}
+                                                        </span>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    {loginBrandSaving && (
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    )}
+                                </div>
                             )}
                         </CardContent>
                     </Card>

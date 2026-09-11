@@ -584,6 +584,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('schools/{id}/activate', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'activate'])->name('schools.activate');
             Route::post('schools/{id}/deactivate', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'deactivate'])->name('schools.deactivate');
             Route::delete('schools/{id}', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'destroy'])->name('schools.destroy');
+
+            // Branding halaman login (logo & nama sekolah yang ditampilkan di /login).
+            Route::get('login-brand', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'getLoginBrand'])->name('login-brand.show');
+            Route::put('login-brand', [\App\Http\Controllers\Api\V1\Admin\SchoolController::class, 'setLoginBrand'])->name('login-brand.update');
         });
 
         // Roles & Permissions
