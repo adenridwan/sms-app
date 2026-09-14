@@ -59,7 +59,7 @@ class MenuRegistry
                 'children' => [
                     ['key' => 'staff.teachers', 'title' => 'Data Guru', 'permission' => 'teachers.view'],
                     ['key' => 'staff.staff', 'title' => 'Data Staff', 'permission' => 'staff.view'],
-                    ['key' => 'staff.leave', 'title' => 'Pengajuan Cuti', 'permission' => null],
+                    ['key' => 'staff.leave', 'title' => 'Pengajuan Cuti', 'permission' => 'attendance.manage'],
                 ],
             ],
             [
@@ -104,6 +104,12 @@ class MenuRegistry
                     ['key' => 'reports.expense', 'title' => 'Pengeluaran', 'permission' => 'finance.report'],
                     ['key' => 'reports.report-cards', 'title' => 'Rapor', 'permission' => null],
                     ['key' => 'reports.generate', 'title' => 'Generate Laporan', 'permission' => null],
+                ],
+            ],
+            [
+                'key' => 'notifications', 'title' => 'Notifikasi', 'permission' => null,
+                'children' => [
+                    ['key' => 'notifications.announcements', 'title' => 'Pengumuman', 'permission' => null],
                 ],
             ],
             [

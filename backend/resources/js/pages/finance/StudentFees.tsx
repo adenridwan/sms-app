@@ -365,15 +365,15 @@ export default function StudentFees() {
         <MainLayout title="Tagihan Siswa">
             <Head title="Keuangan - Tagihan Siswa" />
 
-            <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Tagihan Siswa</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Tagihan Siswa</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground">
                             Kelola tagihan biaya pendidikan siswa
                         </p>
                     </div>
-                    <Button onClick={() => setGenerateOpen(true)}>
+                    <Button onClick={() => setGenerateOpen(true)} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Generate Tagihan
                     </Button>
@@ -551,64 +551,65 @@ export default function StudentFees() {
                                 Tidak ada data tagihan
                             </div>
                         ) : (
-                            <div className="rounded-md border">
-                                <Table>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table className="min-w-[900px]">
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Siswa</TableHead>
-                                            <TableHead>Jenis Biaya</TableHead>
-                                            <TableHead>Periode</TableHead>
-                                            <TableHead className="text-right">Total</TableHead>
-                                            <TableHead className="text-right">Dibayar</TableHead>
-                                            <TableHead className="text-right">Sisa</TableHead>
-                                            <TableHead>Jatuh Tempo</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="w-[100px]">Aksi</TableHead>
+                                            <TableHead className="whitespace-nowrap">Siswa</TableHead>
+                                            <TableHead className="whitespace-nowrap hidden sm:table-cell">Jenis Biaya</TableHead>
+                                            <TableHead className="whitespace-nowrap">Periode</TableHead>
+                                            <TableHead className="text-right whitespace-nowrap">Total</TableHead>
+                                            <TableHead className="text-right whitespace-nowrap hidden md:table-cell">Dibayar</TableHead>
+                                            <TableHead className="text-right whitespace-nowrap">Sisa</TableHead>
+                                            <TableHead className="whitespace-nowrap hidden lg:table-cell">Jatuh Tempo</TableHead>
+                                            <TableHead className="whitespace-nowrap">Status</TableHead>
+                                            <TableHead className="w-[90px] sm:w-[100px]">Aksi</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {fees.map((fee) => (
                                             <TableRow key={fee.id}>
                                                 <TableCell>
-                                                    <div>
-                                                        <div className="font-medium">{fee.student?.name}</div>
-                                                        <div className="text-xs text-muted-foreground">
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium text-sm truncate max-w-[120px] sm:max-w-none">{fee.student?.name}</div>
+                                                        <div className="text-xs text-muted-foreground truncate">
                                                             {fee.student?.nis}
                                                             {fee.student?.classroom && ` - ${fee.student.classroom.name}`}
                                                         </div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className="hidden sm:table-cell text-sm">
                                                     {fee.fee_structure?.fee_type?.name ?? '-'}
                                                 </TableCell>
-                                                <TableCell>{fee.period_label}</TableCell>
-                                                <TableCell className="text-right font-mono">
+                                                <TableCell className="text-sm whitespace-nowrap">{fee.period_label}</TableCell>
+                                                <TableCell className="text-right font-mono text-sm whitespace-nowrap">
                                                     {fee.total_amount_formatted}
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono text-green-600">
+                                                <TableCell className="text-right font-mono text-green-600 text-sm hidden md:table-cell whitespace-nowrap">
                                                     {fee.paid_amount > 0 ? fee.paid_amount_formatted : '-'}
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono font-medium">
+                                                <TableCell className="text-right font-mono font-medium text-sm whitespace-nowrap">
                                                     {fee.remaining_amount_formatted}
                                                 </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
+                                                <TableCell className="hidden lg:table-cell">
+                                                    <div className="flex items-center gap-1 text-sm whitespace-nowrap">
                                                         {fee.due_date ?? '-'}
                                                         {fee.is_overdue && (
-                                                            <AlertTriangle className="h-4 w-4 text-red-500" />
+                                                            <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
                                                         )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge className={getStatusColor(fee.status)}>
+                                                    <Badge className={`${getStatusColor(fee.status)} text-xs whitespace-nowrap`}>
                                                         {fee.status_label}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-0.5 sm:gap-1">
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
+                                                            className="h-8 w-8"
                                                             onClick={() => openEdit(fee)}
                                                             disabled={fee.status === 'paid' || fee.status === 'waived'}
                                                         >
@@ -618,7 +619,7 @@ export default function StudentFees() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="text-blue-600"
+                                                                className="h-8 w-8 text-blue-600"
                                                                 onClick={() => openWaive(fee)}
                                                                 title="Bebaskan"
                                                             >
@@ -629,7 +630,7 @@ export default function StudentFees() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="text-muted-foreground hover:text-red-600"
+                                                                className="h-8 w-8 text-muted-foreground hover:text-red-600"
                                                                 onClick={() => setDeletingFee(fee)}
                                                             >
                                                                 <Trash2 className="h-4 w-4" />
@@ -645,16 +646,17 @@ export default function StudentFees() {
                         )}
 
                         {meta && meta.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
                                     Menampilkan {meta.from}-{meta.to} dari {meta.total} data
                                 </p>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 justify-center sm:justify-end">
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         disabled={page <= 1 || loading}
                                         onClick={() => setPage((p) => p - 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Sebelumnya
                                     </Button>
@@ -663,6 +665,7 @@ export default function StudentFees() {
                                         size="sm"
                                         disabled={page >= meta.last_page || loading}
                                         onClick={() => setPage((p) => p + 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Berikutnya
                                     </Button>
@@ -675,10 +678,10 @@ export default function StudentFees() {
 
             {/* Generate Dialog */}
             <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Generate Tagihan</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg">Generate Tagihan</DialogTitle>
+                        <DialogDescription className="text-sm">
                             Generate tagihan untuk siswa berdasarkan struktur biaya
                         </DialogDescription>
                     </DialogHeader>
@@ -701,7 +704,7 @@ export default function StudentFees() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label>Tingkat Kelas</Label>
                                 <Select
@@ -756,7 +759,7 @@ export default function StudentFees() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label>Bulan *</Label>
                                 <Select
@@ -812,11 +815,11 @@ export default function StudentFees() {
                             </Label>
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setGenerateOpen(false)} disabled={generating}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0 mt-4">
+                        <Button variant="outline" onClick={() => setGenerateOpen(false)} disabled={generating} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleGenerate} disabled={generating}>
+                        <Button onClick={handleGenerate} disabled={generating} className="w-full sm:w-auto">
                             {generating && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             Generate
                         </Button>
@@ -826,10 +829,10 @@ export default function StudentFees() {
 
             {/* Edit Dialog */}
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-full max-w-md p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Edit Tagihan</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg">Edit Tagihan</DialogTitle>
+                        <DialogDescription className="text-sm">
                             {editingFee?.student?.name} - {editingFee?.period_label}
                         </DialogDescription>
                     </DialogHeader>
@@ -846,7 +849,7 @@ export default function StudentFees() {
                                 />
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="edit-discount">Diskon</Label>
                                 <div className="relative">
@@ -891,11 +894,11 @@ export default function StudentFees() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0 mt-4">
+                        <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleSave} disabled={saving}>
+                        <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
                             {saving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             Simpan
                         </Button>
@@ -905,10 +908,10 @@ export default function StudentFees() {
 
             {/* Waive Dialog */}
             <Dialog open={waiveOpen} onOpenChange={setWaiveOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-full max-w-md p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Bebaskan Tagihan</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg">Bebaskan Tagihan</DialogTitle>
+                        <DialogDescription className="text-sm">
                             {waivingFee?.student?.name} - {waivingFee?.period_label}
                             <br />
                             <span className="font-medium">{waivingFee?.total_amount_formatted}</span>
@@ -926,11 +929,11 @@ export default function StudentFees() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setWaiveOpen(false)} disabled={waiving}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0 mt-4">
+                        <Button variant="outline" onClick={() => setWaiveOpen(false)} disabled={waiving} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleWaive} disabled={waiving}>
+                        <Button onClick={handleWaive} disabled={waiving} className="w-full sm:w-auto">
                             {waiving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             Bebaskan
                         </Button>
@@ -940,18 +943,18 @@ export default function StudentFees() {
 
             {/* Delete Dialog */}
             <AlertDialog open={!!deletingFee} onOpenChange={(open) => !open && !deleting && setDeletingFee(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="w-[95vw] max-w-md p-4 sm:p-6">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Hapus Tagihan</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="text-lg">Hapus Tagihan</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
                             Apakah Anda yakin ingin menghapus tagihan{' '}
                             <span className="font-medium">{deletingFee?.student?.name}</span> periode{' '}
                             <span className="font-medium">{deletingFee?.period_label}</span>?
                             Tindakan ini tidak dapat dibatalkan.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDeletingFee(null)} disabled={deleting}>
+                    <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel onClick={() => setDeletingFee(null)} disabled={deleting} className="w-full sm:w-auto">
                             Batal
                         </AlertDialogCancel>
                         <AlertDialogAction
@@ -960,7 +963,7 @@ export default function StudentFees() {
                                 handleDelete();
                             }}
                             disabled={deleting}
-                            className="bg-red-600 hover:bg-red-700"
+                            className="w-full sm:w-auto bg-red-600 hover:bg-red-700"
                         >
                             {deleting ? 'Menghapus...' : 'Hapus'}
                         </AlertDialogAction>

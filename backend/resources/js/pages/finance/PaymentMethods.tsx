@@ -191,15 +191,15 @@ export default function PaymentMethods() {
         <MainLayout title="Metode Pembayaran">
             <Head title="Keuangan - Metode Pembayaran" />
 
-            <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Metode Pembayaran</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Metode Pembayaran</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground">
                             Kelola metode pembayaran yang tersedia (tunai, transfer, e-wallet, dll)
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
+                    <Button onClick={openCreate} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Tambah Metode
                     </Button>
@@ -238,43 +238,43 @@ export default function PaymentMethods() {
                                 Tidak ada data metode pembayaran
                             </div>
                         ) : (
-                            <div className="rounded-md border">
-                                <Table>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table className="min-w-[700px]">
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-[100px]">Kode</TableHead>
-                                            <TableHead>Nama</TableHead>
-                                            <TableHead className="w-[130px]">Tipe</TableHead>
-                                            <TableHead>Provider</TableHead>
-                                            <TableHead className="w-[130px] text-right">Biaya Admin</TableHead>
-                                            <TableHead className="w-[100px]">Status</TableHead>
-                                            <TableHead className="w-[100px]">Aksi</TableHead>
+                                            <TableHead className="w-[80px] sm:w-[100px] whitespace-nowrap">Kode</TableHead>
+                                            <TableHead className="whitespace-nowrap">Nama</TableHead>
+                                            <TableHead className="w-[100px] sm:w-[130px] whitespace-nowrap hidden sm:table-cell">Tipe</TableHead>
+                                            <TableHead className="whitespace-nowrap hidden md:table-cell">Provider</TableHead>
+                                            <TableHead className="w-[110px] sm:w-[130px] text-right whitespace-nowrap">Biaya Admin</TableHead>
+                                            <TableHead className="w-[80px] sm:w-[100px] whitespace-nowrap">Status</TableHead>
+                                            <TableHead className="w-[80px] sm:w-[100px]">Aksi</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {items.map((item) => (
                                             <TableRow key={item.id}>
-                                                <TableCell className="font-mono text-muted-foreground">{item.code}</TableCell>
-                                                <TableCell className="font-medium">{item.name}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline">{item.type_label}</Badge>
+                                                <TableCell className="font-mono text-muted-foreground text-sm">{item.code}</TableCell>
+                                                <TableCell className="font-medium text-sm">{item.name}</TableCell>
+                                                <TableCell className="hidden sm:table-cell">
+                                                    <Badge variant="outline" className="text-xs">{item.type_label}</Badge>
                                                 </TableCell>
-                                                <TableCell className="text-muted-foreground">{item.provider ?? '-'}</TableCell>
-                                                <TableCell className="text-right font-mono">{item.admin_fee_formatted}</TableCell>
+                                                <TableCell className="text-muted-foreground text-sm hidden md:table-cell">{item.provider ?? '-'}</TableCell>
+                                                <TableCell className="text-right font-mono text-sm">{item.admin_fee_formatted}</TableCell>
                                                 <TableCell>
-                                                    <Badge variant={item.is_active ? 'default' : 'secondary'}>
+                                                    <Badge variant={item.is_active ? 'default' : 'secondary'} className="text-xs">
                                                         {item.is_active ? 'Aktif' : 'Nonaktif'}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
+                                                    <div className="flex items-center gap-0.5 sm:gap-1">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
                                                             <Pencil className="h-4 w-4" />
                                                         </Button>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="text-muted-foreground hover:text-red-600"
+                                                            className="h-8 w-8 text-muted-foreground hover:text-red-600"
                                                             onClick={() => setDeletingItem(item)}
                                                         >
                                                             <Trash2 className="h-4 w-4" />
@@ -289,15 +289,15 @@ export default function PaymentMethods() {
                         )}
 
                         {meta && meta.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
                                     Menampilkan {meta.from}-{meta.to} dari {meta.total} data
                                 </p>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)}>
+                                <div className="flex gap-2 justify-center sm:justify-end">
+                                    <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)} className="flex-1 sm:flex-none">
                                         Sebelumnya
                                     </Button>
-                                    <Button variant="outline" size="sm" disabled={page >= meta.last_page || loading} onClick={() => setPage((p) => p + 1)}>
+                                    <Button variant="outline" size="sm" disabled={page >= meta.last_page || loading} onClick={() => setPage((p) => p + 1)} className="flex-1 sm:flex-none">
                                         Berikutnya
                                     </Button>
                                 </div>
@@ -308,15 +308,15 @@ export default function PaymentMethods() {
             </div>
 
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-full max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>{editingItem ? 'Edit Metode Pembayaran' : 'Tambah Metode Pembayaran'}</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg">{editingItem ? 'Edit Metode Pembayaran' : 'Tambah Metode Pembayaran'}</DialogTitle>
+                        <DialogDescription className="text-sm">
                             {editingItem ? 'Perbarui data metode pembayaran' : 'Isi data metode pembayaran baru'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="pm-code">Kode *</Label>
                                 <Input
@@ -351,7 +351,7 @@ export default function PaymentMethods() {
                                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                             />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="pm-provider">Provider</Label>
                                 <Input
@@ -374,9 +374,9 @@ export default function PaymentMethods() {
                             </div>
                         </div>
                         <div className="flex items-center justify-between rounded-md border p-3">
-                            <div>
+                            <div className="flex-1 min-w-0 mr-3">
                                 <Label htmlFor="pm-active">Aktif</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                     Metode aktif dapat dipilih saat pembayaran
                                 </p>
                             </div>
@@ -387,11 +387,11 @@ export default function PaymentMethods() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0 mt-4">
+                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleSubmit} disabled={saving}>
+                        <Button onClick={handleSubmit} disabled={saving} className="w-full sm:w-auto">
                             {saving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             {editingItem ? 'Simpan Perubahan' : 'Simpan'}
                         </Button>
@@ -400,16 +400,16 @@ export default function PaymentMethods() {
             </Dialog>
 
             <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && !deleting && setDeletingItem(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="w-[95vw] max-w-md p-4 sm:p-6">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Hapus Metode Pembayaran</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="text-lg">Hapus Metode Pembayaran</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
                             Apakah Anda yakin ingin menghapus metode pembayaran{' '}
                             <span className="font-medium">{deletingItem?.name}</span>? Tindakan ini tidak dapat dibatalkan.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting}>
+                    <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting} className="w-full sm:w-auto">
                             Batal
                         </AlertDialogCancel>
                         <AlertDialogAction
@@ -418,7 +418,7 @@ export default function PaymentMethods() {
                                 handleDelete();
                             }}
                             disabled={deleting}
-                            className="bg-red-600 hover:bg-red-700"
+                            className="w-full sm:w-auto bg-red-600 hover:bg-red-700"
                         >
                             {deleting ? 'Menghapus...' : 'Hapus'}
                         </AlertDialogAction>

@@ -224,15 +224,15 @@ export default function Discounts() {
         <MainLayout title="Potongan / Beasiswa">
             <Head title="Keuangan - Potongan / Beasiswa" />
 
-            <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Potongan / Beasiswa</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Potongan / Beasiswa</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground">
                             Kelola potongan biaya dan beasiswa untuk siswa
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
+                    <Button onClick={openCreate} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Tambah Potongan
                     </Button>
@@ -245,9 +245,9 @@ export default function Discounts() {
                             {meta ? `${meta.total} potongan terdaftar` : 'Memuat data'}
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="relative w-full max-w-sm">
+                    <CardContent className="space-y-4 p-3 sm:p-6">
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
+                            <div className="relative w-full sm:max-w-sm">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     placeholder="Cari kode atau nama..."
@@ -259,7 +259,7 @@ export default function Discounts() {
                                     }}
                                 />
                             </div>
-                            <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
+                            <Button variant="outline" size="icon" onClick={fetchData} disabled={loading} className="self-end sm:self-auto">
                                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                             </Button>
                         </div>
@@ -271,16 +271,16 @@ export default function Discounts() {
                                 Tidak ada data potongan/beasiswa
                             </div>
                         ) : (
-                            <div className="rounded-md border">
-                                <Table>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table className="min-w-[800px]">
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead className="w-[100px]">Kode</TableHead>
                                             <TableHead>Nama</TableHead>
-                                            <TableHead className="w-[100px]">Tipe</TableHead>
+                                            <TableHead className="w-[100px] hidden sm:table-cell">Tipe</TableHead>
                                             <TableHead className="w-[120px] text-right">Nilai</TableHead>
-                                            <TableHead>Jenis Biaya</TableHead>
-                                            <TableHead className="w-[100px]">Berlaku</TableHead>
+                                            <TableHead className="hidden md:table-cell">Jenis Biaya</TableHead>
+                                            <TableHead className="w-[100px] hidden sm:table-cell">Berlaku</TableHead>
                                             <TableHead className="w-[100px]">Status</TableHead>
                                             <TableHead className="w-[100px]">Aksi</TableHead>
                                         </TableRow>
@@ -290,12 +290,12 @@ export default function Discounts() {
                                             <TableRow key={item.id}>
                                                 <TableCell className="font-mono text-muted-foreground">{item.code}</TableCell>
                                                 <TableCell className="font-medium">{item.name}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="hidden sm:table-cell">
                                                     <Badge variant="outline">{item.type_label}</Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right font-mono">{item.value_formatted}</TableCell>
-                                                <TableCell className="text-muted-foreground">{item.fee_type?.name ?? 'Semua'}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="text-muted-foreground hidden md:table-cell">{item.fee_type?.name ?? 'Semua'}</TableCell>
+                                                <TableCell className="hidden sm:table-cell">
                                                     <Badge variant={item.is_valid ? 'default' : 'secondary'}>
                                                         {item.is_valid ? 'Berlaku' : 'Kadaluarsa'}
                                                     </Badge>
@@ -328,15 +328,15 @@ export default function Discounts() {
                         )}
 
                         {meta && meta.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+                                <p className="text-sm text-muted-foreground text-center sm:text-left">
                                     Menampilkan {meta.from}-{meta.to} dari {meta.total} data
                                 </p>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)}>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)} className="flex-1 sm:flex-none">
                                         Sebelumnya
                                     </Button>
-                                    <Button variant="outline" size="sm" disabled={page >= meta.last_page || loading} onClick={() => setPage((p) => p + 1)}>
+                                    <Button variant="outline" size="sm" disabled={page >= meta.last_page || loading} onClick={() => setPage((p) => p + 1)} className="flex-1 sm:flex-none">
                                         Berikutnya
                                     </Button>
                                 </div>
@@ -347,7 +347,7 @@ export default function Discounts() {
             </div>
 
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
                         <DialogTitle>{editingItem ? 'Edit Potongan/Beasiswa' : 'Tambah Potongan/Beasiswa'}</DialogTitle>
                         <DialogDescription>
@@ -355,7 +355,7 @@ export default function Discounts() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="discount-code">Kode *</Label>
                                 <Input
@@ -390,7 +390,7 @@ export default function Discounts() {
                                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                             />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="discount-value">Nilai * {form.type === 'percentage' ? '(%)' : '(Rp)'}</Label>
                                 <Input
@@ -433,7 +433,7 @@ export default function Discounts() {
                                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                             />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="discount-from">Berlaku Dari</Label>
                                 <DatePicker
@@ -456,7 +456,7 @@ export default function Discounts() {
                         <div className="flex items-center justify-between rounded-md border p-3">
                             <div>
                                 <Label htmlFor="discount-active">Aktif</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                     Potongan aktif dapat diterapkan ke siswa
                                 </p>
                             </div>
@@ -467,11 +467,11 @@ export default function Discounts() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleSubmit} disabled={saving}>
+                        <Button onClick={handleSubmit} disabled={saving} className="w-full sm:w-auto">
                             {saving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             {editingItem ? 'Simpan Perubahan' : 'Simpan'}
                         </Button>
@@ -480,7 +480,7 @@ export default function Discounts() {
             </Dialog>
 
             <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && !deleting && setDeletingItem(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="w-full max-w-md p-4 sm:p-6">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Hapus Potongan/Beasiswa</AlertDialogTitle>
                         <AlertDialogDescription>
@@ -488,8 +488,8 @@ export default function Discounts() {
                             <span className="font-medium">{deletingItem?.name}</span>? Tindakan ini tidak dapat dibatalkan.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting}>
+                    <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting} className="w-full sm:w-auto">
                             Batal
                         </AlertDialogCancel>
                         <AlertDialogAction
@@ -498,7 +498,7 @@ export default function Discounts() {
                                 handleDelete();
                             }}
                             disabled={deleting}
-                            className="bg-red-600 hover:bg-red-700"
+                            className="bg-red-600 hover:bg-red-700 w-full sm:w-auto"
                         >
                             {deleting ? 'Menghapus...' : 'Hapus'}
                         </AlertDialogAction>

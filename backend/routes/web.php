@@ -60,6 +60,11 @@ Route::middleware(['auth', 'password.current'])->group(function () {
         Route::get('/create', [PageController::class, 'createStudent'])
             ->middleware('permission:students.create')
             ->name('create');
+        Route::get('/enrollment', [PageController::class, 'studentEnrollment'])
+            ->middleware('permission:students.enroll')
+            ->name('enrollment');
+        Route::get('/achievements', [PageController::class, 'studentAchievements'])
+            ->name('achievements');
         Route::get('/{student}', [PageController::class, 'showStudent'])->whereUuid('student')->name('show');
         Route::get('/{student}/edit', [PageController::class, 'editStudent'])
             ->whereUuid('student')
@@ -187,6 +192,26 @@ Route::middleware(['auth', 'password.current'])->group(function () {
     // Reports Module (Laporan Terpisah)
     Route::prefix('reports')->name('reports.')->group(function () {
         Route::get('/expense', [PageController::class, 'expenseReport'])->name('expense');
+        Route::get('/report-cards', [PageController::class, 'reportCards'])->name('report-cards');
+    });
+
+    // Notifications Module
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/announcements', [PageController::class, 'announcements'])->name('announcements');
+    });
+
+    // Grades & Exams Module
+    Route::prefix('grades')->name('grades.')->group(function () {
+        Route::get('/exams', [PageController::class, 'gradeExams'])->name('exams');
+        Route::get('/input', [PageController::class, 'gradeInput'])->name('input');
+        Route::get('/recap', [PageController::class, 'gradeRecap'])->name('recap');
+    });
+
+    // Library Module
+    Route::prefix('library')->name('library.')->group(function () {
+        Route::get('/books', [PageController::class, 'libraryBooks'])->name('books');
+        Route::get('/loans', [PageController::class, 'libraryLoans'])->name('loans');
+        Route::get('/members', [PageController::class, 'libraryMembers'])->name('members');
     });
 
     // Profile Routes

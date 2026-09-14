@@ -28,9 +28,16 @@ return [
     |--------------------------------------------------------------------------
     | Expiration Minutes
     |--------------------------------------------------------------------------
+    |
+    | Token expiration configuration for "Remember Me" functionality:
+    | - Normal login: shorter expiration (default: 1 day)
+    | - Remember me: longer expiration (default: 30 days)
+    |
     */
 
-    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 60 * 24 * 7), // 7 days
+    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 60 * 24), // 1 day (normal login)
+
+    'remember_expiration' => env('SANCTUM_REMEMBER_EXPIRATION', 60 * 24 * 30), // 30 days (remember me)
 
     /*
     |--------------------------------------------------------------------------

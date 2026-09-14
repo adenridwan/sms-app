@@ -55,9 +55,10 @@ import {
     FileText,
     CreditCard,
     Banknote,
+    Users,
 } from 'lucide-react';
-import { paymentsApi, studentFeesApi, paymentMethodsApi, studentsApi } from '@/services/api';
-import type { Payment, StudentFee, PaymentMethod, Student, PaginationMeta } from '@/types';
+import { paymentsApi, studentFeesApi, paymentMethodsApi, studentsApi, classroomsApi } from '@/services/api';
+import type { Payment, StudentFee, PaymentMethod, Student, PaginationMeta, Classroom } from '@/types';
 
 interface Summary {
     total_received: number;
@@ -120,6 +121,14 @@ export default function Payments() {
     const [paymentNote, setPaymentNote] = useState('');
     const [creating, setCreating] = useState(false);
 
+    // Classroom & Student selection (new dropdown approach)
+    const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+    const [selectedClassroom, setSelectedClassroom] = useState('');
+    const [classroomStudents, setClassroomStudents] = useState<Student[]>([]);
+    const [loadingClassrooms, setLoadingClassrooms] = useState(false);
+    const [loadingStudents, setLoadingStudents] = useState(false);
+    const [selectionMode, setSelectionMode] = useState<'dropdown' | 'search'>('dropdown');
+
     // View payment details
     const [viewOpen, setViewOpen] = useState(false);
     const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
@@ -146,7 +155,7 @@ export default function Payments() {
     // Payment methods
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
 
-    // Load payment methods
+    // Load payment methods & classrooms
     useEffect(() => {
         const loadPaymentMethods = async () => {
             try {
@@ -158,6 +167,46 @@ export default function Payments() {
         };
         loadPaymentMethods();
     }, []);
+
+    // Load classrooms for student selection
+    useEffect(() => {
+        const loadClassrooms = async () => {
+            setLoadingClassrooms(true);
+            try {
+                const response = await classroomsApi.list({ per_page: 100, sort: 'name', direction: 'asc' });
+                setClassrooms(response.data.data.data ?? []);
+            } catch {
+                // ignore
+            } finally {
+                setLoadingClassrooms(false);
+            }
+        };
+        loadClassrooms();
+    }, []);
+
+    // Load students when classroom is selected
+    useEffect(() => {
+        const loadStudentsByClassroom = async () => {
+            if (!selectedClassroom) {
+                setClassroomStudents([]);
+                return;
+            }
+            setLoadingStudents(true);
+            try {
+                // Use dedicated endpoint: GET /academic/classrooms/{id}/students
+                const response = await classroomsApi.students(selectedClassroom);
+                // response.data = { success, message, data: Student[] }
+                const students = response.data.data ?? [];
+                setClassroomStudents(students);
+            } catch (error) {
+                console.error('Error loading students:', error);
+                setClassroomStudents([]);
+            } finally {
+                setLoadingStudents(false);
+            }
+        };
+        loadStudentsByClassroom();
+    }, [selectedClassroom]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -292,6 +341,16 @@ export default function Payments() {
         setFeeAmounts({});
         setSelectedPaymentMethod('');
         setPaymentNote('');
+        setSelectedClassroom('');
+        setClassroomStudents([]);
+        setSelectionMode('dropdown');
+    };
+
+    const handleSelectStudentFromDropdown = (studentId: string) => {
+        const student = classroomStudents.find(s => s.id === studentId);
+        if (student) {
+            setSelectedStudent(student);
+        }
     };
 
     const handleCreate = async () => {
@@ -419,15 +478,15 @@ export default function Payments() {
         <MainLayout title="Pembayaran">
             <Head title="Keuangan - Pembayaran" />
 
-            <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Pembayaran</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Pembayaran</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground">
                             Kelola transaksi pembayaran biaya pendidikan
                         </p>
                     </div>
-                    <Button onClick={() => { resetCreateForm(); setCreateOpen(true); }}>
+                    <Button onClick={() => { resetCreateForm(); setCreateOpen(true); }} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Buat Pembayaran
                     </Button>
@@ -558,61 +617,62 @@ export default function Payments() {
                                 Tidak ada data pembayaran
                             </div>
                         ) : (
-                            <div className="rounded-md border">
-                                <Table>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table className="min-w-[700px]">
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Invoice</TableHead>
-                                            <TableHead>Siswa</TableHead>
-                                            <TableHead>Metode</TableHead>
-                                            <TableHead className="text-right">Total</TableHead>
-                                            <TableHead>Tanggal</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="w-[140px]">Aksi</TableHead>
+                                            <TableHead className="whitespace-nowrap">Invoice</TableHead>
+                                            <TableHead className="whitespace-nowrap">Siswa</TableHead>
+                                            <TableHead className="whitespace-nowrap hidden sm:table-cell">Metode</TableHead>
+                                            <TableHead className="text-right whitespace-nowrap">Total</TableHead>
+                                            <TableHead className="whitespace-nowrap hidden md:table-cell">Tanggal</TableHead>
+                                            <TableHead className="whitespace-nowrap">Status</TableHead>
+                                            <TableHead className="w-[120px] sm:w-[140px]">Aksi</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {payments.map((payment) => (
                                             <TableRow key={payment.id}>
-                                                <TableCell className="font-mono text-sm">
+                                                <TableCell className="font-mono text-xs sm:text-sm whitespace-nowrap">
                                                     {payment.invoice_number}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div>
-                                                        <div className="font-medium">{payment.student?.name}</div>
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium text-sm truncate max-w-[120px] sm:max-w-none">{payment.student?.name}</div>
                                                         <div className="text-xs text-muted-foreground">
                                                             {payment.student?.nis}
                                                         </div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className="hidden sm:table-cell">
                                                     <div className="flex items-center gap-1">
                                                         {payment.payment_method?.type === 'cash' ? (
-                                                            <Banknote className="h-4 w-4 text-green-600" />
+                                                            <Banknote className="h-4 w-4 text-green-600 shrink-0" />
                                                         ) : (
-                                                            <CreditCard className="h-4 w-4 text-blue-600" />
+                                                            <CreditCard className="h-4 w-4 text-blue-600 shrink-0" />
                                                         )}
-                                                        <span className="text-sm">{payment.payment_method?.name}</span>
+                                                        <span className="text-sm truncate">{payment.payment_method?.name}</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono font-medium">
+                                                <TableCell className="text-right font-mono font-medium text-xs sm:text-sm whitespace-nowrap">
                                                     {payment.grand_total_formatted}
                                                 </TableCell>
-                                                <TableCell className="text-sm">
+                                                <TableCell className="text-sm hidden md:table-cell whitespace-nowrap">
                                                     {payment.paid_at
                                                         ? new Date(payment.paid_at).toLocaleDateString('id-ID')
                                                         : new Date(payment.created_at).toLocaleDateString('id-ID')}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge className={getStatusColor(payment.status)}>
+                                                    <Badge className={`${getStatusColor(payment.status)} text-xs whitespace-nowrap`}>
                                                         {payment.status_label}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap">
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
+                                                            className="h-8 w-8"
                                                             onClick={() => openView(payment)}
                                                             title="Detail"
                                                         >
@@ -622,7 +682,7 @@ export default function Payments() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="text-green-600"
+                                                                className="h-8 w-8 text-green-600"
                                                                 onClick={() => openComplete(payment)}
                                                                 title="Catat Pembayaran"
                                                             >
@@ -633,7 +693,7 @@ export default function Payments() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="text-blue-600"
+                                                                className="h-8 w-8 text-blue-600"
                                                                 onClick={() => openVerify(payment)}
                                                                 title="Verifikasi"
                                                             >
@@ -644,6 +704,7 @@ export default function Payments() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
+                                                                className="h-8 w-8"
                                                                 onClick={() => printReceipt(payment)}
                                                                 title="Kuitansi"
                                                             >
@@ -654,7 +715,7 @@ export default function Payments() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="text-red-600"
+                                                                className="h-8 w-8 text-red-600"
                                                                 onClick={() => openCancel(payment)}
                                                                 title="Batalkan"
                                                             >
@@ -671,16 +732,17 @@ export default function Payments() {
                         )}
 
                         {meta && meta.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
                                     Menampilkan {meta.from}-{meta.to} dari {meta.total} data
                                 </p>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 justify-center sm:justify-end">
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         disabled={page <= 1 || loading}
                                         onClick={() => setPage((p) => p - 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Sebelumnya
                                     </Button>
@@ -689,6 +751,7 @@ export default function Payments() {
                                         size="sm"
                                         disabled={page >= meta.last_page || loading}
                                         onClick={() => setPage((p) => p + 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Berikutnya
                                     </Button>
@@ -701,29 +764,124 @@ export default function Payments() {
 
             {/* Create Payment Dialog */}
             <Dialog open={createOpen} onOpenChange={(open) => { if (!open) resetCreateForm(); setCreateOpen(open); }}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Buat Pembayaran</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg sm:text-xl">Buat Pembayaran</DialogTitle>
+                        <DialogDescription className="text-sm">
                             Pilih siswa dan tagihan yang akan dibayar
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         {/* Student Selection */}
-                        <div className="space-y-2">
-                            <Label>Siswa *</Label>
+                        <div className="space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <Label>Siswa *</Label>
+                                {!selectedStudent && (
+                                    <div className="flex gap-1">
+                                        <Button
+                                            type="button"
+                                            variant={selectionMode === 'dropdown' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setSelectionMode('dropdown')}
+                                            className="text-xs h-7"
+                                        >
+                                            <Users className="h-3 w-3 mr-1" />
+                                            Per Kelas
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant={selectionMode === 'search' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setSelectionMode('search')}
+                                            className="text-xs h-7"
+                                        >
+                                            <Search className="h-3 w-3 mr-1" />
+                                            Cari
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+
                             {selectedStudent ? (
-                                <div className="flex items-center justify-between rounded-md border p-3">
-                                    <div>
-                                        <div className="font-medium">{selectedStudent.full_name}</div>
-                                        <div className="text-sm text-muted-foreground">
+                                <div className="flex items-center justify-between rounded-md border p-3 bg-muted/50">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="font-medium truncate">{selectedStudent.full_name}</div>
+                                        <div className="text-sm text-muted-foreground truncate">
                                             NIS: {selectedStudent.nis}
                                             {selectedStudent.current_class && ` - ${selectedStudent.current_class.name}`}
                                         </div>
                                     </div>
-                                    <Button variant="ghost" size="sm" onClick={() => setSelectedStudent(null)}>
+                                    <Button variant="ghost" size="sm" onClick={() => setSelectedStudent(null)} className="ml-2 shrink-0">
                                         <X className="h-4 w-4" />
                                     </Button>
+                                </div>
+                            ) : selectionMode === 'dropdown' ? (
+                                <div className="space-y-3">
+                                    {/* Classroom Dropdown */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label className="text-xs text-muted-foreground">Pilih Kelas</Label>
+                                            <Select
+                                                value={selectedClassroom || undefined}
+                                                onValueChange={(value) => {
+                                                    setSelectedClassroom(value);
+                                                    setSelectedStudent(null);
+                                                }}
+                                                disabled={loadingClassrooms}
+                                            >
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder={loadingClassrooms ? 'Memuat...' : 'Pilih kelas'} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {classrooms.map((classroom) => (
+                                                        <SelectItem key={classroom.id} value={classroom.id}>
+                                                            {classroom.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {/* Student Dropdown */}
+                                        <div className="space-y-1.5">
+                                            <Label className="text-xs text-muted-foreground">Pilih Siswa</Label>
+                                            <Select
+                                                value={undefined}
+                                                onValueChange={handleSelectStudentFromDropdown}
+                                                disabled={!selectedClassroom || loadingStudents}
+                                            >
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue
+                                                        placeholder={
+                                                            !selectedClassroom
+                                                                ? 'Pilih kelas dulu'
+                                                                : loadingStudents
+                                                                    ? 'Memuat...'
+                                                                    : classroomStudents.length > 0
+                                                                        ? `${classroomStudents.length} siswa tersedia`
+                                                                        : 'Tidak ada siswa'
+                                                        }
+                                                    />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {classroomStudents.length === 0 ? (
+                                                        <div className="py-2 px-3 text-sm text-muted-foreground text-center">
+                                                            {loadingStudents ? 'Memuat siswa...' : 'Tidak ada siswa di kelas ini'}
+                                                        </div>
+                                                    ) : (
+                                                        classroomStudents.map((student) => (
+                                                            <SelectItem key={student.id} value={student.id}>
+                                                                <div className="flex flex-col">
+                                                                    <span>{student.full_name}</span>
+                                                                    <span className="text-xs text-muted-foreground">NIS: {student.nis}</span>
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="relative">
@@ -735,16 +893,17 @@ export default function Payments() {
                                         onChange={(e) => setStudentSearch(e.target.value)}
                                     />
                                     {studentResults.length > 0 && (
-                                        <div className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow-lg">
+                                        <div className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow-lg max-h-[200px] overflow-y-auto">
                                             {studentResults.map((student) => (
                                                 <button
                                                     key={student.id}
-                                                    className="w-full px-3 py-2 text-left hover:bg-accent"
+                                                    className="w-full px-3 py-2 text-left hover:bg-accent border-b last:border-b-0"
                                                     onClick={() => selectStudent(student)}
                                                 >
                                                     <div className="font-medium">{student.full_name}</div>
                                                     <div className="text-sm text-muted-foreground">
                                                         NIS: {student.nis}
+                                                        {student.current_class && ` - ${student.current_class.name}`}
                                                     </div>
                                                 </button>
                                             ))}
@@ -766,38 +925,40 @@ export default function Payments() {
                                 {loadingFees ? (
                                     <div className="py-4 text-center text-muted-foreground">Memuat tagihan...</div>
                                 ) : studentFees.length === 0 ? (
-                                    <div className="rounded-md border p-4 text-center text-muted-foreground">
+                                    <div className="rounded-md border p-4 text-center text-muted-foreground text-sm">
                                         Tidak ada tagihan yang belum lunas
                                     </div>
                                 ) : (
                                     <div className="rounded-md border divide-y max-h-[200px] overflow-y-auto">
                                         {studentFees.map((fee) => (
-                                            <div key={fee.id} className="flex items-center gap-3 p-3">
-                                                <Checkbox
-                                                    id={`fee-${fee.id}`}
-                                                    checked={selectedFeeIds.includes(fee.id)}
-                                                    onCheckedChange={() => toggleFeeSelection(fee.id, fee)}
-                                                />
-                                                <label
-                                                    htmlFor={`fee-${fee.id}`}
-                                                    className="flex-1 cursor-pointer"
-                                                >
-                                                    <div className="font-medium">
-                                                        {fee.fee_structure?.fee_type?.name} - {fee.period_label}
-                                                    </div>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        Sisa: {fee.remaining_amount_formatted}
-                                                    </div>
-                                                </label>
+                                            <div key={fee.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <Checkbox
+                                                        id={`fee-${fee.id}`}
+                                                        checked={selectedFeeIds.includes(fee.id)}
+                                                        onCheckedChange={() => toggleFeeSelection(fee.id, fee)}
+                                                    />
+                                                    <label
+                                                        htmlFor={`fee-${fee.id}`}
+                                                        className="flex-1 cursor-pointer min-w-0"
+                                                    >
+                                                        <div className="font-medium text-sm truncate">
+                                                            {fee.fee_structure?.fee_type?.name} - {fee.period_label}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            Sisa: {fee.remaining_amount_formatted}
+                                                        </div>
+                                                    </label>
+                                                </div>
                                                 {selectedFeeIds.includes(fee.id) && (
-                                                    <div className="w-32">
+                                                    <div className="w-full sm:w-28 ml-8 sm:ml-0">
                                                         <Input
                                                             type="number"
                                                             min={0}
                                                             max={fee.remaining_amount}
                                                             value={feeAmounts[fee.id] || 0}
                                                             onChange={(e) => updateFeeAmount(fee.id, parseFloat(e.target.value) || 0, fee.remaining_amount)}
-                                                            className="text-right"
+                                                            className="text-right text-sm h-9"
                                                         />
                                                     </div>
                                                 )}
@@ -851,15 +1012,15 @@ export default function Payments() {
 
                         {/* Summary */}
                         {selectedFeeIds.length > 0 && (
-                            <div className="rounded-md bg-muted p-4 space-y-2">
+                            <div className="rounded-md bg-muted p-3 sm:p-4 space-y-2">
                                 <div className="flex justify-between text-sm">
                                     <span>Subtotal ({selectedFeeIds.length} tagihan)</span>
-                                    <span className="font-mono">Rp {totalPayment.toLocaleString('id-ID')}</span>
+                                    <span className="font-mono text-sm">Rp {totalPayment.toLocaleString('id-ID')}</span>
                                 </div>
                                 {adminFee > 0 && (
                                     <div className="flex justify-between text-sm text-muted-foreground">
                                         <span>Biaya Admin</span>
-                                        <span className="font-mono">Rp {adminFee.toLocaleString('id-ID')}</span>
+                                        <span className="font-mono text-sm">Rp {adminFee.toLocaleString('id-ID')}</span>
                                     </div>
                                 )}
                                 <div className="flex justify-between font-medium border-t pt-2">
@@ -869,11 +1030,11 @@ export default function Payments() {
                             </div>
                         )}
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0 mt-4">
+                        <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleCreate} disabled={creating || selectedFeeIds.length === 0}>
+                        <Button onClick={handleCreate} disabled={creating || selectedFeeIds.length === 0} className="w-full sm:w-auto">
                             {creating && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             Buat Pembayaran
                         </Button>
@@ -883,32 +1044,32 @@ export default function Payments() {
 
             {/* View Payment Dialog */}
             <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Detail Pembayaran</DialogTitle>
-                        <DialogDescription>{viewingPayment?.invoice_number}</DialogDescription>
+                        <DialogTitle className="text-lg">Detail Pembayaran</DialogTitle>
+                        <DialogDescription className="font-mono text-xs sm:text-sm">{viewingPayment?.invoice_number}</DialogDescription>
                     </DialogHeader>
                     {viewingPayment && (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                                 <div>
-                                    <p className="text-muted-foreground">Siswa</p>
+                                    <p className="text-muted-foreground text-xs">Siswa</p>
                                     <p className="font-medium">{viewingPayment.student?.name}</p>
-                                    <p className="text-muted-foreground">{viewingPayment.student?.nis}</p>
+                                    <p className="text-muted-foreground text-xs">{viewingPayment.student?.nis}</p>
                                 </div>
                                 <div>
-                                    <p className="text-muted-foreground">Status</p>
+                                    <p className="text-muted-foreground text-xs">Status</p>
                                     <Badge className={getStatusColor(viewingPayment.status)}>
                                         {viewingPayment.status_label}
                                     </Badge>
                                 </div>
                                 <div>
-                                    <p className="text-muted-foreground">Metode Pembayaran</p>
+                                    <p className="text-muted-foreground text-xs">Metode Pembayaran</p>
                                     <p className="font-medium">{viewingPayment.payment_method?.name}</p>
                                 </div>
                                 <div>
-                                    <p className="text-muted-foreground">Tanggal</p>
-                                    <p className="font-medium">
+                                    <p className="text-muted-foreground text-xs">Tanggal</p>
+                                    <p className="font-medium text-sm">
                                         {viewingPayment.paid_at
                                             ? new Date(viewingPayment.paid_at).toLocaleString('id-ID')
                                             : new Date(viewingPayment.created_at).toLocaleString('id-ID')}
@@ -918,17 +1079,17 @@ export default function Payments() {
 
                             <div className="space-y-2">
                                 <p className="text-sm text-muted-foreground">Item Pembayaran</p>
-                                <div className="rounded-md border divide-y">
+                                <div className="rounded-md border divide-y max-h-[150px] overflow-y-auto">
                                     {viewingPayment.items?.map((item) => (
-                                        <div key={item.id} className="flex justify-between p-3 text-sm">
-                                            <span>{item.student_fee?.fee_type?.name} - {item.student_fee?.period_label}</span>
-                                            <span className="font-mono">{item.amount_formatted}</span>
+                                        <div key={item.id} className="flex flex-col sm:flex-row sm:justify-between gap-1 p-3 text-sm">
+                                            <span className="truncate">{item.student_fee?.fee_type?.name} - {item.student_fee?.period_label}</span>
+                                            <span className="font-mono text-right">{item.amount_formatted}</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
-                            <div className="rounded-md bg-muted p-4 space-y-2 text-sm">
+                            <div className="rounded-md bg-muted p-3 sm:p-4 space-y-2 text-sm">
                                 <div className="flex justify-between">
                                     <span>Subtotal</span>
                                     <span className="font-mono">{viewingPayment.total_amount_formatted}</span>
@@ -958,8 +1119,8 @@ export default function Payments() {
                             )}
                         </div>
                     )}
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setViewOpen(false)}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setViewOpen(false)} className="w-full sm:w-auto">
                             Tutup
                         </Button>
                     </DialogFooter>
@@ -968,11 +1129,12 @@ export default function Payments() {
 
             {/* Complete Payment Dialog */}
             <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-full max-w-md p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Catat Pembayaran Tunai</DialogTitle>
-                        <DialogDescription>
-                            {completingPayment?.invoice_number} - {completingPayment?.grand_total_formatted}
+                        <DialogTitle className="text-lg">Catat Pembayaran Tunai</DialogTitle>
+                        <DialogDescription className="text-sm">
+                            <span className="font-mono">{completingPayment?.invoice_number}</span>
+                            <span className="block sm:inline sm:ml-2 font-semibold">{completingPayment?.grand_total_formatted}</span>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
@@ -986,11 +1148,11 @@ export default function Payments() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setCompleteOpen(false)} disabled={completing}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setCompleteOpen(false)} disabled={completing} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleComplete} disabled={completing}>
+                        <Button onClick={handleComplete} disabled={completing} className="w-full sm:w-auto">
                             {completing && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             Konfirmasi
                         </Button>
@@ -1000,30 +1162,31 @@ export default function Payments() {
 
             {/* Verify Payment Dialog */}
             <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-full max-w-md p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Verifikasi Pembayaran Transfer</DialogTitle>
-                        <DialogDescription>
-                            {verifyingPayment?.invoice_number} - {verifyingPayment?.grand_total_formatted}
+                        <DialogTitle className="text-lg">Verifikasi Pembayaran Transfer</DialogTitle>
+                        <DialogDescription className="text-sm">
+                            <span className="font-mono">{verifyingPayment?.invoice_number}</span>
+                            <span className="block sm:inline sm:ml-2 font-semibold">{verifyingPayment?.grand_total_formatted}</span>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="flex gap-4">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-4">
                             <Button
                                 variant={verifyApproved ? 'default' : 'outline'}
-                                className="flex-1"
+                                className="w-full"
                                 onClick={() => setVerifyApproved(true)}
                             >
-                                <CheckCircle className="mr-2 h-4 w-4" />
-                                Setujui
+                                <CheckCircle className="mr-1 sm:mr-2 h-4 w-4" />
+                                <span className="text-sm">Setujui</span>
                             </Button>
                             <Button
                                 variant={!verifyApproved ? 'destructive' : 'outline'}
-                                className="flex-1"
+                                className="w-full"
                                 onClick={() => setVerifyApproved(false)}
                             >
-                                <XCircle className="mr-2 h-4 w-4" />
-                                Tolak
+                                <XCircle className="mr-1 sm:mr-2 h-4 w-4" />
+                                <span className="text-sm">Tolak</span>
                             </Button>
                         </div>
                         {!verifyApproved && (
@@ -1039,14 +1202,15 @@ export default function Payments() {
                             </div>
                         )}
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setVerifyOpen(false)} disabled={verifying}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setVerifyOpen(false)} disabled={verifying} className="w-full sm:w-auto">
                             Batal
                         </Button>
                         <Button
                             onClick={handleVerify}
                             disabled={verifying || (!verifyApproved && !verifyNotes.trim())}
                             variant={verifyApproved ? 'default' : 'destructive'}
+                            className="w-full sm:w-auto"
                         >
                             {verifying && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             {verifyApproved ? 'Setujui' : 'Tolak'}
@@ -1057,12 +1221,12 @@ export default function Payments() {
 
             {/* Cancel Payment Dialog */}
             <AlertDialog open={cancelOpen} onOpenChange={(open) => !canceling && setCancelOpen(open)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="w-[95vw] max-w-md p-4 sm:p-6">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Batalkan Pembayaran</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="text-lg">Batalkan Pembayaran</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
                             Apakah Anda yakin ingin membatalkan pembayaran{' '}
-                            <span className="font-medium">{cancelingPayment?.invoice_number}</span>?
+                            <span className="font-medium font-mono">{cancelingPayment?.invoice_number}</span>?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="py-2">
@@ -1075,8 +1239,8 @@ export default function Payments() {
                             onChange={(e) => setCancelReason(e.target.value)}
                         />
                     </div>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setCancelOpen(false)} disabled={canceling}>
+                    <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel onClick={() => setCancelOpen(false)} disabled={canceling} className="w-full sm:w-auto">
                             Tidak
                         </AlertDialogCancel>
                         <AlertDialogAction
@@ -1085,7 +1249,7 @@ export default function Payments() {
                                 handleCancel();
                             }}
                             disabled={canceling}
-                            className="bg-red-600 hover:bg-red-700"
+                            className="w-full sm:w-auto bg-red-600 hover:bg-red-700"
                         >
                             {canceling ? 'Membatalkan...' : 'Ya, Batalkan'}
                         </AlertDialogAction>

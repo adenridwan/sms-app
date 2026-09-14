@@ -177,6 +177,95 @@ class PageController extends Controller
     }
 
     /**
+     * Display student enrollment management page.
+     */
+    public function studentEnrollment(): Response
+    {
+        $academicYears = AcademicYear::orderBy('start_date', 'desc')
+            ->get(['id', 'name', 'is_active']);
+
+        $classrooms = Classroom::with('gradeLevel:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'grade_level_id'])
+            ->map(fn (Classroom $c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'code' => $c->code,
+                'grade_level' => $c->gradeLevel?->name,
+            ]);
+
+        // Students without active enrollment (for bulk enroll)
+        $activeYear = AcademicYear::where('is_active', true)->first();
+        $unenrolledStudents = collect();
+
+        if ($activeYear) {
+            $unenrolledStudents = Student::where('status', 'active')
+                ->whereDoesntHave('enrollments', fn ($q) => $q
+                    ->where('academic_year_id', $activeYear->id)
+                    ->where('status', 'active'))
+                ->with('user.profile')
+                ->orderBy('nis')
+                ->get()
+                ->map(fn (Student $s) => [
+                    'id' => $s->id,
+                    'nis' => $s->nis,
+                    'full_name' => $s->user?->full_name,
+                ]);
+        }
+
+        return Inertia::render('students/Enrollment', [
+            'academicYears' => $academicYears,
+            'classrooms' => $classrooms,
+            'unenrolledStudents' => $unenrolledStudents,
+            'activeYearId' => $activeYear?->id,
+        ]);
+    }
+
+    /**
+     * Display student achievements management page.
+     */
+    public function studentAchievements(): Response
+    {
+        // Get students for dropdown (with their current class)
+        $students = Student::visibleTo(request()->user())
+            ->where('status', 'active')
+            ->with(['user.profile', 'currentClass'])
+            ->orderBy('nis')
+            ->get()
+            ->map(fn (Student $s) => [
+                'id' => $s->id,
+                'nis' => $s->nis,
+                'full_name' => $s->user?->full_name,
+                'class' => $s->currentClass?->name,
+            ]);
+
+        // Category options
+        $categories = [
+            ['value' => 'academic', 'label' => 'Akademik'],
+            ['value' => 'sports', 'label' => 'Olahraga'],
+            ['value' => 'arts', 'label' => 'Seni'],
+            ['value' => 'science', 'label' => 'Sains'],
+            ['value' => 'other', 'label' => 'Lainnya'],
+        ];
+
+        // Level options
+        $levels = [
+            ['value' => 'school', 'label' => 'Sekolah'],
+            ['value' => 'district', 'label' => 'Kecamatan'],
+            ['value' => 'city', 'label' => 'Kota/Kabupaten'],
+            ['value' => 'province', 'label' => 'Provinsi'],
+            ['value' => 'national', 'label' => 'Nasional'],
+            ['value' => 'international', 'label' => 'Internasional'],
+        ];
+
+        return Inertia::render('students/Achievements', [
+            'students' => $students,
+            'categories' => $categories,
+            'levels' => $levels,
+        ]);
+    }
+
+    /**
      * Display the "wajib ganti password" page (initial/reset password).
      */
     public function changePassword(): Response
@@ -817,5 +906,81 @@ class PageController extends Controller
     public function expenseReport(): Response
     {
         return Inertia::render('reports/ExpenseReport');
+    }
+
+    /**
+     * Display report cards management page.
+     */
+    public function reportCards(): Response
+    {
+        return Inertia::render('reports/ReportCards');
+    }
+
+    // =========================================================================
+    // Notifications Module
+    // =========================================================================
+
+    /**
+     * Display announcements management page.
+     */
+    public function announcements(): Response
+    {
+        return Inertia::render('notifications/Announcements');
+    }
+
+    // =========================================================================
+    // Grades & Exams Module
+    // =========================================================================
+
+    /**
+     * Display exams management page.
+     */
+    public function gradeExams(): Response
+    {
+        return Inertia::render('grades/Exams');
+    }
+
+    /**
+     * Display grade input page.
+     */
+    public function gradeInput(): Response
+    {
+        return Inertia::render('grades/Input');
+    }
+
+    /**
+     * Display grade recap page.
+     */
+    public function gradeRecap(): Response
+    {
+        return Inertia::render('grades/Recap');
+    }
+
+    // =========================================================================
+    // Library Module
+    // =========================================================================
+
+    /**
+     * Display library books (catalog) page.
+     */
+    public function libraryBooks(): Response
+    {
+        return Inertia::render('library/Books');
+    }
+
+    /**
+     * Display library loans page.
+     */
+    public function libraryLoans(): Response
+    {
+        return Inertia::render('library/Loans');
+    }
+
+    /**
+     * Display library members page.
+     */
+    public function libraryMembers(): Response
+    {
+        return Inertia::render('library/Members');
     }
 }

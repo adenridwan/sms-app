@@ -165,6 +165,133 @@ export const studentsApi = {
         ),
 };
 
+// Student Enrollments
+export interface Enrollment {
+    id: string;
+    student_id: string;
+    student?: {
+        id: string;
+        nis: string;
+        full_name: string;
+        photo_url: string | null;
+    };
+    academic_year_id: string;
+    academic_year?: {
+        id: string;
+        name: string;
+        is_active: boolean;
+    };
+    classroom_id: string;
+    classroom?: {
+        id: string;
+        name: string;
+        code: string | null;
+    };
+    student_number_in_class: string | null;
+    status: string;
+    status_label: string;
+    enrollment_date: string;
+}
+
+export interface BulkEnrollResult {
+    enrolled: number;
+    skipped: number;
+}
+
+export const enrollmentApi = {
+    list: (params?: Record<string, string>) =>
+        api.get<ApiResponse<Enrollment[]>>('/students/enrollments', { params }),
+
+    studentEnrollments: (studentId: string) =>
+        api.get<ApiResponse<Enrollment[]>>(`/students/${studentId}/enrollments`),
+
+    enroll: (studentId: string, data: {
+        academic_year_id: string;
+        classroom_id: string;
+        student_number_in_class?: string;
+        enrollment_date?: string;
+    }) => api.post<ApiResponse<Enrollment>>(`/students/${studentId}/enroll`, data),
+
+    bulkEnroll: (data: {
+        student_ids: string[];
+        academic_year_id: string;
+        classroom_id: string;
+        enrollment_date?: string;
+    }) => api.post<ApiResponse<BulkEnrollResult>>('/students/enrollments/bulk', data),
+
+    update: (enrollmentId: string, data: {
+        classroom_id?: string;
+        student_number_in_class?: string;
+        status?: string;
+    }) => api.put<ApiResponse<Enrollment>>(`/students/enrollments/${enrollmentId}`, data),
+
+    delete: (enrollmentId: string) =>
+        api.delete<ApiResponse>(`/students/enrollments/${enrollmentId}`),
+
+    statistics: (academicYearId?: string) =>
+        api.get<ApiResponse<{
+            total_enrolled: number;
+            by_status: Record<string, number>;
+            by_classroom: Array<{ classroom_id: string; classroom_name: string; count: number }>;
+        }>>('/students/enrollments/statistics', { params: academicYearId ? { academic_year_id: academicYearId } : {} }),
+};
+
+// Student Achievements
+export interface Achievement {
+    id: string;
+    student_id: string;
+    student?: {
+        id: string;
+        nis: string;
+        full_name: string;
+        photo_url: string | null;
+    };
+    title: string;
+    description: string | null;
+    category: string;
+    category_label: string;
+    level: string;
+    level_label: string;
+    rank: string | null;
+    achievement_date: string;
+    organizer: string | null;
+    certificate_url: string | null;
+}
+
+export const achievementApi = {
+    list: (params?: Record<string, string>) =>
+        api.get<ApiResponse<Achievement[]>>('/students/achievements', { params }),
+
+    forStudent: (studentId: string) =>
+        api.get<ApiResponse<Achievement[]>>(`/students/${studentId}/achievements`),
+
+    get: (id: string) =>
+        api.get<ApiResponse<Achievement>>(`/students/achievements/${id}`),
+
+    create: (data: FormData) =>
+        api.post<ApiResponse<Achievement>>('/students/achievements', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+
+    update: (id: string, data: FormData) =>
+        api.post<ApiResponse<Achievement>>(`/students/achievements/${id}`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/students/achievements/${id}`),
+
+    deleteCertificate: (id: string) =>
+        api.delete<ApiResponse>(`/students/achievements/${id}/certificate`),
+
+    statistics: (params?: { student_id?: string; year?: string }) =>
+        api.get<ApiResponse<{
+            total: number;
+            by_category: Record<string, number>;
+            by_level: Record<string, number>;
+        }>>('/students/achievements/statistics', { params }),
+};
+
 // Teachers (Data Guru — master: identitas, kepegawaian, akun login.
 // Penempatan kelas & mapel dikelola dari menu Kelas / Mata Pelajaran,
 // lihat TEACHER-MODULE-PLAN.md §2)
@@ -1645,6 +1772,617 @@ export const deviceMonitorApi = {
 
     generateProvisionQr: (data: { user_id: string; device_name?: string; location?: string }) =>
         api.post<ApiResponse<DeviceProvisionQr>>('/admin/devices/provision-qr', data),
+};
+
+// Announcements
+export interface Announcement {
+    id: string;
+    title: string;
+    content: string;
+    image_url: string | null;
+    attachments: unknown[] | null;
+    priority: 'low' | 'normal' | 'high' | 'urgent';
+    priority_label: string;
+    target_audience: {
+        roles?: string[];
+        classrooms?: string[];
+        grade_levels?: string[];
+    } | null;
+    publish_at: string | null;
+    expires_at: string | null;
+    is_pinned: boolean;
+    is_published: boolean;
+    is_active: boolean;
+    send_notification: boolean;
+    author?: {
+        id: string;
+        email: string;
+        full_name: string;
+    };
+    read_count: number;
+    is_read: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AnnouncementStatistics {
+    total: number;
+    published: number;
+    draft: number;
+    pinned: number;
+    by_priority: Record<string, number>;
+}
+
+export const announcementApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<Announcement>>('/notifications/announcements', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<Announcement>>(`/notifications/announcements/${id}`),
+
+    create: (data: FormData) =>
+        api.post<ApiResponse<Announcement>>('/notifications/announcements', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+
+    update: (id: string, data: FormData) => {
+        data.append('_method', 'PUT');
+        return api.post<ApiResponse<Announcement>>(`/notifications/announcements/${id}`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/notifications/announcements/${id}`),
+
+    publish: (id: string, is_published: boolean) =>
+        api.post<ApiResponse<Announcement>>(`/notifications/announcements/${id}/publish`, { is_published }),
+
+    markAsRead: (id: string) =>
+        api.post<ApiResponse>(`/notifications/announcements/${id}/read`),
+
+    deleteImage: (id: string) =>
+        api.delete<ApiResponse>(`/notifications/announcements/${id}/image`),
+
+    statistics: () =>
+        api.get<ApiResponse<AnnouncementStatistics>>('/notifications/announcements/statistics'),
+};
+
+// Library
+export interface LibraryBook {
+    id: string;
+    title: string;
+    isbn: string | null;
+    edition: string | null;
+    publish_year: number | null;
+    language: string;
+    pages: number | null;
+    description: string | null;
+    cover_url: string | null;
+    total_copies: number;
+    available_copies: number;
+    price: number | null;
+    status: 'available' | 'unavailable' | 'damaged' | 'lost';
+    status_label: string;
+    category?: { id: string; name: string; code: string };
+    shelf?: { id: string; name: string; code: string; location: string | null };
+    publisher?: { id: string; name: string };
+    authors?: { id: string; name: string; is_primary: boolean }[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BookCategory {
+    id: string;
+    parent_id: string | null;
+    name: string;
+    code: string;
+    description: string | null;
+    parent?: { id: string; name: string };
+    book_count?: number;
+}
+
+export interface LibraryMember {
+    id: string;
+    member_number: string;
+    member_type: 'student' | 'teacher' | 'staff' | 'external';
+    member_type_label: string;
+    registered_at: string;
+    expires_at: string | null;
+    max_borrow_limit: number;
+    current_borrowed: number;
+    status: 'active' | 'inactive' | 'suspended' | 'expired';
+    status_label: string;
+    can_borrow: boolean;
+    user?: { id: string; email: string; full_name: string; avatar_url: string | null };
+}
+
+export interface BookLoan {
+    id: string;
+    borrow_date: string;
+    due_date: string;
+    return_date: string | null;
+    extension_count: number;
+    status: 'borrowed' | 'returned' | 'overdue' | 'lost';
+    status_label: string;
+    condition_on_borrow: string | null;
+    condition_on_return: string | null;
+    fine_amount: number;
+    fine_paid: boolean;
+    is_overdue: boolean;
+    days_overdue: number;
+    notes: string | null;
+    member?: {
+        id: string;
+        member_number: string;
+        member_type: string;
+        user?: { id: string; full_name: string; email: string };
+    };
+    book_copy?: {
+        id: string;
+        copy_number: string;
+        barcode: string | null;
+        condition: string;
+        book?: { id: string; title: string; isbn: string | null; cover_url: string | null };
+    };
+}
+
+export interface LoanStatistics {
+    total_loans: number;
+    active_loans: number;
+    overdue_loans: number;
+    returned_today: number;
+    unpaid_fines: number;
+}
+
+export const libraryBookApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<LibraryBook>>('/library/books', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<LibraryBook>>(`/library/books/${id}`),
+
+    create: (data: FormData) =>
+        api.post<ApiResponse<LibraryBook>>('/library/books', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+
+    update: (id: string, data: FormData) => {
+        data.append('_method', 'PUT');
+        return api.post<ApiResponse<LibraryBook>>(`/library/books/${id}`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/library/books/${id}`),
+
+    copies: (id: string) =>
+        api.get<ApiResponse<unknown[]>>(`/library/books/${id}/copies`),
+};
+
+export const bookCategoryApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<BookCategory>>('/library/categories', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<BookCategory>>(`/library/categories/${id}`),
+
+    create: (data: Record<string, unknown>) =>
+        api.post<ApiResponse<BookCategory>>('/library/categories', data),
+
+    update: (id: string, data: Record<string, unknown>) =>
+        api.put<ApiResponse<BookCategory>>(`/library/categories/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/library/categories/${id}`),
+};
+
+export const libraryMemberApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<LibraryMember>>('/library/members', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<LibraryMember>>(`/library/members/${id}`),
+
+    create: (data: Record<string, unknown>) =>
+        api.post<ApiResponse<LibraryMember>>('/library/members', data),
+
+    update: (id: string, data: Record<string, unknown>) =>
+        api.put<ApiResponse<LibraryMember>>(`/library/members/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/library/members/${id}`),
+
+    loans: (id: string) =>
+        api.get<ApiResponse<unknown[]>>(`/library/members/${id}/loans`),
+
+    availableUsers: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<{ id: string; email: string; full_name: string }[]>>('/library/members-available-users', { params }),
+};
+
+export const bookLoanApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<BookLoan>>('/library/loans', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<BookLoan>>(`/library/loans/${id}`),
+
+    create: (data: Record<string, unknown>) =>
+        api.post<ApiResponse<BookLoan>>('/library/loans', data),
+
+    returnBook: (id: string, data?: Record<string, unknown>) =>
+        api.post<ApiResponse<BookLoan>>(`/library/loans/${id}/return`, data || {}),
+
+    extend: (id: string) =>
+        api.post<ApiResponse<BookLoan>>(`/library/loans/${id}/extend`),
+
+    statistics: () =>
+        api.get<ApiResponse<LoanStatistics>>('/library/loans/statistics'),
+};
+
+// ===================================================================
+// EXAM & GRADES MODULE
+// ===================================================================
+
+export interface ExamType {
+    id: string;
+    name: string;
+    code: string;
+    description: string | null;
+    default_weight: number;
+    is_active: boolean;
+    exam_count: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Exam {
+    id: string;
+    name: string;
+    description: string | null;
+    exam_date: string;
+    start_time: string | null;
+    end_time: string | null;
+    duration_minutes: number | null;
+    max_score: number;
+    passing_score: number;
+    weight: number;
+    status: 'draft' | 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
+    status_label: string;
+    score_count: number;
+    average_score: number | null;
+    can_edit: boolean;
+    can_delete: boolean;
+    can_accept_scores: boolean;
+    academic_year?: { id: string; name: string };
+    semester?: { id: string; name: string; semester_number: number };
+    subject?: { id: string; name: string; code: string };
+    exam_type?: { id: string; name: string; code: string };
+    classroom?: { id: string; name: string };
+    teacher?: { id: string; full_name: string; nip: string };
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ExamScore {
+    id: string;
+    exam_id: string;
+    student_id: string;
+    score: number | null;
+    notes: string | null;
+    is_absent: boolean;
+    is_remedial: boolean;
+    is_passed: boolean;
+    grade_letter: string;
+    graded_at: string | null;
+    student?: {
+        id: string;
+        nis: string;
+        full_name: string;
+        photo_url: string | null;
+    };
+    graded_by?: {
+        id: string;
+        full_name: string;
+    };
+    exam?: {
+        id: string;
+        name: string;
+        max_score: number;
+        passing_score: number;
+    };
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ExamStatistics {
+    total_exams: number;
+    by_status: Record<string, number>;
+    average_score: number | null;
+}
+
+export interface StudentGrade {
+    id: string;
+    subject: { id: string; name: string; code: string };
+    knowledge_score: number;
+    skill_score: number;
+    attitude_score: number;
+    final_score: number;
+    grade_letter: string;
+    predicate: string;
+    is_passed: boolean;
+    is_approved: boolean;
+}
+
+export interface StudentGradeSemester {
+    semester: { id: string; name: string; semester_number: number };
+    grades: StudentGrade[];
+    summary: {
+        total_subjects: number;
+        passed: number;
+        failed: number;
+        average: number;
+    };
+}
+
+export const examTypeApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<ExamType> | ApiResponse<ExamType[]>>('/exams/types', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<ExamType>>(`/exams/types/${id}`),
+
+    create: (data: Record<string, unknown>) =>
+        api.post<ApiResponse<ExamType>>('/exams/types', data),
+
+    update: (id: string, data: Record<string, unknown>) =>
+        api.put<ApiResponse<ExamType>>(`/exams/types/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/exams/types/${id}`),
+};
+
+export const examApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<Exam>>('/exams', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<Exam>>(`/exams/${id}`),
+
+    create: (data: Record<string, unknown>) =>
+        api.post<ApiResponse<Exam>>('/exams', data),
+
+    update: (id: string, data: Record<string, unknown>) =>
+        api.put<ApiResponse<Exam>>(`/exams/${id}`, data),
+
+    delete: (id: string) =>
+        api.delete<ApiResponse>(`/exams/${id}`),
+
+    scores: (examId: string) =>
+        api.get<ApiResponse<ExamScore[]>>(`/exams/${examId}/scores`),
+
+    storeScore: (examId: string, data: Record<string, unknown>) =>
+        api.post<ApiResponse<ExamScore>>(`/exams/${examId}/scores`, data),
+
+    storeBulkScores: (examId: string, scores: Record<string, unknown>[]) =>
+        api.post<ApiResponse<{ saved: ExamScore[]; count: number }>>(`/exams/${examId}/scores/bulk`, { scores }),
+
+    updateScore: (scoreId: string, data: Record<string, unknown>) =>
+        api.put<ApiResponse<ExamScore>>(`/exams/scores/${scoreId}`, data),
+
+    deleteScore: (scoreId: string) =>
+        api.delete<ApiResponse>(`/exams/scores/${scoreId}`),
+
+    statistics: (params?: Record<string, unknown>) =>
+        api.get<ApiResponse<ExamStatistics>>('/exams/statistics', { params }),
+};
+
+export const gradeApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<unknown>>('/grades', { params }),
+
+    byStudent: (studentId: string, params?: Record<string, unknown>) =>
+        api.get<ApiResponse<{
+            student: { id: string; nis: string; full_name: string };
+            semesters: StudentGradeSemester[];
+        }>>(`/grades/student/${studentId}`, { params }),
+
+    byClassroom: (classroomId: string, params: { semester_id: string; subject_id?: string }) =>
+        api.get<ApiResponse<{
+            classroom: { id: string; name: string };
+            students: Array<{
+                student: { id: string; nis: string; full_name: string };
+                grades: Array<{
+                    id: string;
+                    subject_id: string;
+                    subject_name: string;
+                    final_score: number;
+                    grade_letter: string;
+                    is_passed: boolean;
+                }>;
+                average: number;
+            }>;
+            summary: { total_students: number; class_average: number | null };
+        }>>(`/grades/classroom/${classroomId}`, { params }),
+
+    finalize: (data: { semester_id: string; subject_id: string; classroom_id: string }) =>
+        api.post<ApiResponse<{ processed: number; errors: number; error_details: Array<{ student_id: string; student_name: string; error: string }> }>>('/grades/finalize', data),
+
+    approve: (gradeIds: string[]) =>
+        api.post<ApiResponse<{ approved: number }>>('/grades/approve', { grade_ids: gradeIds }),
+};
+
+// ===================================================================
+// REPORT CARDS MODULE
+// ===================================================================
+
+export interface ReportCardExtracurricular {
+    id: string;
+    activity_name: string;
+    predicate: string | null;
+    description: string | null;
+}
+
+export interface ReportCardCharacter {
+    id: string;
+    character_name: string;
+    predicate: string;
+    description: string | null;
+}
+
+export interface ReportCard {
+    id: string;
+    report_number: string | null;
+    total_subjects: number | null;
+    average_score: number | null;
+    rank_in_class: number | null;
+    total_students_in_class: number | null;
+    total_present_days: number | null;
+    total_absent_days: number | null;
+    total_sick_days: number | null;
+    total_permitted_days: number | null;
+    homeroom_notes: string | null;
+    principal_notes: string | null;
+    promotion_status: 'pending' | 'promoted' | 'retained' | 'conditional';
+    promotion_status_label: string;
+    next_classroom: string | null;
+    issued_date: string | null;
+    status: 'draft' | 'reviewed' | 'approved' | 'published' | 'distributed';
+    status_label: string;
+    can_edit: boolean;
+    can_approve: boolean;
+    can_publish: boolean;
+    student?: {
+        id: string;
+        nis: string;
+        full_name: string;
+        photo_url: string | null;
+    };
+    classroom?: {
+        id: string;
+        name: string;
+    };
+    academic_year?: {
+        id: string;
+        name: string;
+    };
+    semester?: {
+        id: string;
+        name: string;
+        semester_number: number;
+    };
+    homeroom_teacher?: {
+        id: string;
+        full_name: string;
+    };
+    principal?: {
+        id: string;
+        full_name: string;
+    };
+    extracurriculars?: ReportCardExtracurricular[];
+    characters?: ReportCardCharacter[];
+    grades?: Array<{
+        id: string;
+        subject: { id: string; name: string; code: string };
+        knowledge_score: number;
+        skill_score: number;
+        attitude_score: number;
+        final_score: number;
+        grade_letter: string;
+        predicate: string;
+        is_passed: boolean;
+    }>;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ReportCardStatistics {
+    total: number;
+    by_status: Record<string, number>;
+    by_promotion: Record<string, number>;
+}
+
+export interface ReportCardGenerateResult {
+    created: number;
+    skipped: number;
+    errors: number;
+    error_details: Array<{
+        student_id: string;
+        student_name: string | null;
+        error: string;
+    }>;
+}
+
+export const reportCardApi = {
+    list: (params?: Record<string, unknown>) =>
+        api.get<PaginatedResponse<ReportCard>>('/reports/report-cards', { params }),
+
+    get: (id: string) =>
+        api.get<ApiResponse<ReportCard>>(`/reports/report-cards/${id}`),
+
+    generate: (data: {
+        academic_year_id: string;
+        semester_id: string;
+        classroom_id: string;
+    }) => api.post<ApiResponse<ReportCardGenerateResult>>('/reports/report-cards/generate', data),
+
+    update: (id: string, data: {
+        homeroom_notes?: string;
+        principal_notes?: string;
+        promotion_status?: 'pending' | 'promoted' | 'retained' | 'conditional';
+        next_classroom?: string;
+        total_present_days?: number;
+        total_absent_days?: number;
+        total_sick_days?: number;
+        total_permitted_days?: number;
+        extracurriculars?: Array<{
+            activity_name: string;
+            predicate?: string;
+            description?: string;
+        }>;
+        characters?: Array<{
+            character_name: string;
+            predicate: string;
+            description?: string;
+        }>;
+    }) => api.put<ApiResponse<ReportCard>>(`/reports/report-cards/${id}`, data),
+
+    submitForReview: (id: string) =>
+        api.post<ApiResponse<ReportCard>>(`/reports/report-cards/${id}/submit-review`),
+
+    approve: (id: string) =>
+        api.post<ApiResponse<ReportCard>>(`/reports/report-cards/${id}/approve`),
+
+    publish: (id: string) =>
+        api.post<ApiResponse<ReportCard>>(`/reports/report-cards/${id}/publish`),
+
+    bulkApprove: (ids: string[]) =>
+        api.post<ApiResponse<{ approved: number; skipped: number }>>('/reports/report-cards/bulk-approve', {
+            report_card_ids: ids,
+        }),
+
+    bulkPublish: (ids: string[]) =>
+        api.post<ApiResponse<{ published: number; skipped: number }>>('/reports/report-cards/bulk-publish', {
+            report_card_ids: ids,
+        }),
+
+    pdf: (id: string) =>
+        api.get<ApiResponse<{
+            message: string;
+            report_card: ReportCard;
+            grades: Array<{
+                subject: string;
+                knowledge_score: number;
+                skill_score: number;
+                final_score: number;
+                grade_letter: string;
+                predicate: string;
+            }>;
+        }>>(`/reports/report-cards/${id}/pdf`),
+
+    statistics: (params?: { academic_year_id?: string; semester_id?: string }) =>
+        api.get<ApiResponse<ReportCardStatistics>>('/reports/report-cards/statistics', { params }),
 };
 
 export default api;

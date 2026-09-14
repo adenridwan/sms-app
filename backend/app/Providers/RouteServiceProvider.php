@@ -2,6 +2,18 @@
 
 namespace App\Providers;
 
+use App\Infrastructure\Persistence\Eloquent\Exam\Exam;
+use App\Infrastructure\Persistence\Eloquent\Exam\ExamScore;
+use App\Infrastructure\Persistence\Eloquent\Exam\ExamType;
+use App\Infrastructure\Persistence\Eloquent\Library\Book;
+use App\Infrastructure\Persistence\Eloquent\Library\BookCategory;
+use App\Infrastructure\Persistence\Eloquent\Library\BookLoan;
+use App\Infrastructure\Persistence\Eloquent\Library\LibraryMember;
+use App\Infrastructure\Persistence\Eloquent\Notification\Announcement;
+use App\Infrastructure\Persistence\Eloquent\Report\ReportCard;
+use App\Infrastructure\Persistence\Eloquent\Student\StudentAchievement;
+use App\Infrastructure\Persistence\Eloquent\Student\StudentEnrollment;
+use App\Infrastructure\Persistence\Eloquent\Student\StudentGuardian;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Http\Request;
@@ -43,6 +55,26 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('sensitive', function (Request $request) {
             return Limit::perMinute(5)->by($request->user()?->id ?: $request->ip());
         });
+
+        // Route model binding untuk model di namespace non-standar
+        Route::model('enrollment', StudentEnrollment::class);
+        Route::model('guardian', StudentGuardian::class);
+        Route::model('achievement', StudentAchievement::class);
+        Route::model('announcement', Announcement::class);
+
+        // Library module
+        Route::model('book', Book::class);
+        Route::model('category', BookCategory::class);
+        Route::model('member', LibraryMember::class);
+        Route::model('loan', BookLoan::class);
+
+        // Exam module
+        Route::model('exam', Exam::class);
+        Route::model('type', ExamType::class);
+        Route::model('score', ExamScore::class);
+
+        // Report module
+        Route::model('reportCard', ReportCard::class);
 
         $this->routes(function () {
             // API Routes

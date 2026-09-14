@@ -400,16 +400,16 @@ export default function Reports() {
         <MainLayout>
             <Head title="Laporan Keuangan" />
 
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
+            <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <div>
-                        <h1 className="text-2xl font-bold">Laporan Keuangan</h1>
-                        <p className="text-muted-foreground">Lihat ringkasan dan laporan keuangan siswa</p>
+                        <h1 className="text-xl sm:text-2xl font-bold">Laporan Keuangan</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground">Lihat ringkasan dan laporan keuangan siswa</p>
                     </div>
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
                         <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                         <TabsTrigger value="outstanding">Tunggakan</TabsTrigger>
                         <TabsTrigger value="classroom">Per Kelas</TabsTrigger>
@@ -417,10 +417,10 @@ export default function Reports() {
                     </TabsList>
 
                     {/* Dashboard Tab */}
-                    <TabsContent value="dashboard" className="space-y-6">
-                        <div className="flex items-center gap-4">
+                    <TabsContent value="dashboard" className="space-y-4 sm:space-y-6">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
                             <Select value={dashboardYearId} onValueChange={setDashboardYearId}>
-                                <SelectTrigger className="w-[200px]">
+                                <SelectTrigger className="w-full sm:w-[200px]">
                                     <SelectValue placeholder="Semua Tahun Ajaran" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -430,7 +430,7 @@ export default function Reports() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Button variant="outline" onClick={loadDashboard} disabled={loading}>
+                            <Button variant="outline" onClick={loadDashboard} disabled={loading} className="w-full sm:w-auto">
                                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                                 Refresh
                             </Button>
@@ -439,42 +439,42 @@ export default function Reports() {
                         {dashboardData && (
                             <>
                                 {/* Summary Cards */}
-                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                                <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
                                     <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">Total Siswa</CardTitle>
+                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+                                            <CardTitle className="text-xs sm:text-sm font-medium">Total Siswa</CardTitle>
                                             <Users className="h-4 w-4 text-muted-foreground" />
                                         </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold">{dashboardData.summary.total_students}</div>
+                                        <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                            <div className="text-lg sm:text-2xl font-bold">{dashboardData.summary.total_students}</div>
                                         </CardContent>
                                     </Card>
                                     <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">Total Tagihan</CardTitle>
+                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+                                            <CardTitle className="text-xs sm:text-sm font-medium">Total Tagihan</CardTitle>
                                             <Wallet className="h-4 w-4 text-muted-foreground" />
                                         </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold">{dashboardData.summary.total_fees_formatted}</div>
+                                        <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                            <div className="text-lg sm:text-2xl font-bold truncate">{dashboardData.summary.total_fees_formatted}</div>
                                         </CardContent>
                                     </Card>
                                     <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">Total Terbayar</CardTitle>
+                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+                                            <CardTitle className="text-xs sm:text-sm font-medium">Total Terbayar</CardTitle>
                                             <TrendingUp className="h-4 w-4 text-green-600" />
                                         </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-green-600">{dashboardData.summary.total_paid_formatted}</div>
+                                        <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                            <div className="text-lg sm:text-2xl font-bold text-green-600 truncate">{dashboardData.summary.total_paid_formatted}</div>
                                             <p className="text-xs text-muted-foreground">{dashboardData.summary.collection_rate}% terkumpul</p>
                                         </CardContent>
                                     </Card>
                                     <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">Total Tunggakan</CardTitle>
+                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+                                            <CardTitle className="text-xs sm:text-sm font-medium">Total Tunggakan</CardTitle>
                                             <TrendingDown className="h-4 w-4 text-red-600" />
                                         </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-red-600">{dashboardData.summary.total_outstanding_formatted}</div>
+                                        <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                            <div className="text-lg sm:text-2xl font-bold text-red-600 truncate">{dashboardData.summary.total_outstanding_formatted}</div>
                                             <p className="text-xs text-muted-foreground">{dashboardData.summary.overdue_students} siswa menunggak</p>
                                         </CardContent>
                                     </Card>
@@ -536,14 +536,14 @@ export default function Reports() {
                     </TabsContent>
 
                     {/* Outstanding Tab */}
-                    <TabsContent value="outstanding" className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
+                    <TabsContent value="outstanding" className="space-y-4 sm:space-y-6">
+                        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
                                 <Select
                                     value={outstandingFilters.academic_year_id}
                                     onValueChange={(value) => setOutstandingFilters(prev => ({ ...prev, academic_year_id: value, page: 1 }))}
                                 >
-                                    <SelectTrigger className="w-[180px]">
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Tahun Ajaran" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -557,7 +557,7 @@ export default function Reports() {
                                     value={outstandingFilters.classroom_id}
                                     onValueChange={(value) => setOutstandingFilters(prev => ({ ...prev, classroom_id: value, page: 1 }))}
                                 >
-                                    <SelectTrigger className="w-[180px]">
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Kelas" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -571,7 +571,7 @@ export default function Reports() {
                                     value={outstandingFilters.status}
                                     onValueChange={(value) => setOutstandingFilters(prev => ({ ...prev, status: value, page: 1 }))}
                                 >
-                                    <SelectTrigger className="w-[150px]">
+                                    <SelectTrigger className="w-full col-span-2 sm:col-span-1">
                                         <SelectValue placeholder="Status" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -582,53 +582,53 @@ export default function Reports() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <Button variant="outline" onClick={handleExportOutstanding} disabled={exporting}>
+                            <Button variant="outline" onClick={handleExportOutstanding} disabled={exporting} className="w-full lg:w-auto">
                                 <Download className="h-4 w-4 mr-2" />
                                 Export CSV
                             </Button>
                         </div>
 
                         {outstandingSummary && (
-                            <div className="grid gap-4 md:grid-cols-3">
+                            <div className="grid gap-3 sm:gap-4 grid-cols-3">
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Total Tunggakan</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Total Tunggakan</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-red-600">{outstandingSummary.total_outstanding_formatted}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold text-red-600 truncate">{outstandingSummary.total_outstanding_formatted}</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Jumlah Siswa</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Jumlah Siswa</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold">{outstandingSummary.total_students}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold">{outstandingSummary.total_students}</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Jumlah Tagihan</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Jumlah Tagihan</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold">{outstandingSummary.total_fees}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold">{outstandingSummary.total_fees}</div>
                                     </CardContent>
                                 </Card>
                             </div>
                         )}
 
                         <Card>
-                            <CardContent className="p-0">
-                                <Table>
+                            <CardContent className="p-0 overflow-x-auto">
+                                <Table className="min-w-[900px]">
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>NIS</TableHead>
                                             <TableHead>Nama Siswa</TableHead>
-                                            <TableHead>Kelas</TableHead>
-                                            <TableHead>Jenis Tagihan</TableHead>
-                                            <TableHead>Periode</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Kelas</TableHead>
+                                            <TableHead className="hidden md:table-cell">Jenis Tagihan</TableHead>
+                                            <TableHead className="hidden lg:table-cell">Periode</TableHead>
                                             <TableHead className="text-right">Sisa</TableHead>
-                                            <TableHead>Jatuh Tempo</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Jatuh Tempo</TableHead>
                                             <TableHead>Status</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -644,13 +644,13 @@ export default function Reports() {
                                                 <TableRow key={item.id}>
                                                     <TableCell className="font-mono">{item.student.nis}</TableCell>
                                                     <TableCell>{item.student.name}</TableCell>
-                                                    <TableCell>{item.student.classroom}</TableCell>
-                                                    <TableCell>{item.fee_type}</TableCell>
-                                                    <TableCell>{item.period}</TableCell>
+                                                    <TableCell className="hidden sm:table-cell">{item.student.classroom}</TableCell>
+                                                    <TableCell className="hidden md:table-cell">{item.fee_type}</TableCell>
+                                                    <TableCell className="hidden lg:table-cell">{item.period}</TableCell>
                                                     <TableCell className="text-right font-medium text-red-600">
                                                         {item.remaining_amount_formatted}
                                                     </TableCell>
-                                                    <TableCell>{item.due_date}</TableCell>
+                                                    <TableCell className="hidden sm:table-cell">{item.due_date}</TableCell>
                                                     <TableCell>
                                                         <Badge className={getStatusColor(item.status)}>
                                                             {item.status_label}
@@ -670,35 +670,37 @@ export default function Reports() {
                         </Card>
 
                         {outstandingMeta && outstandingMeta.last_page > 1 && (
-                            <div className="flex items-center justify-end gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setOutstandingFilters(prev => ({ ...prev, page: prev.page - 1 }))}
-                                    disabled={outstandingFilters.page <= 1}
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                </Button>
-                                <span className="text-sm">
+                            <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end gap-2">
+                                <span className="text-sm text-muted-foreground order-first sm:order-none">
                                     Halaman {outstandingMeta.current_page} dari {outstandingMeta.last_page}
                                 </span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setOutstandingFilters(prev => ({ ...prev, page: prev.page + 1 }))}
-                                    disabled={outstandingFilters.page >= outstandingMeta.last_page}
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setOutstandingFilters(prev => ({ ...prev, page: prev.page - 1 }))}
+                                        disabled={outstandingFilters.page <= 1}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setOutstandingFilters(prev => ({ ...prev, page: prev.page + 1 }))}
+                                        disabled={outstandingFilters.page >= outstandingMeta.last_page}
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         )}
                     </TabsContent>
 
                     {/* Classroom Tab */}
-                    <TabsContent value="classroom" className="space-y-6">
-                        <div className="flex items-center justify-between">
+                    <TabsContent value="classroom" className="space-y-4 sm:space-y-6">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                             <Select value={classroomYearId} onValueChange={setClassroomYearId}>
-                                <SelectTrigger className="w-[200px]">
+                                <SelectTrigger className="w-full sm:w-[200px]">
                                     <SelectValue placeholder="Semua Tahun Ajaran" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -708,61 +710,61 @@ export default function Reports() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Button variant="outline" onClick={handleExportClassroom} disabled={exporting}>
+                            <Button variant="outline" onClick={handleExportClassroom} disabled={exporting} className="w-full sm:w-auto">
                                 <Download className="h-4 w-4 mr-2" />
                                 Export CSV
                             </Button>
                         </div>
 
                         {classroomSummary && (
-                            <div className="grid gap-4 md:grid-cols-4">
+                            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Jumlah Kelas</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Jumlah Kelas</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold">{classroomSummary.total_classrooms}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold">{classroomSummary.total_classrooms}</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Total Tagihan</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Total Tagihan</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold">{classroomSummary.total_fees_formatted}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold truncate">{classroomSummary.total_fees_formatted}</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Total Terbayar</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Total Terbayar</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-green-600">{classroomSummary.total_paid_formatted}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold text-green-600 truncate">{classroomSummary.total_paid_formatted}</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">% Terkumpul</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">% Terkumpul</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold">{classroomSummary.collection_rate}%</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold">{classroomSummary.collection_rate}%</div>
                                     </CardContent>
                                 </Card>
                             </div>
                         )}
 
                         <Card>
-                            <CardContent className="p-0">
-                                <Table>
+                            <CardContent className="p-0 overflow-x-auto">
+                                <Table className="min-w-[900px]">
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Kelas</TableHead>
-                                            <TableHead>Tingkat</TableHead>
-                                            <TableHead>Jurusan</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Tingkat</TableHead>
+                                            <TableHead className="hidden md:table-cell">Jurusan</TableHead>
                                             <TableHead className="text-right">Siswa</TableHead>
-                                            <TableHead className="text-right">Belum Bayar</TableHead>
-                                            <TableHead className="text-right">Total Tagihan</TableHead>
-                                            <TableHead className="text-right">Terbayar</TableHead>
+                                            <TableHead className="text-right hidden sm:table-cell">Belum Bayar</TableHead>
+                                            <TableHead className="text-right hidden lg:table-cell">Total Tagihan</TableHead>
+                                            <TableHead className="text-right hidden md:table-cell">Terbayar</TableHead>
                                             <TableHead className="text-right">Tunggakan</TableHead>
                                             <TableHead className="text-right">%</TableHead>
                                         </TableRow>
@@ -778,12 +780,12 @@ export default function Reports() {
                                             classroomData.map((item) => (
                                                 <TableRow key={item.id}>
                                                     <TableCell className="font-medium">{item.name}</TableCell>
-                                                    <TableCell>{item.grade_level}</TableCell>
-                                                    <TableCell>{item.major}</TableCell>
+                                                    <TableCell className="hidden sm:table-cell">{item.grade_level}</TableCell>
+                                                    <TableCell className="hidden md:table-cell">{item.major}</TableCell>
                                                     <TableCell className="text-right">{item.student_count}</TableCell>
-                                                    <TableCell className="text-right text-red-600">{item.unpaid_count}</TableCell>
-                                                    <TableCell className="text-right">{item.total_fees_formatted}</TableCell>
-                                                    <TableCell className="text-right text-green-600">{item.total_paid_formatted}</TableCell>
+                                                    <TableCell className="text-right text-red-600 hidden sm:table-cell">{item.unpaid_count}</TableCell>
+                                                    <TableCell className="text-right hidden lg:table-cell">{item.total_fees_formatted}</TableCell>
+                                                    <TableCell className="text-right text-green-600 hidden md:table-cell">{item.total_paid_formatted}</TableCell>
                                                     <TableCell className="text-right text-red-600">{item.total_outstanding_formatted}</TableCell>
                                                     <TableCell className="text-right">
                                                         <Badge variant={item.collection_rate >= 80 ? 'default' : item.collection_rate >= 50 ? 'secondary' : 'destructive'}>
@@ -800,14 +802,14 @@ export default function Reports() {
                     </TabsContent>
 
                     {/* Monthly Tab */}
-                    <TabsContent value="monthly" className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
+                    <TabsContent value="monthly" className="space-y-4 sm:space-y-6">
+                        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
                                 <Select
                                     value={monthlyFilters.month}
                                     onValueChange={(value) => setMonthlyFilters(prev => ({ ...prev, month: value, page: 1 }))}
                                 >
-                                    <SelectTrigger className="w-[150px]">
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Bulan" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -820,7 +822,7 @@ export default function Reports() {
                                     value={monthlyFilters.year}
                                     onValueChange={(value) => setMonthlyFilters(prev => ({ ...prev, year: value, page: 1 }))}
                                 >
-                                    <SelectTrigger className="w-[120px]">
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Tahun" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -833,7 +835,7 @@ export default function Reports() {
                                     value={monthlyFilters.classroom_id}
                                     onValueChange={(value) => setMonthlyFilters(prev => ({ ...prev, classroom_id: value, page: 1 }))}
                                 >
-                                    <SelectTrigger className="w-[180px]">
+                                    <SelectTrigger className="w-full col-span-2 sm:col-span-1">
                                         <SelectValue placeholder="Kelas" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -844,63 +846,63 @@ export default function Reports() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <Button variant="outline" onClick={handleExportMonthly} disabled={exporting}>
+                            <Button variant="outline" onClick={handleExportMonthly} disabled={exporting} className="w-full lg:w-auto">
                                 <Download className="h-4 w-4 mr-2" />
                                 Export CSV
                             </Button>
                         </div>
 
                         {monthlySummary && (
-                            <div className="grid gap-4 md:grid-cols-4">
+                            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Periode</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Periode</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-xl font-bold">{monthlySummary.period}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-base sm:text-xl font-bold">{monthlySummary.period}</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Total Tagihan</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Total Tagihan</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold">{monthlySummary.total_fees_formatted}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold truncate">{monthlySummary.total_fees_formatted}</div>
                                         <p className="text-xs text-muted-foreground">{monthlySummary.total_students} siswa</p>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Lunas</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Lunas</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-green-600">{monthlySummary.paid_count}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold text-green-600">{monthlySummary.paid_count}</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-medium">Belum Lunas</CardTitle>
+                                    <CardHeader className="pb-2 p-3 sm:p-6 sm:pb-2">
+                                        <CardTitle className="text-xs sm:text-sm font-medium">Belum Lunas</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-red-600">{monthlySummary.unpaid_count}</div>
+                                    <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                                        <div className="text-lg sm:text-2xl font-bold text-red-600">{monthlySummary.unpaid_count}</div>
                                     </CardContent>
                                 </Card>
                             </div>
                         )}
 
                         <Card>
-                            <CardContent className="p-0">
-                                <Table>
+                            <CardContent className="p-0 overflow-x-auto">
+                                <Table className="min-w-[900px]">
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>NIS</TableHead>
                                             <TableHead>Nama Siswa</TableHead>
-                                            <TableHead>Kelas</TableHead>
-                                            <TableHead>Jenis Tagihan</TableHead>
-                                            <TableHead className="text-right">Total</TableHead>
-                                            <TableHead className="text-right">Terbayar</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Kelas</TableHead>
+                                            <TableHead className="hidden md:table-cell">Jenis Tagihan</TableHead>
+                                            <TableHead className="text-right hidden lg:table-cell">Total</TableHead>
+                                            <TableHead className="text-right hidden md:table-cell">Terbayar</TableHead>
                                             <TableHead className="text-right">Sisa</TableHead>
-                                            <TableHead>Jatuh Tempo</TableHead>
+                                            <TableHead className="hidden sm:table-cell">Jatuh Tempo</TableHead>
                                             <TableHead>Status</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -916,12 +918,12 @@ export default function Reports() {
                                                 <TableRow key={item.id}>
                                                     <TableCell className="font-mono">{item.student.nis}</TableCell>
                                                     <TableCell>{item.student.name}</TableCell>
-                                                    <TableCell>{item.student.classroom}</TableCell>
-                                                    <TableCell>{item.fee_type}</TableCell>
-                                                    <TableCell className="text-right">{item.total_amount_formatted}</TableCell>
-                                                    <TableCell className="text-right text-green-600">{item.paid_amount_formatted}</TableCell>
+                                                    <TableCell className="hidden sm:table-cell">{item.student.classroom}</TableCell>
+                                                    <TableCell className="hidden md:table-cell">{item.fee_type}</TableCell>
+                                                    <TableCell className="text-right hidden lg:table-cell">{item.total_amount_formatted}</TableCell>
+                                                    <TableCell className="text-right text-green-600 hidden md:table-cell">{item.paid_amount_formatted}</TableCell>
                                                     <TableCell className="text-right text-red-600">{item.remaining_amount_formatted}</TableCell>
-                                                    <TableCell>{item.due_date}</TableCell>
+                                                    <TableCell className="hidden sm:table-cell">{item.due_date}</TableCell>
                                                     <TableCell>
                                                         <Badge className={getStatusColor(item.status)}>
                                                             {item.status_label}
@@ -936,26 +938,28 @@ export default function Reports() {
                         </Card>
 
                         {monthlyMeta && monthlyMeta.last_page > 1 && (
-                            <div className="flex items-center justify-end gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setMonthlyFilters(prev => ({ ...prev, page: prev.page - 1 }))}
-                                    disabled={monthlyFilters.page <= 1}
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                </Button>
-                                <span className="text-sm">
+                            <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end gap-2">
+                                <span className="text-sm text-muted-foreground order-first sm:order-none">
                                     Halaman {monthlyMeta.current_page} dari {monthlyMeta.last_page}
                                 </span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setMonthlyFilters(prev => ({ ...prev, page: prev.page + 1 }))}
-                                    disabled={monthlyFilters.page >= monthlyMeta.last_page}
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setMonthlyFilters(prev => ({ ...prev, page: prev.page - 1 }))}
+                                        disabled={monthlyFilters.page <= 1}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setMonthlyFilters(prev => ({ ...prev, page: prev.page + 1 }))}
+                                        disabled={monthlyFilters.page >= monthlyMeta.last_page}
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         )}
                     </TabsContent>

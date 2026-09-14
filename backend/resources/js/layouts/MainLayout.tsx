@@ -121,7 +121,7 @@ const menuItems: MenuItem[] = [
         children: [
             { key: 'staff.teachers', title: 'Data Guru', href: '/teachers', permission: 'teachers.view' },
             { key: 'staff.staff', title: 'Data Staff', href: '/staff', permission: 'staff.view' },
-            { key: 'staff.leave', title: 'Pengajuan Cuti', href: '/leave-requests' },
+            { key: 'staff.leave', title: 'Pengajuan Cuti', href: '/attendance/permissions', permission: 'attendance.manage' },
         ],
     },
     {
@@ -198,6 +198,14 @@ const menuItems: MenuItem[] = [
             { key: 'reports.expense', title: 'Pengeluaran', href: '/reports/expense', permission: 'finance.report' },
             { key: 'reports.report-cards', title: 'Rapor', href: '/reports/report-cards' },
             { key: 'reports.generate', title: 'Generate Laporan', href: '/reports/generate' },
+        ],
+    },
+    {
+        key: 'notifications',
+        title: 'Notifikasi',
+        icon: Bell,
+        children: [
+            { key: 'notifications.announcements', title: 'Pengumuman', href: '/notifications/announcements' },
         ],
     },
     {
@@ -376,19 +384,19 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
         <SidebarProvider>
             <Sidebar>
                 {/* Sidebar Header: school logo & name */}
-                <SidebarHeader className="border-b px-3 py-3">
+                <SidebarHeader className="border-b border-sidebar-border bg-gradient-to-b from-primary/[0.04] to-transparent px-3 py-3">
                     <Link
                         href="/dashboard"
-                        className="flex items-center gap-2.5 group-data-[state=collapsed]:justify-center"
+                        className="flex items-center gap-2.5 rounded-xl p-1.5 transition-colors hover:bg-sidebar-accent group-data-[state=collapsed]:justify-center"
                     >
                         {tenant?.logo ? (
                             <img
                                 src={tenant.logo}
                                 alt={schoolName}
-                                className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-border"
+                                className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-sidebar-border shadow-sm"
                             />
                         ) : (
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm ring-1 ring-primary/20">
                                 <GraduationCap className="h-5 w-5" />
                             </div>
                         )}
@@ -403,7 +411,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
 
                 {/* Sidebar Menu: vertically scrollable */}
                 <SidebarContent className="scrollbar-thin">
-                    <SidebarMenu className="px-2 py-2">
+                    <SidebarMenu className="px-2 py-3">
                         {menuItems.map((item) => {
                             if (!hasPermission(item.permission) || !isMenuVisible(item.key)) return null;
 
@@ -445,8 +453,8 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                 </SidebarContent>
 
                 {/* Sidebar Footer: user info + logout */}
-                <SidebarFooter className="border-t p-2">
-                    <div className="flex items-center gap-2 rounded-lg p-1.5 group-data-[state=collapsed]:flex-col group-data-[state=collapsed]:gap-1.5 group-data-[state=collapsed]:p-0">
+                <SidebarFooter className="border-t border-sidebar-border bg-gradient-to-t from-primary/[0.025] to-transparent p-2">
+                    <div className="flex items-center gap-2 rounded-xl border border-transparent p-1.5 transition-colors hover:border-sidebar-border hover:bg-sidebar-accent/60 group-data-[state=collapsed]:flex-col group-data-[state=collapsed]:gap-1.5 group-data-[state=collapsed]:border-0 group-data-[state=collapsed]:bg-transparent group-data-[state=collapsed]:p-0">
                         <Link href="/profile" title="Profil" className="shrink-0">
                             <Avatar className="h-8 w-8 ring-1 ring-border transition-shadow hover:ring-2 hover:ring-primary">
                                 <AvatarImage src={auth.user?.avatar_url ?? undefined} />

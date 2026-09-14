@@ -122,6 +122,14 @@ class Student extends Model
     }
 
     /**
+     * Get achievements
+     */
+    public function achievements(): HasMany
+    {
+        return $this->hasMany(StudentAchievement::class, 'student_id');
+    }
+
+    /**
      * Get current classroom via the active enrollment
      */
     public function currentClass(): HasOneThrough

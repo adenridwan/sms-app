@@ -108,7 +108,7 @@ const Sidebar = React.forwardRef<
         <>
             {/* Mobile */}
             <Sheet open={openMobile} onOpenChange={setOpenMobile}>
-                <SheetContent side="left" className="w-[--sidebar-width] p-0 md:hidden">
+                <SheetContent side="left" className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground md:hidden">
                     <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                     <div className="flex h-full flex-col">{children}</div>
                 </SheetContent>
@@ -119,7 +119,7 @@ const Sidebar = React.forwardRef<
                 ref={ref}
                 data-state={state}
                 className={cn(
-                    'group hidden flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground md:flex',
+                    'group hidden flex-col overflow-hidden border-r border-sidebar-border bg-sidebar/95 text-sidebar-foreground shadow-sm backdrop-blur md:flex',
                     'w-[--sidebar-width] transition-[width] duration-300 ease-in-out',
                     'data-[state=collapsed]:w-[--sidebar-width-icon]',
                     variant === 'inset' && 'rounded-lg border',
@@ -214,7 +214,7 @@ const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.ComponentProps<'li
 SidebarMenuItem.displayName = 'SidebarMenuItem';
 
 const sidebarMenuButtonVariants = cva(
-    'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:ring-2 active:bg-primary/15 active:text-primary disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-primary data-[active=true]:font-medium data-[active=true]:text-primary-foreground data-[active=true]:shadow-sm data-[active=true]:hover:bg-primary data-[active=true]:hover:text-primary-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:[&>span]:hidden',
+    'peer/menu-button relative flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left text-sm outline-none ring-sidebar-ring transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-primary/15 active:text-primary disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-primary/10 data-[active=true]:font-medium data-[active=true]:text-primary data-[active=true]:shadow-sm data-[active=true]:before:absolute data-[active=true]:before:inset-y-2 data-[active=true]:before:left-0 data-[active=true]:before:w-0.5 data-[active=true]:before:rounded-r-full data-[active=true]:before:bg-primary [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:[&>span]:hidden group-data-[state=collapsed]:data-[active=true]:before:inset-y-1.5',
     {
         variants: {
             size: {
@@ -269,7 +269,7 @@ const SidebarMenuSub = React.forwardRef<HTMLUListElement, React.ComponentProps<'
         <ul
             ref={ref}
             className={cn(
-                'mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5',
+                'mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border/80 px-2.5 py-1',
                 'group-data-[state=collapsed]:hidden',
                 className
             )}
@@ -295,8 +295,8 @@ const SidebarMenuSubButton = React.forwardRef<
             ref={ref}
             data-active={isActive}
             className={cn(
-                'flex h-8 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:ring-2 active:bg-primary/15 active:text-primary disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
-                'data-[active=true]:bg-primary/15 data-[active=true]:font-medium data-[active=true]:text-primary',
+                'flex h-8 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-primary/15 active:text-primary disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
+                'data-[active=true]:bg-primary/10 data-[active=true]:font-medium data-[active=true]:text-primary',
                 'text-sm',
                 className
             )}

@@ -139,18 +139,50 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->middleware('throttle:uploads')
             ->name('import');
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Student\StudentController::class)->parameter('', 'student');
-        Route::get('{student}/guardians', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'guardians'])->name('guardians');
-        Route::get('{student}/enrollments', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'enrollments'])->name('enrollments');
+        Route::get('{student}/guardians', [\App\Http\Controllers\Api\V1\Student\GuardianController::class, 'forStudent'])->name('guardians');
+        Route::get('{student}/enrollments', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'studentEnrollments'])->name('enrollments');
         Route::get('{student}/grades', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'grades'])->name('grades');
         Route::get('{student}/attendance', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'attendance'])->name('attendance');
         Route::get('{student}/fees', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'fees'])->name('fees');
-        Route::get('{student}/achievements', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'achievements'])->name('achievements');
+        Route::get('{student}/achievements', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'forStudent'])->name('achievements');
         Route::post('{student}/enroll', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'store'])->name('enroll');
         Route::post('{student}/photo', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'uploadPhoto'])->name('photo.upload');
         Route::delete('{student}/photo', [\App\Http\Controllers\Api\V1\Student\StudentController::class, 'deletePhoto'])->name('photo.delete');
 
         // Guardians
         Route::apiResource('guardians', \App\Http\Controllers\Api\V1\Student\GuardianController::class);
+
+        // Enrollments
+        Route::prefix('enrollments')->name('enrollments.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'index'])->name('index');
+            Route::get('statistics', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'statistics'])->name('statistics');
+            Route::post('bulk', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'bulkEnroll'])->name('bulk');
+            Route::put('{enrollment}', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'update'])
+                ->whereUuid('enrollment')
+                ->name('update');
+            Route::delete('{enrollment}', [\App\Http\Controllers\Api\V1\Student\EnrollmentController::class, 'destroy'])
+                ->whereUuid('enrollment')
+                ->name('destroy');
+        });
+
+        // Achievements
+        Route::prefix('achievements')->name('achievements.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'index'])->name('index');
+            Route::get('statistics', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'statistics'])->name('statistics');
+            Route::post('/', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'store'])->name('store');
+            Route::get('{achievement}', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'show'])
+                ->whereUuid('achievement')
+                ->name('show');
+            Route::put('{achievement}', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'update'])
+                ->whereUuid('achievement')
+                ->name('update');
+            Route::delete('{achievement}', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'destroy'])
+                ->whereUuid('achievement')
+                ->name('destroy');
+            Route::delete('{achievement}/certificate', [\App\Http\Controllers\Api\V1\Student\AchievementController::class, 'deleteCertificate'])
+                ->whereUuid('achievement')
+                ->name('certificate.destroy');
+        });
     });
 
     // ===========================================
@@ -332,10 +364,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // ===========================================
     Route::prefix('exams')->name('exams.')->group(function () {
         Route::apiResource('types', \App\Http\Controllers\Api\V1\Exam\ExamTypeController::class);
+        Route::get('statistics', [\App\Http\Controllers\Api\V1\Exam\ExamController::class, 'statistics'])->name('statistics');
         Route::apiResource('/', \App\Http\Controllers\Api\V1\Exam\ExamController::class)->parameter('', 'exam');
         Route::get('{exam}/scores', [\App\Http\Controllers\Api\V1\Exam\ExamController::class, 'scores'])->name('scores');
         Route::post('{exam}/scores', [\App\Http\Controllers\Api\V1\Exam\ScoreController::class, 'store'])->name('scores.store');
         Route::post('{exam}/scores/bulk', [\App\Http\Controllers\Api\V1\Exam\ScoreController::class, 'storeBulk'])->name('scores.bulk');
+        Route::put('scores/{score}', [\App\Http\Controllers\Api\V1\Exam\ScoreController::class, 'update'])->name('scores.update');
+        Route::delete('scores/{score}', [\App\Http\Controllers\Api\V1\Exam\ScoreController::class, 'destroy'])->name('scores.destroy');
     });
 
     Route::prefix('grades')->name('grades.')->group(function () {
@@ -343,6 +378,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('student/{student}', [\App\Http\Controllers\Api\V1\Exam\GradeController::class, 'byStudent'])->name('by-student');
         Route::get('classroom/{classroom}', [\App\Http\Controllers\Api\V1\Exam\GradeController::class, 'byClassroom'])->name('by-classroom');
         Route::post('finalize', [\App\Http\Controllers\Api\V1\Exam\GradeController::class, 'finalize'])->name('finalize');
+        Route::post('approve', [\App\Http\Controllers\Api\V1\Exam\GradeController::class, 'approve'])->name('approve');
     });
 
     // ===========================================
@@ -497,7 +533,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('books/{book}/copies', [\App\Http\Controllers\Api\V1\Library\BookController::class, 'copies'])->name('books.copies');
 
         Route::apiResource('members', \App\Http\Controllers\Api\V1\Library\MemberController::class);
+        Route::get('members/{member}/loans', [\App\Http\Controllers\Api\V1\Library\MemberController::class, 'loans'])->name('members.loans');
+        Route::get('members-available-users', [\App\Http\Controllers\Api\V1\Library\MemberController::class, 'availableUsers'])->name('members.available-users');
 
+        Route::get('loans/statistics', [\App\Http\Controllers\Api\V1\Library\LoanController::class, 'statistics'])->name('loans.statistics');
         Route::apiResource('loans', \App\Http\Controllers\Api\V1\Library\LoanController::class);
         Route::post('loans/{loan}/return', [\App\Http\Controllers\Api\V1\Library\LoanController::class, 'returnBook'])->name('loans.return');
         Route::post('loans/{loan}/extend', [\App\Http\Controllers\Api\V1\Library\LoanController::class, 'extend'])->name('loans.extend');
@@ -512,11 +551,18 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Report Module
     // ===========================================
     Route::prefix('reports')->name('reports.')->group(function () {
-        // Report Cards
+        // Report Cards - static routes first
+        Route::get('report-cards/statistics', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'statistics'])->name('report-cards.statistics');
+        Route::post('report-cards/generate', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'generate'])->name('report-cards.generate');
+        Route::post('report-cards/bulk-approve', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'bulkApprove'])->name('report-cards.bulk-approve');
+        Route::post('report-cards/bulk-publish', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'bulkPublish'])->name('report-cards.bulk-publish');
+
         Route::get('report-cards', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'index'])->name('report-cards.index');
         Route::get('report-cards/{reportCard}', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'show'])->name('report-cards.show');
-        Route::post('report-cards/generate', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'generate'])->name('report-cards.generate');
+        Route::put('report-cards/{reportCard}', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'update'])->name('report-cards.update');
+        Route::post('report-cards/{reportCard}/submit-review', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'submitForReview'])->name('report-cards.submit-review');
         Route::post('report-cards/{reportCard}/approve', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'approve'])->name('report-cards.approve');
+        Route::post('report-cards/{reportCard}/publish', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'publish'])->name('report-cards.publish');
         Route::get('report-cards/{reportCard}/pdf', [\App\Http\Controllers\Api\V1\Report\ReportCardController::class, 'pdf'])->name('report-cards.pdf');
 
         // Generated Reports
@@ -536,8 +582,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::delete('{notification}', [\App\Http\Controllers\Api\V1\Notification\NotificationController::class, 'destroy'])->name('destroy');
 
         // Announcements
+        Route::get('announcements/statistics', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'statistics'])->name('announcements.statistics');
         Route::apiResource('announcements', \App\Http\Controllers\Api\V1\Notification\AnnouncementController::class);
         Route::post('announcements/{announcement}/publish', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'publish'])->name('announcements.publish');
+        Route::post('announcements/{announcement}/read', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'markAsRead'])->name('announcements.read');
+        Route::delete('announcements/{announcement}/image', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'deleteImage'])->name('announcements.image.destroy');
     });
 
     // ===========================================

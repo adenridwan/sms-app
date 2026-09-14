@@ -256,15 +256,15 @@ export default function FeeStructures() {
         <MainLayout title="Struktur Biaya">
             <Head title="Keuangan - Struktur Biaya" />
 
-            <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Struktur Biaya</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Struktur Biaya</h1>
+                        <p className="text-sm sm:text-base text-muted-foreground">
                             Kelola tarif biaya per tahun ajaran, tingkat kelas, dan jurusan
                         </p>
                     </div>
-                    <Button onClick={openCreate}>
+                    <Button onClick={openCreate} className="w-full sm:w-auto">
                         <Plus className="mr-2 h-4 w-4" />
                         Tambah Struktur Biaya
                     </Button>
@@ -381,61 +381,61 @@ export default function FeeStructures() {
                                 Tidak ada data struktur biaya
                             </div>
                         ) : (
-                            <div className="rounded-md border">
-                                <Table>
+                            <div className="rounded-md border overflow-x-auto">
+                                <Table className="min-w-[900px]">
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Tahun Ajaran</TableHead>
-                                            <TableHead>Jenis Biaya</TableHead>
-                                            <TableHead>Tingkat</TableHead>
-                                            <TableHead>Jurusan</TableHead>
-                                            <TableHead className="text-right">Nominal</TableHead>
-                                            <TableHead className="text-right">Diskon</TableHead>
-                                            <TableHead className="text-right">Efektif</TableHead>
-                                            <TableHead className="w-[80px]">Status</TableHead>
-                                            <TableHead className="w-[80px]">Aksi</TableHead>
+                                            <TableHead className="whitespace-nowrap">Tahun Ajaran</TableHead>
+                                            <TableHead className="whitespace-nowrap">Jenis Biaya</TableHead>
+                                            <TableHead className="whitespace-nowrap hidden sm:table-cell">Tingkat</TableHead>
+                                            <TableHead className="whitespace-nowrap hidden md:table-cell">Jurusan</TableHead>
+                                            <TableHead className="text-right whitespace-nowrap">Nominal</TableHead>
+                                            <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">Diskon</TableHead>
+                                            <TableHead className="text-right whitespace-nowrap">Efektif</TableHead>
+                                            <TableHead className="w-[70px] sm:w-[80px] whitespace-nowrap">Status</TableHead>
+                                            <TableHead className="w-[70px] sm:w-[80px]">Aksi</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {structures.map((item) => (
                                             <TableRow key={item.id}>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        {item.academic_year?.name}
+                                                    <div className="flex items-center gap-1 sm:gap-2 text-sm">
+                                                        <span className="truncate max-w-[80px] sm:max-w-none">{item.academic_year?.name}</span>
                                                         {item.academic_year?.is_active && (
-                                                            <Badge variant="outline" className="text-xs">Aktif</Badge>
+                                                            <Badge variant="outline" className="text-xs hidden sm:inline-flex">Aktif</Badge>
                                                         )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <div>
-                                                        <div className="font-medium">{item.fee_type?.name}</div>
+                                                        <div className="font-medium text-sm truncate max-w-[100px] sm:max-w-none">{item.fee_type?.name}</div>
                                                         <div className="text-xs text-muted-foreground">{item.fee_type?.code}</div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell>{item.grade_level?.name}</TableCell>
-                                                <TableCell>{item.major?.name ?? '-'}</TableCell>
-                                                <TableCell className="text-right font-mono">{item.amount_formatted}</TableCell>
-                                                <TableCell className="text-right font-mono text-muted-foreground">
+                                                <TableCell className="hidden sm:table-cell text-sm">{item.grade_level?.name}</TableCell>
+                                                <TableCell className="hidden md:table-cell text-sm">{item.major?.name ?? '-'}</TableCell>
+                                                <TableCell className="text-right font-mono text-sm">{item.amount_formatted}</TableCell>
+                                                <TableCell className="text-right font-mono text-muted-foreground text-sm hidden lg:table-cell">
                                                     {item.discount_amount > 0 ? item.discount_amount_formatted : '-'}
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono font-medium">
+                                                <TableCell className="text-right font-mono font-medium text-sm">
                                                     {item.effective_amount_formatted}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant={item.is_active ? 'default' : 'secondary'}>
+                                                    <Badge variant={item.is_active ? 'default' : 'secondary'} className="text-xs">
                                                         {item.is_active ? 'Aktif' : 'Nonaktif'}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
+                                                    <div className="flex items-center gap-0.5 sm:gap-1">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
                                                             <Pencil className="h-4 w-4" />
                                                         </Button>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="text-muted-foreground hover:text-red-600"
+                                                            className="h-8 w-8 text-muted-foreground hover:text-red-600"
                                                             onClick={() => setDeletingItem(item)}
                                                         >
                                                             <Trash2 className="h-4 w-4" />
@@ -450,16 +450,17 @@ export default function FeeStructures() {
                         )}
 
                         {meta && meta.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
                                     Menampilkan {meta.from}-{meta.to} dari {meta.total} data
                                 </p>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 justify-center sm:justify-end">
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         disabled={page <= 1 || loading}
                                         onClick={() => setPage((p) => p - 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Sebelumnya
                                     </Button>
@@ -468,6 +469,7 @@ export default function FeeStructures() {
                                         size="sm"
                                         disabled={page >= meta.last_page || loading}
                                         onClick={() => setPage((p) => p + 1)}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Berikutnya
                                     </Button>
@@ -479,15 +481,15 @@ export default function FeeStructures() {
             </div>
 
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>{editingItem ? 'Edit Struktur Biaya' : 'Tambah Struktur Biaya'}</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg">{editingItem ? 'Edit Struktur Biaya' : 'Tambah Struktur Biaya'}</DialogTitle>
+                        <DialogDescription className="text-sm">
                             {editingItem ? 'Perbarui data struktur biaya' : 'Isi data struktur biaya baru'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label>Tahun Ajaran *</Label>
                                 <Select
@@ -525,7 +527,7 @@ export default function FeeStructures() {
                                 </Select>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label>Tingkat Kelas *</Label>
                                 <Select
@@ -564,7 +566,7 @@ export default function FeeStructures() {
                                 </Select>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Nominal *</Label>
                                 <div className="relative">
@@ -592,7 +594,7 @@ export default function FeeStructures() {
                                 </div>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="due_date">Tanggal Jatuh Tempo</Label>
                                 <DatePicker
@@ -603,7 +605,7 @@ export default function FeeStructures() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="due_day">Tanggal Jatuh Tempo Bulanan (1-31)</Label>
+                                <Label htmlFor="due_day" className="text-sm">Tanggal Bulanan (1-31)</Label>
                                 <Input
                                     id="due_day"
                                     type="number"
@@ -616,9 +618,9 @@ export default function FeeStructures() {
                             </div>
                         </div>
                         <div className="flex items-center justify-between rounded-md border p-3">
-                            <div>
+                            <div className="flex-1 min-w-0 mr-3">
                                 <Label htmlFor="struct-active">Aktif</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                     Struktur biaya aktif dapat digunakan untuk generate tagihan
                                 </p>
                             </div>
@@ -629,11 +631,11 @@ export default function FeeStructures() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>
+                    <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0 mt-4">
+                        <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving} className="w-full sm:w-auto">
                             Batal
                         </Button>
-                        <Button onClick={handleSubmit} disabled={saving}>
+                        <Button onClick={handleSubmit} disabled={saving} className="w-full sm:w-auto">
                             {saving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             {editingItem ? 'Simpan Perubahan' : 'Simpan'}
                         </Button>
@@ -642,18 +644,18 @@ export default function FeeStructures() {
             </Dialog>
 
             <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && !deleting && setDeletingItem(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="w-[95vw] max-w-md p-4 sm:p-6">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Hapus Struktur Biaya</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="text-lg">Hapus Struktur Biaya</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
                             Apakah Anda yakin ingin menghapus struktur biaya{' '}
                             <span className="font-medium">{deletingItem?.fee_type?.name}</span> untuk{' '}
                             <span className="font-medium">{deletingItem?.grade_level?.name}</span>?
                             Tindakan ini tidak dapat dibatalkan.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting}>
+                    <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel onClick={() => setDeletingItem(null)} disabled={deleting} className="w-full sm:w-auto">
                             Batal
                         </AlertDialogCancel>
                         <AlertDialogAction
@@ -662,7 +664,7 @@ export default function FeeStructures() {
                                 handleDelete();
                             }}
                             disabled={deleting}
-                            className="bg-red-600 hover:bg-red-700"
+                            className="w-full sm:w-auto bg-red-600 hover:bg-red-700"
                         >
                             {deleting ? 'Menghapus...' : 'Hapus'}
                         </AlertDialogAction>

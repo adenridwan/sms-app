@@ -31,8 +31,9 @@ class AuthController extends ApiController
     {
         $credentials = $request->only('email', 'password');
         $email = (string) $request->input('email');
+        $remember = $request->boolean('remember');
 
-        if (!Auth::attempt($credentials, $request->boolean('remember'))) {
+        if (!Auth::attempt($credentials, $remember)) {
             $this->loginLog->record($request, null, $email, 'password', false, 'invalid_credentials');
             return $this->unauthorized('Email atau password salah.');
         }
@@ -45,7 +46,7 @@ class AuthController extends ApiController
             return $this->forbidden('Akun Anda tidak aktif. Silakan hubungi administrator.');
         }
 
-        return $this->issueToken($request, $user, 'password');
+        return $this->issueToken($request, $user, 'password', $remember);
     }
 
     /**
@@ -72,8 +73,12 @@ class AuthController extends ApiController
         return $this->issueToken($request, $user, 'otp');
     }
 
-    /** Catat login sukses, perbarui jejak terakhir, lalu terbitkan token. */
-    protected function issueToken(Request $request, $user, string $method): JsonResponse
+    /**
+     * Catat login sukses, perbarui jejak terakhir, lalu terbitkan token.
+     *
+     * @param bool $remember Jika true, token berlaku lebih lama (30 hari default)
+     */
+    protected function issueToken(Request $request, $user, string $method, bool $remember = false): JsonResponse
     {
         $user->update([
             'last_login_at' => now(),
@@ -82,12 +87,23 @@ class AuthController extends ApiController
 
         $this->loginLog->record($request, $user, (string) $user->email, $method, true);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Token expiration berdasarkan "remember me"
+        // - Normal: 1 hari (default)
+        // - Remember: 30 hari (default)
+        $expirationMinutes = $remember
+            ? config('sanctum.remember_expiration', 60 * 24 * 30)
+            : config('sanctum.expiration', 60 * 24);
+
+        $expiresAt = now()->addMinutes($expirationMinutes);
+
+        $token = $user->createToken('auth_token', ['*'], $expiresAt)->plainTextToken;
 
         return $this->success([
             'user' => new UserResource($user->load('profile')),
             'token' => $token,
             'token_type' => 'Bearer',
+            'expires_at' => $expiresAt->toIso8601String(),
+            'remember' => $remember,
         ], 'Login berhasil.');
     }
 
