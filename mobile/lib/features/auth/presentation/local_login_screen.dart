@@ -39,9 +39,8 @@ class _LocalLoginScreenState extends ConsumerState<LocalLoginScreen> {
           password: _passwordCtrl.text,
         );
 
-    if (success && mounted) {
-      context.go('/');
-    }
+    // Navigation is handled automatically by router redirect when session changes
+    // No explicit navigation needed
   }
 
   @override
