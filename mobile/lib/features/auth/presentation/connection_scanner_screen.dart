@@ -91,18 +91,36 @@ class _ConnectionScannerScreenState
   }
 
   Map<String, dynamic>? _parseQrData(String raw) {
+    // Try JSON format first: {"api": "url", "token": "...", "school": "..."}
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
-
-      // Must have api and token
-      if (!data.containsKey('api') || !data.containsKey('token')) {
-        return null;
+      if (data.containsKey('api') && data.containsKey('token')) {
+        return data;
       }
-
-      return data;
     } catch (_) {
-      return null;
+      // Not JSON, try deep link format
     }
+
+    // Try deep link format: smsapp://provision?token=...&server=...
+    try {
+      final uri = Uri.parse(raw);
+      if (uri.scheme == 'smsapp' && uri.host == 'provision') {
+        final token = uri.queryParameters['token'];
+        final server = uri.queryParameters['server'];
+
+        if (token != null && server != null) {
+          return {
+            'api': server,
+            'token': token,
+            'school': uri.queryParameters['device_name'],
+          };
+        }
+      }
+    } catch (_) {
+      // Not a valid deep link
+    }
+
+    return null;
   }
 
   @override
