@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/auth_controller.dart';
+import '../widgets/sync_status_banner.dart';
 
 /// Kerangka aplikasi: bottom navigation 4 tab tetap
 /// (`Beranda · Absensi · Keuangan · Profil`) — susunan dan namanya persis
@@ -67,7 +68,13 @@ class AppShell extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: navigationShell,
+      body: Column(
+        children: [
+          // Banner sinkronisasi / offline status di atas konten.
+          const SyncStatusBanner(),
+          Expanded(child: navigationShell),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: scheme.surface,

@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/database_providers.dart';
+import '../../../core/database/sources/sources.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/backend_status.dart';
 import '../../auth/presentation/auth_controller.dart';
-import '../../../core/storage/sync_status_store.dart';
-import '../data/class_attendance_queue_store.dart';
 import '../data/class_attendance_repository.dart';
 import '../models/queued_class_attendance.dart';
 
@@ -26,21 +26,22 @@ class ClassAttendanceQueueState {
 /// karena antrean bersifat global — satu untuk seluruh aplikasi.
 class ClassAttendanceQueueController
     extends StateNotifier<ClassAttendanceQueueState> {
-  ClassAttendanceQueueController(this._store, this._repo)
+  ClassAttendanceQueueController(this._local, this._repo)
       : super(const ClassAttendanceQueueState()) {
     refresh();
   }
 
-  final ClassAttendanceQueueStore _store;
+  final ClassAttendanceQueueLocalSource _local;
   final ClassAttendanceRepository _repo;
 
   Future<void> refresh() async {
-    state = ClassAttendanceQueueState(items: await _store.load());
+    final items = await _local.getAllAttendances();
+    state = ClassAttendanceQueueState(items: items);
   }
 
   Future<void> enqueue(QueuedClassAttendance item) async {
-    final items = await _store.add(item);
-    state = ClassAttendanceQueueState(items: items);
+    await _local.addAttendance(item);
+    await refresh();
   }
 
   /// Kirim ulang seluruh antrean. Mengembalikan jumlah yang berhasil terkirim.
@@ -49,33 +50,43 @@ class ClassAttendanceQueueController
   /// memperbarui baris yang sudah ada untuk tanggal tersebut, jadi pengulangan
   /// tidak menghasilkan duplikat. Entri yang gagal **tetap di antrean**.
   Future<({int total, int success})> sync() async {
-    final items = await _store.load();
-    if (items.isEmpty) return (total: 0, success: 0);
+    final pending = await _local.getPendingAttendances();
+    if (pending.isEmpty) return (total: 0, success: 0);
 
-    state = ClassAttendanceQueueState(items: items, syncing: true);
+    state = ClassAttendanceQueueState(items: pending, syncing: true);
 
     final done = <String>{};
-    for (final item in items) {
+    for (final item in pending) {
       try {
+        await _local.markAsSyncing({item.id});
+
         await _repo.submit(
           classroomId: item.classroomId,
+          classroomName: item.classroomName,
           date: item.date,
           marks: item.marks,
         );
+
+        await _local.markAsSynced({item.id});
         done.add(item.id);
       } on ApiException catch (e) {
         // Jaringan mati lagi → hentikan, sisanya dicoba lain waktu.
-        if (e.isNetwork) break;
-        // Ditolak server (mis. kelas dihapus, izin dicabut): membiarkannya
-        // di antrean hanya akan gagal selamanya, jadi dibuang.
+        if (e.isNetwork) {
+          await _local.markAsFailed({item.id}, e.message);
+          break;
+        }
+        // Ditolak server (mis. kelas dihapus, izin dicabut): tandai gagal
+        // tapi tetap hapus dari antrean.
+        await _local.markAsSynced({item.id});
         done.add(item.id);
       }
     }
 
-    final remaining = await _store.removeIds(done);
-    state = ClassAttendanceQueueState(items: remaining);
-    await SyncStatusStore().markSynced();
-    return (total: items.length, success: done.length);
+    // Remove synced items.
+    await _local.removeSyncedAttendances();
+    await refresh();
+
+    return (total: pending.length, success: done.length);
   }
 
   /// Versi senyap untuk pemulihan koneksi — kegagalan tidak ditampilkan.
@@ -96,7 +107,7 @@ final classAttendanceQueueProvider = StateNotifierProvider<
   ref.watch(authControllerProvider.select((s) => s.user?.id));
 
   final controller = ClassAttendanceQueueController(
-    ref.watch(classAttendanceQueueStoreProvider),
+    ref.watch(classAttendanceQueueLocalSourceProvider),
     ref.watch(classAttendanceRepositoryProvider),
   );
 
@@ -116,6 +127,3 @@ final classAttendanceQueueProvider = StateNotifierProvider<
 
   return controller;
 });
-
-final classAttendanceQueueStoreProvider =
-    Provider<ClassAttendanceQueueStore>((ref) => ClassAttendanceQueueStore());

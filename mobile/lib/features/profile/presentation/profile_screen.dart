@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/local_session_controller.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/backend_status.dart';
 import '../../../core/network/backend_status_dot.dart';
@@ -24,8 +25,15 @@ class ProfileScreen extends ConsumerWidget {
     final backend = ref.watch(backendStatusProvider);
     final mode = ref.watch(themeModeProvider);
     final unread = ref.watch(notificationControllerProvider).unreadCount;
+    final localSession = ref.watch(localSessionProvider);
     final scheme = Theme.of(context).colorScheme;
     final user = auth.user;
+    final localAccount = localSession.account;
+    final connection = localSession.connection;
+
+    // Prefer local account name for display
+    final displayName = localAccount?.fullName ?? user?.fullName ?? 'Petugas';
+    final displayEmail = localAccount?.email ?? user?.email;
 
     return Scaffold(
       appBar: AppBar(
@@ -57,7 +65,7 @@ class ProfileScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
-                    _initials(user?.fullName ?? '?'),
+                    _initials(displayName),
                     style: TextStyle(
                       color: scheme.onPrimary,
                       fontWeight: FontWeight.w800,
@@ -71,7 +79,7 @@ class ProfileScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user?.fullName ?? 'Petugas',
+                        displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -81,10 +89,10 @@ class ProfileScreen extends ConsumerWidget {
                           color: scheme.surface,
                         ),
                       ),
-                      if (user?.email != null) ...[
+                      if (displayEmail != null) ...[
                         const SizedBox(height: 2),
                         Text(
-                          user!.email,
+                          displayEmail,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -99,6 +107,60 @@ class ProfileScreen extends ConsumerWidget {
               ],
             ),
           ),
+
+          // Show backend identity if different from local
+          if (connection != null &&
+              connection.backendUserName != null &&
+              connection.backendUserName != localAccount?.fullName) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.green.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_done_rounded,
+                      size: 18, color: Colors.green.shade600),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Akun backend: ${connection.backendUserName}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (connection.backendUserEmail != null)
+                          Text(
+                            connection.backendUserEmail!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        if (connection.schoolName != null)
+                          Text(
+                            connection.schoolName!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           if (user != null && user.roles.isNotEmpty) ...[
             const SizedBox(height: 20),
@@ -242,7 +304,8 @@ class ProfileScreen extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Keluar'),
         content: const Text(
-          'Yakin keluar dari aplikasi? Antrean scan offline tidak akan terhapus.',
+          'Yakin keluar dari aplikasi? Antrean scan offline tidak akan terhapus, '
+          'dan koneksi ke server tetap tersimpan.',
         ),
         actions: [
           TextButton(
@@ -258,6 +321,8 @@ class ProfileScreen extends ConsumerWidget {
     );
 
     if (ok == true) {
+      // Logout from both local session and auth controller
+      await ref.read(localSessionProvider.notifier).logout();
       await ref.read(authControllerProvider.notifier).logout();
     }
   }

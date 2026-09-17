@@ -7,22 +7,24 @@ import '../../features/attendance/presentation/manual_input_screen.dart';
 import '../../features/attendance/presentation/offline_queue_screen.dart';
 import '../../features/attendance/presentation/scan_camera_screen.dart';
 import '../../features/attendance/presentation/scanner_home_screen.dart';
-import '../../features/auth/presentation/auth_controller.dart';
-import '../../features/auth/presentation/login_screen.dart';
-import '../../features/auth/presentation/provision_scanner_screen.dart';
+import '../../features/auth/presentation/change_password_screen.dart';
+import '../../features/auth/presentation/connection_scanner_screen.dart';
+import '../../features/auth/presentation/local_login_screen.dart';
+import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
-import '../../features/home/presentation/home_screen.dart';
 import '../../features/finance/presentation/finance_screen.dart';
+import '../../features/home/presentation/home_screen.dart';
 import '../../features/notifications/presentation/notification_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
+import '../auth/local_session_controller.dart';
 import 'app_shell.dart';
 
 /// Menjembatani perubahan state Riverpod ke GoRouter (refresh + redirect).
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
-    _ref.listen<AuthState>(
-      authControllerProvider,
+    _ref.listen<LocalSession>(
+      localSessionProvider,
       (_, __) => notifyListeners(),
     );
   }
@@ -30,20 +32,26 @@ class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
 
   String? redirect(BuildContext context, GoRouterState state) {
-    final status = _ref.read(authControllerProvider).status;
+    final session = _ref.read(localSessionProvider);
     final loc = state.matchedLocation;
 
-    if (status == AuthStatus.unknown) {
+    // Still initializing
+    if (session.status == LocalSessionStatus.unknown) {
       return loc == '/splash' ? null : '/splash';
     }
 
-    if (status == AuthStatus.authenticated) {
-      if (loc == '/login' || loc == '/splash') return '/home';
+    // Authenticated - redirect away from auth screens
+    if (session.isLoggedIn) {
+      if (loc == '/login' || loc == '/splash' || loc == '/signup') {
+        return '/home';
+      }
       return null;
     }
 
-    // unauthenticated / authenticating → tetap di login atau provision-scan
-    if (loc == '/login' || loc == '/provision-scan') return null;
+    // Not authenticated - allow auth screens only
+    if (loc == '/login' || loc == '/signup' || loc == '/connect-scan') {
+      return null;
+    }
     return '/login';
   }
 }
@@ -58,21 +66,23 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: notifier.redirect,
     routes: [
+      // Auth flow
       GoRoute(
         path: '/splash',
         builder: (_, __) => const SplashScreen(),
       ),
       GoRoute(
         path: '/login',
-        builder: (_, __) => const LoginScreen(),
+        builder: (_, __) => const LocalLoginScreen(),
       ),
-      // Scan QR provisioning — di luar shell karena belum login.
-      // Jika ada query param `token`, langsung proses tanpa scan.
       GoRoute(
-        path: '/provision-scan',
-        builder: (_, state) => ProvisionScannerScreen(
-          initialToken: state.uri.queryParameters['token'],
-        ),
+        path: '/signup',
+        builder: (_, __) => const SignupScreen(),
+      ),
+      // Scan QR for backend connection (can be accessed before or after login)
+      GoRoute(
+        path: '/connect-scan',
+        builder: (_, __) => const ConnectionScannerScreen(),
       ),
 
       // App shell — bottom nav 4 tab, tiap tab punya tumpukan navigasi sendiri.
@@ -106,6 +116,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/settings',
         builder: (_, __) => const SettingsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/change-password',
+        builder: (_, __) => const ChangePasswordScreen(),
       ),
 
       // Notifikasi kehilangan tabnya karena rujukan desain memakai Keuangan

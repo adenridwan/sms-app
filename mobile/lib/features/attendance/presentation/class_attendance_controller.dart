@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/class_attendance_repository.dart';
 import '../models/class_attendance.dart';
-import '../models/queued_class_attendance.dart';
-import 'class_attendance_queue_controller.dart';
 
 class ClassAttendanceState {
   const ClassAttendanceState({
@@ -70,13 +68,12 @@ class ClassAttendanceState {
 }
 
 class ClassAttendanceController extends StateNotifier<ClassAttendanceState> {
-  ClassAttendanceController(this._repo, this._queue, this._initialClassroomId)
+  ClassAttendanceController(this._repo, this._initialClassroomId)
       : super(ClassAttendanceState(date: DateTime.now())) {
     _loadClasses();
   }
 
   final ClassAttendanceRepository _repo;
-  final ClassAttendanceQueueController _queue;
   final String? _initialClassroomId;
 
   Future<void> _loadClasses() async {
@@ -179,9 +176,16 @@ class ClassAttendanceController extends StateNotifier<ClassAttendanceState> {
     final date = state.date ?? DateTime.now();
     state = state.copyWith(saving: true);
 
+    final className = state.classes
+        .where((c) => c.id == classId)
+        .map((c) => c.name)
+        .firstOrNull ??
+        '';
+
     try {
       await _repo.submit(
         classroomId: classId,
+        classroomName: className,
         date: date,
         marks: state.marks,
       );
@@ -189,18 +193,7 @@ class ClassAttendanceController extends StateNotifier<ClassAttendanceState> {
       return const SaveOutcome.sent();
     } on ApiException catch (e) {
       if (e.isNetwork) {
-        await _queue.enqueue(QueuedClassAttendance(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          classroomId: classId,
-          classroomName: state.classes
-              .where((c) => c.id == classId)
-              .map((c) => c.name)
-              .firstOrNull ??
-              '',
-          date: date,
-          marks: state.marks,
-          savedAt: DateTime.now(),
-        ));
+        // Already queued by repository.
         state = state.copyWith(saving: false);
         return const SaveOutcome.queued();
       }
@@ -241,7 +234,6 @@ final classAttendanceControllerProvider = StateNotifierProvider.family<
     ClassAttendanceController, ClassAttendanceState, String?>(
   (ref, initialClassroomId) => ClassAttendanceController(
     ref.watch(classAttendanceRepositoryProvider),
-    ref.watch(classAttendanceQueueProvider.notifier),
     initialClassroomId,
   ),
 );

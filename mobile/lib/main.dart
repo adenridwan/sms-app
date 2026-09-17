@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'core/config/app_config.dart';
+import 'core/database/database.dart';
+import 'core/database/database_providers.dart';
+import 'core/database/migration_helper.dart';
 import 'core/services/heartbeat_service.dart';
 
 void main() async {
@@ -14,7 +17,21 @@ void main() async {
   // Inisialisasi device info untuk heartbeat (versi app, model perangkat, dll).
   await HeartbeatService.initDeviceInfo();
 
+  // Migrasi data dari SharedPreferences ke SQLite (sekali saat update).
+  final db = AppDatabase();
+  final migration = MigrationHelper(db);
+  final result = await migration.migrate();
+  if (result.hasMigrated) {
+    debugPrint('Migration complete: ${result.totalMigrated} items migrated');
+  }
+
   runApp(
-    const ProviderScope(child: SmsApp()),
+    ProviderScope(
+      overrides: [
+        // Gunakan database yang sudah diinisialisasi dan di-migrasi.
+        databaseProvider.overrideWithValue(db),
+      ],
+      child: const SmsApp(),
+    ),
   );
 }

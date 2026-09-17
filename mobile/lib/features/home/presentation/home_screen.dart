@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/local_session_controller.dart';
 import '../../../core/theme/ui_kit.dart';
+import '../../../core/widgets/connection_status_card.dart';
 import '../../attendance/presentation/class_attendance_queue_controller.dart';
 import '../../attendance/presentation/scan_controller.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -27,7 +29,11 @@ class HomeScreen extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider);
     final scan = ref.watch(scanControllerProvider);
     final stats = ref.watch(dashboardStatsProvider);
+    final localSession = ref.watch(localSessionProvider);
     final user = auth.user;
+
+    // Use local account name if available, fallback to backend user
+    final displayName = localSession.account?.fullName ?? user?.fullName;
 
     final data = stats.valueOrNull;
     final isTeacher = data?.isTeacher ?? false;
@@ -48,15 +54,18 @@ class HomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
             children: [
               HomeHero(
-                greeting: _greeting(user?.fullName),
+                greeting: _greeting(displayName),
                 roleLabel: _roleLabel(user?.userType),
                 dateLabel: _prettyDate(scan.bootstrap?.today),
-                schoolName: null,
+                schoolName: localSession.connection?.schoolName,
               ),
 
               const SizedBox(height: 18),
 
-              if (!auth.isSessionVerified)
+              // Connection status card
+              const ConnectionStatusCard(),
+
+              if (!auth.isSessionVerified && localSession.isConnectedToBackend)
                 const InfoStrip(
                   text: 'Memakai sesi tersimpan — belum terhubung ke server. '
                       'Absensi tetap disimpan dan disinkronkan nanti.',

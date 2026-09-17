@@ -9,15 +9,16 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 
-    // Sebagian plugin (mis. geolocator_android) mereferensikan
+    // Sebagian plugin (mis. geolocator_android, jni) mereferensikan
     // `flutter.compileSdkVersion` / `flutter.minSdkVersion`, yang tidak di-inject
     // Flutter 3.24 ke submodul plugin. Sediakan objek penggantinya di sini
     // (kecuali :app yang punya extension `flutter` asli).
     if (project.name != "app") {
         project.ext.flutter = [
-            compileSdkVersion: 34,
+            compileSdkVersion: 35,
             minSdkVersion    : 23,
-            targetSdkVersion : 33,
+            targetSdkVersion : 35,
+            ndkVersion       : "27.0.12077973",
             versionCode      : 1,
             versionName      : "1.0",
         ]
@@ -26,8 +27,11 @@ subprojects {
     afterEvaluate { project ->
         if (project.hasProperty("android")) {
             project.android {
-                compileSdkVersion 34
-                buildToolsVersion "34.0.0"
+                compileSdkVersion 35
+                buildToolsVersion "35.0.0"
+                if (project.android.hasProperty("ndkVersion")) {
+                    ndkVersion "27.0.12077973"
+                }
             }
         }
     }

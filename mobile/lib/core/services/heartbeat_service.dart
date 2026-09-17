@@ -7,8 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../../features/attendance/data/class_attendance_queue_store.dart';
-import '../../features/attendance/data/offline_queue_store.dart';
+import '../database/database.dart';
 import '../storage/token_storage.dart';
 
 /// Service untuk mengirim heartbeat berkala ke server.
@@ -25,17 +24,14 @@ class HeartbeatService {
   HeartbeatService({
     required Dio dio,
     required TokenStorage tokenStorage,
-    required OfflineQueueStore offlineQueueStore,
-    required ClassAttendanceQueueStore classQueueStore,
+    required AppDatabase database,
   })  : _dio = dio,
         _tokenStorage = tokenStorage,
-        _offlineQueueStore = offlineQueueStore,
-        _classQueueStore = classQueueStore;
+        _database = database;
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
-  final OfflineQueueStore _offlineQueueStore;
-  final ClassAttendanceQueueStore _classQueueStore;
+  final AppDatabase _database;
 
   Timer? _timer;
   final NetworkInfo _networkInfo = NetworkInfo();
@@ -143,12 +139,11 @@ class HeartbeatService {
       }
     } catch (_) {}
 
-    // Pending sync count (gabungan scan tunggal + absen kelas)
+    // Pending sync count (gabungan scan tunggal + absen kelas + actions)
     int pendingSyncCount = 0;
     try {
-      final scans = await _offlineQueueStore.load();
-      final classAttendances = await _classQueueStore.load();
-      pendingSyncCount = scans.length + classAttendances.length;
+      final counts = await _database.getPendingSyncCounts();
+      pendingSyncCount = counts.scans + counts.classAttendances + counts.actions;
     } catch (_) {}
 
     return {

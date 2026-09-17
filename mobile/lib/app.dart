@@ -6,6 +6,7 @@ import 'core/network/backend_probe.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/deep_link_handler.dart';
 import 'core/security/app_lock_gate.dart';
+import 'core/sync/sync_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 
@@ -20,6 +21,9 @@ class SmsApp extends ConsumerWidget {
 
     // Mendengarkan deep link (smsapp://provision?token=xxx).
     ref.watch(deepLinkHandlerProvider);
+
+    // Inisialisasi sync service — auto-sync saat kembali online.
+    ref.watch(syncServiceProvider);
 
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);

@@ -1,8 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
-import '../../../core/providers.dart';
-import '../../auth/presentation/auth_controller.dart';
+import '../../home/data/dashboard_repository.dart';
 import '../data/notification_repository.dart';
 import '../models/app_notification.dart';
 
@@ -21,16 +20,26 @@ class NotificationState {
 }
 
 class NotificationController extends StateNotifier<NotificationState> {
-  NotificationController(this._repo) : super(const NotificationState()) {
+  NotificationController(this._repo, this._userId)
+      : super(const NotificationState()) {
     load();
   }
 
   final NotificationRepository _repo;
+  final String? _userId;
 
   Future<void> load() async {
+    if (_userId == null) {
+      state = const NotificationState(loading: false);
+      return;
+    }
+
     state = NotificationState(items: state.items, loading: true);
     try {
-      state = NotificationState(items: await _repo.list(), loading: false);
+      state = NotificationState(
+        items: await _repo.list(_userId),
+        loading: false,
+      );
     } on ApiException catch (e) {
       state = NotificationState(
         items: state.items,
@@ -41,8 +50,10 @@ class NotificationController extends StateNotifier<NotificationState> {
   }
 
   /// Tandai satu notifikasi terbaca. State diperbarui optimistis; kegagalan
-  /// jaringan dikembalikan ke semula agar tidak menipu (badge harus jujur).
+  /// jaringan tidak membalikkan karena kita sudah queue action untuk sync.
   Future<void> markRead(String id) async {
+    if (_userId == null) return;
+
     final before = state.items;
     state = NotificationState(
       items: [
@@ -51,34 +62,35 @@ class NotificationController extends StateNotifier<NotificationState> {
       loading: false,
     );
     try {
-      await _repo.markRead(id);
-    } on ApiException catch (e) {
-      state = NotificationState(items: before, loading: false, error: e.message);
+      await _repo.markRead(id, _userId);
+    } on ApiException {
+      // Don't revert - we've queued the action for later sync.
     }
   }
 
   Future<void> markAllRead() async {
+    if (_userId == null) return;
+
     final before = state.items;
     state = NotificationState(
       items: [for (final n in before) n.copyWith(isRead: true)],
       loading: false,
     );
     try {
-      await _repo.markAllRead();
+      await _repo.markAllRead(_userId);
     } on ApiException catch (e) {
       state = NotificationState(items: before, loading: false, error: e.message);
     }
   }
 }
 
-final notificationRepositoryProvider = Provider<NotificationRepository>(
-  (ref) => NotificationRepository(ref.watch(dioProvider)),
-);
-
 /// Bergantung pada id user agar notifikasi tidak terbawa antar akun saat
 /// berganti login (lihat catatan serupa di `dashboardStatsProvider`).
 final notificationControllerProvider =
     StateNotifierProvider<NotificationController, NotificationState>((ref) {
-  ref.watch(authControllerProvider.select((s) => s.user?.id));
-  return NotificationController(ref.watch(notificationRepositoryProvider));
+  final userId = ref.watch(currentUserIdProvider);
+  return NotificationController(
+    ref.watch(notificationRepositoryProvider),
+    userId,
+  );
 });

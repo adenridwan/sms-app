@@ -57,11 +57,18 @@ dependencies:
   # Deep linking untuk QR provisioning (smsapp://provision?token=xxx)
   app_links: ^6.3.2
 
+  # Offline-first SQLite database dengan compile-time safety
+  drift: ^2.14.0
+  sqlite3_flutter_libs: ^0.5.18
+  path_provider: ^2.1.1
+  path: ^1.8.3
+
   # Heartbeat service — info device untuk monitoring
   device_info_plus: ^10.1.0
   package_info_plus: ^8.0.0
   connectivity_plus: ^6.0.3
   network_info_plus: ^5.0.3
+  uuid: ^4.6.0
 
 dev_dependencies:
   flutter_test:
@@ -73,6 +80,10 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^4.0.0
+
+  # Drift code generator
+  drift_dev: ^2.14.0
+  build_runner: ^2.4.7
 
   # Pembangkit ikon peluncur dari satu berkas sumber.
   flutter_launcher_icons: ^0.14.1
