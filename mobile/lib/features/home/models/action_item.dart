@@ -39,12 +39,12 @@ class ActionItem {
   bool get isAvailable => route != null;
 }
 
-/// Aksi untuk peran guru — rujukan `homeActionDefs.teacher`.
+/// Aksi untuk peran guru — 5 menu shortcut dengan ikon modern.
 const List<ActionItem> _teacherActions = [
   ActionItem(
     key: 'attendance',
     title: 'Absensi',
-    caption: 'Pindai, Ref ID & checklist',
+    caption: 'Pindai QR & Ref ID',
     icon: Icons.qr_code_scanner_rounded,
     route: '/attendance',
   ),
@@ -55,39 +55,33 @@ const List<ActionItem> _teacherActions = [
     icon: Icons.calendar_month_rounded,
   ),
   ActionItem(
+    key: 'attendance_report',
+    title: 'Laporan Presensi',
+    caption: 'Rekap kehadiran',
+    icon: Icons.assignment_rounded,
+  ),
+  ActionItem(
     key: 'announcements',
     title: 'Pengumuman',
-    caption: 'Pengumuman terbaru',
+    caption: 'Info terbaru',
     icon: Icons.campaign_rounded,
   ),
   ActionItem(
-    key: 'grades',
-    title: 'Nilai',
-    caption: 'Input & finalisasi',
-    icon: Icons.grade_rounded,
+    key: 'leave_request',
+    title: 'Pengajuan Izin',
+    caption: 'Ajukan izin/sakit',
+    icon: Icons.event_busy_rounded,
   ),
 ];
 
-/// Aksi untuk peran admin — rujukan `homeActionDefs.admin`.
+/// Aksi untuk peran admin — 5 menu shortcut dengan ikon modern.
 const List<ActionItem> _adminActions = [
   ActionItem(
     key: 'attendance',
     title: 'Absensi',
-    caption: 'Pindai, Ref ID & checklist',
+    caption: 'Pindai QR & Ref ID',
     icon: Icons.qr_code_scanner_rounded,
     route: '/attendance',
-  ),
-  ActionItem(
-    key: 'finance',
-    title: 'Keuangan',
-    caption: 'Verifikasi pembayaran',
-    icon: Icons.payments_rounded,
-  ),
-  ActionItem(
-    key: 'announcements',
-    title: 'Pengumuman',
-    caption: 'Buat & publikasikan',
-    icon: Icons.campaign_rounded,
   ),
   ActionItem(
     key: 'timetable',
@@ -95,12 +89,36 @@ const List<ActionItem> _adminActions = [
     caption: 'Lihat jadwal',
     icon: Icons.calendar_month_rounded,
   ),
+  ActionItem(
+    key: 'attendance_report',
+    title: 'Laporan Presensi',
+    caption: 'Rekap kehadiran',
+    icon: Icons.assignment_rounded,
+  ),
+  ActionItem(
+    key: 'announcements',
+    title: 'Pengumuman',
+    caption: 'Buat & publikasi',
+    icon: Icons.campaign_rounded,
+  ),
+  ActionItem(
+    key: 'leave_request',
+    title: 'Pengajuan Izin',
+    caption: 'Kelola pengajuan',
+    icon: Icons.event_busy_rounded,
+  ),
 ];
 
 /// Seluruh aksi yang dikenal — dipakai lembar "Semua menu" agar pengguna tetap
 /// bisa melihat peta modul lengkap.
 const List<ActionItem> kActionCatalog = [
   ..._adminActions,
+  ActionItem(
+    key: 'finance',
+    title: 'Keuangan',
+    caption: 'Verifikasi pembayaran',
+    icon: Icons.payments_rounded,
+  ),
   ActionItem(
     key: 'grades',
     title: 'Nilai',

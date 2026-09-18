@@ -70,6 +70,20 @@ class ProvisionController extends ApiController
             'created_by' => $request->user()->id,
         ]);
 
+        // Build API URL for mobile to connect
+        $apiUrl = url('/api/v1');
+        $schoolName = config('app.name', 'SMS Absensi');
+
+        // Build QR content with all required parameters
+        $qrContent = 'smsapp://provision?' . http_build_query([
+            'token' => $plainToken,
+            'server' => $apiUrl,
+            'device_name' => $schoolName,
+            'user_id' => $user->id,
+            'user_name' => $user->full_name,
+            'user_email' => $user->email,
+        ]);
+
         return $this->success([
             'provision_token' => $plainToken,
             'expires_at' => $expiresAt->toIso8601String(),
@@ -79,8 +93,17 @@ class ProvisionController extends ApiController
                 'name' => $user->full_name,
                 'email' => $user->email,
             ],
-            // Deep link untuk QR code
-            'qr_content' => 'smsapp://provision?token=' . $plainToken,
+            // Deep link untuk QR code - includes server URL
+            'qr_content' => $qrContent,
+            // Alternative JSON format for QR
+            'qr_json' => json_encode([
+                'api' => $apiUrl,
+                'token' => $plainToken,
+                'school' => $schoolName,
+                'user_id' => $user->id,
+                'user_name' => $user->full_name,
+                'user_email' => $user->email,
+            ]),
         ], 'Token provisioning berhasil dibuat.');
     }
 

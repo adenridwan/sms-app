@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/auth/local_session_controller.dart';
@@ -21,6 +22,7 @@ class ConnectionScannerScreen extends ConsumerStatefulWidget {
 class _ConnectionScannerScreenState
     extends ConsumerState<ConnectionScannerScreen> {
   final MobileScannerController _controller = MobileScannerController();
+  final ImagePicker _imagePicker = ImagePicker();
   bool _processing = false;
   String? _error;
 
@@ -36,17 +38,58 @@ class _ConnectionScannerScreenState
     final barcode = capture.barcodes.firstOrNull;
     if (barcode == null || barcode.rawValue == null) return;
 
+    await _processQrContent(barcode.rawValue!);
+  }
+
+  /// Pick image from gallery and scan QR from it
+  Future<void> _pickImageAndScan() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+
+      if (image == null) return;
+
+      setState(() {
+        _processing = true;
+        _error = null;
+      });
+
+      // In mobile_scanner 3.x, analyzeImage returns bool and triggers onDetect callback
+      // The detected barcode will be handled by _onDetect method
+      final bool success = await _controller.analyzeImage(image.path);
+
+      if (!success) {
+        setState(() {
+          _error = 'Tidak dapat menemukan QR code dalam gambar.';
+          _processing = false;
+        });
+      }
+      // If success, _onDetect will be triggered automatically
+    } catch (e) {
+      setState(() {
+        _error = 'Gagal memproses gambar: $e';
+        _processing = false;
+      });
+    }
+  }
+
+  /// Process QR content (from camera or image)
+  Future<void> _processQrContent(String raw) async {
     setState(() {
       _processing = true;
       _error = null;
     });
 
     try {
-      final data = _parseQrData(barcode.rawValue!);
+      final data = _parseQrData(raw);
 
       if (data == null) {
+        // Show what was scanned for debugging
+        final preview = raw.length > 100 ? '${raw.substring(0, 100)}...' : raw;
         setState(() {
-          _error = 'QR tidak valid. Pastikan QR dari admin sekolah.';
+          _error = 'QR tidak valid. Pastikan QR dari admin sekolah.\n\nKonten: $preview';
           _processing = false;
         });
         return;
@@ -91,33 +134,44 @@ class _ConnectionScannerScreenState
   }
 
   Map<String, dynamic>? _parseQrData(String raw) {
+    // Debug: print raw content
+    debugPrint('QR Raw: $raw');
+
     // Try JSON format first: {"api": "url", "token": "...", "school": "..."}
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       if (data.containsKey('api') && data.containsKey('token')) {
+        debugPrint('QR Parsed as JSON');
         return data;
       }
-    } catch (_) {
-      // Not JSON, try deep link format
+    } catch (e) {
+      debugPrint('QR Not JSON: $e');
     }
 
     // Try deep link format: smsapp://provision?token=...&server=...
     try {
       final uri = Uri.parse(raw);
+      debugPrint('QR URI - scheme: ${uri.scheme}, host: ${uri.host}');
+      debugPrint('QR URI - queryParams: ${uri.queryParameters}');
+
       if (uri.scheme == 'smsapp' && uri.host == 'provision') {
         final token = uri.queryParameters['token'];
         final server = uri.queryParameters['server'];
+        debugPrint('QR token: $token, server: $server');
 
         if (token != null && server != null) {
           return {
             'api': server,
             'token': token,
             'school': uri.queryParameters['device_name'],
+            'user_id': uri.queryParameters['user_id'],
+            'user_name': uri.queryParameters['user_name'],
+            'user_email': uri.queryParameters['user_email'],
           };
         }
       }
-    } catch (_) {
-      // Not a valid deep link
+    } catch (e) {
+      debugPrint('QR URI parse error: $e');
     }
 
     return null;
@@ -211,13 +265,14 @@ class _ConnectionScannerScreenState
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Icon(Icons.error, color: Colors.red),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               _error!,
-                              style: const TextStyle(color: Colors.red),
+                              style: const TextStyle(color: Colors.red, fontSize: 12),
                             ),
                           ),
                           IconButton(
@@ -235,14 +290,27 @@ class _ConnectionScannerScreenState
             ),
           ),
 
-          // Manual input option
+          // Bottom actions
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: TextButton.icon(
-                onPressed: () => _showManualInput(context),
-                icon: const Icon(Icons.keyboard),
-                label: const Text('Input Manual'),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Upload from gallery
+                  TextButton.icon(
+                    onPressed: _processing ? null : _pickImageAndScan,
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Upload Gambar'),
+                  ),
+                  const SizedBox(width: 16),
+                  // Manual input
+                  TextButton.icon(
+                    onPressed: _processing ? null : () => _showManualInput(context),
+                    icon: const Icon(Icons.keyboard),
+                    label: const Text('Input Manual'),
+                  ),
+                ],
               ),
             ),
           ),
@@ -260,31 +328,34 @@ class _ConnectionScannerScreenState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Input Manual'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: apiCtrl,
-              decoration: const InputDecoration(
-                labelText: 'API URL',
-                hintText: 'https://sekolah.sch.id/api/v1',
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: apiCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'API URL',
+                  hintText: 'http://192.168.1.100:8080/api/v1',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: tokenCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Sync Token',
+              const SizedBox(height: 12),
+              TextField(
+                controller: tokenCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Sync Token',
+                ),
+                maxLines: 2,
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: schoolCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nama Sekolah (opsional)',
+              const SizedBox(height: 12),
+              TextField(
+                controller: schoolCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nama Sekolah (opsional)',
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(

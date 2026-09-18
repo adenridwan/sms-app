@@ -89,7 +89,9 @@ class HomeScreen extends ConsumerWidget {
                 figures: _figures(data),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
+              const SectionHeader(title: 'Menu Cepat'),
+              const SizedBox(height: 16),
               ActionGrid(actions: actions),
 
               if (isTeacher && (data?.myClasses.isNotEmpty ?? false)) ...[

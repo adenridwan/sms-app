@@ -51,6 +51,8 @@ dependencies:
   qr_flutter: ^4.1.0
   # Pemindai QR (kamera) — versi 3.x kompatibel dengan Flutter Gradle Plugin 3.24
   mobile_scanner: ^3.5.7
+  # Ambil gambar dari galeri (untuk scan QR dari screenshot)
+  image_picker: ^1.0.7
   # Lokasi GPS (geofence absensi) — 10.x kompatibel dengan toolchain ini
   geolocator: ^10.1.1
 

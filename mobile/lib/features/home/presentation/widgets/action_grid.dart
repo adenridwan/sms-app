@@ -3,16 +3,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/action_item.dart';
 
-/// Grid aksi 2 kolom bergaya rujukan: kartu datar, **tanpa ikon**, judul tebal
-/// dengan satu baris penjelas di bawahnya.
+/// Grid aksi dengan ikon modern — 5 menu shortcut ditampilkan dalam grid
+/// responsif dengan ikon bulat berwarna di atas label.
 ///
-/// Ikon sengaja ditinggalkan — pada rujukan, pembeda antar kartu adalah kata,
-/// bukan simbol. Itu membuat kartu terbaca lebih cepat dan tidak menuntut
-/// ikon baru setiap kali modul bertambah.
-///
-/// Seluruh aksi peran ditampilkan apa adanya, tanpa penyaring pintasan:
-/// rujukan hanya punya empat kartu per peran, jadi menyembunyikan sebagian di
-/// balik lembar "Semua menu" justru menambah langkah tanpa menghemat ruang.
+/// Layout: 5 item dalam grid, baris pertama 3 kolom, baris kedua 2 kolom
+/// (centered).
 class ActionGrid extends StatelessWidget {
   const ActionGrid({super.key, required this.actions});
 
@@ -31,18 +26,17 @@ class ActionGrid extends StatelessWidget {
       );
     }
 
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.75,
+    // Responsive: gunakan wrap untuk layout yang lebih fleksibel
+    return Wrap(
+      spacing: 12,
+      runSpacing: 16,
+      alignment: WrapAlignment.center,
       children: [
         for (final a in actions)
-          _ActionCard(
+          _ActionIconCard(
             title: a.title,
             caption: a.caption,
+            icon: a.icon,
             enabled: a.isAvailable,
             onTap: a.route == null ? null : () => context.push(a.route!),
           ),
@@ -51,16 +45,19 @@ class ActionGrid extends StatelessWidget {
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
+/// Kartu aksi dengan ikon bulat berwarna modern.
+class _ActionIconCard extends StatelessWidget {
+  const _ActionIconCard({
     required this.title,
     required this.caption,
+    required this.icon,
     required this.enabled,
     this.onTap,
   });
 
   final String title;
   final String caption;
+  final IconData icon;
   final bool enabled;
   final VoidCallback? onTap;
 
@@ -69,39 +66,82 @@ class _ActionCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final active = enabled && onTap != null;
 
-    return Material(
-      color: scheme.surface,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox.expand(
-          child: Opacity(
-            opacity: active ? 1 : .5,
+    // Lebar kartu responsif: sekitar 1/3 layar dengan spacing
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = (screenWidth - 40 - 24) / 3; // 40 = padding, 24 = spacing
+
+    return SizedBox(
+      width: cardWidth.clamp(90.0, 110.0),
+      child: Opacity(
+        opacity: active ? 1 : .5,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -.2,
+                  // Icon container dengan gradient modern
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: active
+                            ? [
+                                scheme.primary,
+                                scheme.primary.withValues(alpha: 0.8),
+                              ]
+                            : [
+                                scheme.surfaceContainerHighest,
+                                scheme.surfaceContainerHighest,
+                              ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: active
+                          ? [
+                              BoxShadow(
+                                color: scheme.primary.withValues(alpha: 0.3),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 26,
+                      color: active ? Colors.white : scheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 10),
+                  // Title
                   Text(
-                    caption,
-                    maxLines: 2,
+                    title,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 11,
-                      height: 1.3,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -.1,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  // Caption
+                  Text(
+                    caption,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
