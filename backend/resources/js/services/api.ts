@@ -426,6 +426,11 @@ export interface StaffFormData {
     employment_status: string;
     status: string;
     education_level: string;
+    /**
+     * Diisi hanya saat menautkan ke akun pengguna yang sudah ada — lihat
+     * LinkExistingUserField. Kosong berarti akun baru dibuat (perilaku lama).
+     */
+    user_id?: string;
 }
 
 export interface CreateStaffResponse extends Staff {
@@ -1805,6 +1810,11 @@ export interface Announcement {
     updated_at: string;
 }
 
+export interface AnnouncementFeed {
+    unread_count: number;
+    items: Announcement[];
+}
+
 export interface AnnouncementStatistics {
     total: number;
     published: number;
@@ -1846,6 +1856,12 @@ export const announcementApi = {
 
     statistics: () =>
         api.get<ApiResponse<AnnouncementStatistics>>('/notifications/announcements/statistics'),
+
+    /** Umpan ikon lonceng: hanya pengumuman yang sudah tayang, + jumlah belum dibaca. */
+    feed: (limit?: number) =>
+        api.get<ApiResponse<AnnouncementFeed>>('/notifications/announcements/feed', {
+            params: { limit },
+        }),
 };
 
 // Library

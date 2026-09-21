@@ -23,7 +23,7 @@ class AnnouncementController extends ApiController
         $canManage = $isSuperAdmin || $user->can('announcements.manage');
 
         $query = Announcement::query()
-            ->with(['author:id,email'])
+            ->with(['author:id,username,email', 'author.profile'])
             ->when(!$canManage, function ($q) {
                 // Non-admin users only see published announcements
                 $q->published();
@@ -68,7 +68,7 @@ class AnnouncementController extends ApiController
             abort(404);
         }
 
-        $announcement->load(['author:id,email']);
+        $announcement->load(['author:id,username,email', 'author.profile']);
 
         // Mark as read
         $announcement->markAsReadBy($user);
@@ -127,7 +127,7 @@ class AnnouncementController extends ApiController
 
             DB::commit();
 
-            $announcement->load(['author:id,email']);
+            $announcement->load(['author:id,username,email', 'author.profile']);
 
             return $this->success(
                 new AnnouncementResource($announcement),
@@ -181,7 +181,7 @@ class AnnouncementController extends ApiController
 
             DB::commit();
 
-            $announcement->load(['author:id,email']);
+            $announcement->load(['author:id,username,email', 'author.profile']);
 
             return $this->success(
                 new AnnouncementResource($announcement),
@@ -261,6 +261,48 @@ class AnnouncementController extends ApiController
         $announcement->markAsReadBy($request->user());
 
         return $this->success(null, 'Pengumuman ditandai sudah dibaca');
+    }
+
+    /**
+     * Umpan untuk ikon lonceng di navbar: pengumuman yang benar-benar tayang
+     * untuk pengguna ini, beserta jumlah yang belum dibaca.
+     *
+     * Sengaja terpisah dari index(): index() memakai `announcements.manage`
+     * sehingga admin ikut melihat draft dan pengumuman kedaluwarsa — tidak
+     * pantas muncul sebagai notifikasi. Di sini scope `published()` berlaku
+     * untuk semua orang tanpa kecuali, termasuk super admin.
+     */
+    public function feed(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'limit' => ['nullable', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $limit = (int) ($validated['limit'] ?? 5);
+
+        $unreadCount = Announcement::published()
+            ->whereDoesntHave('readers', fn ($q) => $q->where('users.id', $user->id))
+            ->count();
+
+        $items = Announcement::published()
+            ->with(['author:id,username,email', 'author.profile'])
+            ->withExists(['readers as is_read' => fn ($q) => $q->where('users.id', $user->id)])
+            ->orderByDesc('is_pinned')
+            ->orderByDesc('publish_at')
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get()
+            // withExists() mengembalikan 0/1, bukan boolean — samakan dengan
+            // bentuk yang dipakai index() supaya frontend tidak perlu tahu
+            // bedanya dari mana data itu datang.
+            ->each(fn (Announcement $a) => $a->is_read = (bool) $a->is_read);
+
+        return $this->success([
+            'unread_count' => $unreadCount,
+            'items' => AnnouncementResource::collection($items),
+        ]);
     }
 
     /**

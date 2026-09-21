@@ -6,6 +6,7 @@ import { roleLabel, roleSummary } from '@/lib/roles';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import AnnouncementBell from '@/components/AnnouncementBell';
 import {
     Collapsible,
     CollapsibleContent,
@@ -377,6 +378,11 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
         currentPath === href || currentPath.startsWith(href + '/');
 
     const schoolName = tenant?.name || activeTenant?.name || app.name;
+    // Fallback ke activeTenant dengan alasan yang sama seperti nama di atas:
+    // prop `tenant` selalu null untuk super admin (akunnya tidak terikat satu
+    // sekolah), sehingga tanpa ini logo sekolah yang baru diunggah tidak pernah
+    // muncul untuknya — yang tampil selalu ikon topi wisuda bawaan.
+    const schoolLogo = tenant?.logo || activeTenant?.logo || null;
     const userName = auth.user?.full_name || 'User';
     const userRoles = auth.user?.roles ?? [];
 
@@ -389,9 +395,9 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                         href="/dashboard"
                         className="flex items-center gap-2.5 rounded-xl p-1.5 transition-colors hover:bg-sidebar-accent group-data-[state=collapsed]:justify-center"
                     >
-                        {tenant?.logo ? (
+                        {schoolLogo ? (
                             <img
-                                src={tenant.logo}
+                                src={schoolLogo}
                                 alt={schoolName}
                                 className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-sidebar-border shadow-sm"
                             />
@@ -522,14 +528,8 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                         </DropdownMenu>
                     )}
 
-                    {/* Notifications */}
-                    <Button variant="ghost" size="icon" className="relative">
-                        <Bell className="h-5 w-5" />
-                        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
-                            3
-                        </span>
-                        <span className="sr-only">Notifikasi</span>
-                    </Button>
+                    {/* Notifikasi — pengumuman yang sudah tayang, lihat AnnouncementBell */}
+                    <AnnouncementBell />
 
                     {/* User dropdown: theme, name, logout */}
                     <DropdownMenu>

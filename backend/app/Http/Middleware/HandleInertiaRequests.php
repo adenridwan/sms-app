@@ -68,21 +68,30 @@ class HandleInertiaRequests extends Middleware
                     : [],
             ],
 
-            // Tenant - diambil dari relasi yang sudah di-load
+            // Tenant - diambil dari relasi yang sudah di-load.
+            // Catatan: null untuk super admin, karena akunnya tidak terikat
+            // satu sekolah (tenant_id NULL). Sekolah aktifnya hanya diketahui
+            // browser (localStorage + header X-Tenant-ID), tidak oleh server
+            // saat merender. Karena itu MainLayout jatuh ke `tenants` di bawah.
             'tenant' => $tenant ? [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
-                'logo' => $tenant->logo
-                    ? (parse_url(\Illuminate\Support\Facades\Storage::disk('public')->url($tenant->logo), PHP_URL_PATH)
-                        ?: '/storage/'.$tenant->logo)
-                    : null,
+                'logo' => $this->tenantLogoUrl($tenant->logo),
             ] : null,
 
-            // Tenant list for super admin (used by the tenant switcher)
+            // Tenant list for super admin (used by the tenant switcher).
+            // Logonya WAJIB berbentuk URL yang sama dengan `tenant.logo` di
+            // atas — sebelumnya kolomnya dikirim mentah ("logos/x.png"),
+            // sehingga tidak bisa dipakai langsung sebagai src <img>.
             'tenants' => fn () => $user?->isSuperAdmin()
                 ? \App\Models\Tenant::query()
                     ->orderBy('name')
                     ->get(['id', 'name', 'logo'])
+                    ->map(fn ($t) => [
+                        'id' => $t->id,
+                        'name' => $t->name,
+                        'logo' => $this->tenantLogoUrl($t->logo),
+                    ])
                 : null,
 
             // Flash messages
@@ -96,6 +105,22 @@ class HandleInertiaRequests extends Middleware
             // App settings - cache untuk mengurangi query Setting
             'app' => $this->getAppSettings(),
         ];
+    }
+
+    /**
+     * URL logo sekolah sebagai path root-relatif (mis. "/storage/logos/x.png"),
+     * bukan URL absolut — supaya cocok dengan host/port mana pun yang dipakai
+     * (localhost:8000 saat dev, domain sungguhan saat produksi). Pola yang sama
+     * dipakai SchoolProfileController::logoUrl().
+     */
+    protected function tenantLogoUrl(?string $logo): ?string
+    {
+        if (! $logo) {
+            return null;
+        }
+
+        return parse_url(\Illuminate\Support\Facades\Storage::disk('public')->url($logo), PHP_URL_PATH)
+            ?: '/storage/' . $logo;
     }
 
     /**

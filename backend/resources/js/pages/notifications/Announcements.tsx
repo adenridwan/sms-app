@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateTimePicker } from '@/components/ui/datetime-picker';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -673,20 +674,20 @@ export default function Announcements() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="publish_at">Tanggal Publikasi</Label>
-                                <Input
+                                <DateTimePicker
                                     id="publish_at"
-                                    type="datetime-local"
                                     value={formData.publish_at}
-                                    onChange={(e) => setFormData({ ...formData, publish_at: e.target.value })}
+                                    onChange={(v) => setFormData({ ...formData, publish_at: v })}
+                                    placeholder="Terbitkan segera"
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="expires_at">Tanggal Kedaluwarsa</Label>
-                                <Input
+                                <DateTimePicker
                                     id="expires_at"
-                                    type="datetime-local"
                                     value={formData.expires_at}
-                                    onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
+                                    onChange={(v) => setFormData({ ...formData, expires_at: v })}
+                                    placeholder="Tanpa batas waktu"
                                 />
                             </div>
                         </div>

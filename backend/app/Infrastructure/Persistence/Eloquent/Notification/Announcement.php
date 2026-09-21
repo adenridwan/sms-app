@@ -4,7 +4,12 @@ namespace App\Infrastructure\Persistence\Eloquent\Notification;
 
 use App\Infrastructure\Persistence\Eloquent\Concerns\HasUuid;
 use App\Infrastructure\Persistence\Eloquent\Concerns\BelongsToTenant;
-use App\Models\User;
+// Kelas dasar, BUKAN App\Models\User yang mewarisinya. Guard `sanctum`
+// menghasilkan instance Auth\User (lihat config/auth.php), sehingga type-hint
+// ke kelas anak membuat isReadBy()/markAsReadBy() melempar TypeError — efeknya
+// "tandai dibaca" selalu 500 dan daftar pengumuman ikut 500 begitu ada isinya,
+// karena index() memanggil isReadBy() untuk tiap baris.
+use App\Infrastructure\Persistence\Eloquent\Auth\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -60,9 +65,12 @@ class Announcement extends Model
      */
     public function readers(): BelongsToMany
     {
+        // Tanpa withTimestamps(): tabel `announcement_reads` hanya punya
+        // `read_at` (lihat 0001_01_01_000011_create_notification_tables), tidak
+        // ada created_at/updated_at. Menyalakannya membuat setiap penandaan
+        // "sudah dibaca" gagal dengan "column created_at does not exist".
         return $this->belongsToMany(User::class, 'announcement_reads')
-            ->withPivot('read_at')
-            ->withTimestamps();
+            ->withPivot('read_at');
     }
 
     /**
