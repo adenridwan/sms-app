@@ -139,7 +139,7 @@ class AuthController extends StateNotifier<AuthState> {
   static const _onlineLoginTimeout = Duration(seconds: 6);
 
   static Never _timedOut() => throw ApiException(
-        message: 'Server tidak menjawab.',
+        message: 'Sekolah tidak menjawab.',
         isNetwork: true,
       );
 
@@ -209,14 +209,14 @@ class AuthController extends StateNotifier<AuthState> {
         // password salah, akun ini belum pernah masuk di sini, atau perangkat
         // ini memang belum pernah dipakai sama sekali.
         error: isKnown
-            ? 'Tidak terhubung ke server, dan password tidak cocok dengan '
+            ? 'Tidak terhubung ke sekolah, dan password tidak cocok dengan '
                 'yang tersimpan untuk akun ini.'
             : known.isEmpty
-                ? 'Tidak terhubung ke server. Perangkat ini belum pernah '
+                ? 'Tidak terhubung ke sekolah. Perangkat ini belum pernah '
                     'dipakai login, jadi belum ada yang bisa diverifikasi '
                     'secara offline. Satu kali login online dibutuhkan lebih '
                     'dulu.'
-                : 'Tidak terhubung ke server. Akun ini belum pernah masuk di '
+                : 'Tidak terhubung ke sekolah. Akun ini belum pernah masuk di '
                     'perangkat ini. Yang bisa masuk offline: '
                     '${known.join(', ')}.',
       );
@@ -235,7 +235,7 @@ class AuthController extends StateNotifier<AuthState> {
       user: user,
       isSessionVerified: false,
       error: 'Masuk tanpa koneksi — memakai kredensial tersimpan. Absensi '
-          'akan disinkronkan begitu server terjangkau.',
+          'akan dikirim begitu tersambung lagi.',
     );
   }
 

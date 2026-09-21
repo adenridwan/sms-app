@@ -9,6 +9,7 @@ import '../../features/attendance/presentation/scan_camera_screen.dart';
 import '../../features/attendance/presentation/scanner_home_screen.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/connection_scanner_screen.dart';
+import '../../features/auth/presentation/provision_scanner_screen.dart';
 import '../../features/auth/presentation/local_login_screen.dart';
 import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
@@ -83,6 +84,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/connect-scan',
         builder: (_, __) => const ConnectionScannerScreen(),
+      ),
+
+      // Deep link `smsapp://provision?token=...` mendarat di sini. Rutenya
+      // sempat tidak terdaftar sama sekali, sehingga DeepLinkHandler menavigasi
+      // ke alamat yang tidak ada dan membuang token yang sudah ditangkap.
+      // Token dibaca dari query agar pengguna tidak perlu memindai ulang QR
+      // yang barusan membuka aplikasi.
+      GoRoute(
+        path: '/provision-scan',
+        builder: (_, state) => ProvisionScannerScreen(
+          initialToken: state.uri.queryParameters['token'],
+        ),
       ),
 
       // App shell — bottom nav 4 tab, tiap tab punya tumpukan navigasi sendiri.

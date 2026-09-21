@@ -1,7 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/auth/data/auth_repository.dart';
+import '../config/app_config.dart';
 import '../database/database.dart';
 import '../database/database_providers.dart';
+import '../network/api_exception.dart';
+import '../providers.dart';
 import 'local_auth_service.dart';
 
 /// Session state for local-first authentication.
@@ -50,11 +54,15 @@ enum LocalSessionStatus {
 
 /// Controller for local session management.
 class LocalSessionController extends StateNotifier<LocalSession> {
-  LocalSessionController(this._authService) : super(const LocalSession()) {
+  LocalSessionController(this._authService, this._authRepository)
+      : super(const LocalSession()) {
     _init();
   }
 
   final LocalAuthService _authService;
+
+  /// Dipakai menebus token provisioning saat menghubungkan ke sekolah.
+  final AuthRepository _authRepository;
 
   Future<void> _init() async {
     // Check for existing connection
@@ -198,24 +206,68 @@ class LocalSessionController extends StateNotifier<LocalSession> {
     String? backendUserName,
     String? backendUserEmail,
     List<String> permissions = const [],
+    List<String> roles = const [],
   }) async {
+    // Alamat server harus dipasang LEBIH DULU: Dio membaca AppConfig.baseUrl,
+    // dan token hanya bisa ditebus ke server yang menerbitkannya.
+    final previousUrl = AppConfig.baseUrl;
+    final wasProvisioned = AppConfig.isProvisioned;
+    await AppConfig.setServerUrl(apiUrl);
+
     try {
+      // Tebus token provisioning jadi token sesi sungguhan. Tanpa langkah ini
+      // koneksi cuma tercatat di perangkat: aplikasi mengaku "terhubung"
+      // padahal tidak punya akses apa pun, dan tombol Sinkron akan gagal 401.
+      final user = await _authRepository.redeemProvision(
+        provisionToken: syncToken,
+      );
+
       await _authService.saveConnection(
         apiUrl: apiUrl,
         syncToken: syncToken,
         schoolName: schoolName,
-        backendUserId: backendUserId,
-        backendUserName: backendUserName,
-        backendUserEmail: backendUserEmail,
-        permissions: permissions,
+        // Identitas dari server lebih tepercaya daripada yang tertulis di QR.
+        backendUserId: user.id.isNotEmpty ? user.id : backendUserId,
+        backendUserName: user.fullName.isNotEmpty ? user.fullName : backendUserName,
+        backendUserEmail: user.email.isNotEmpty ? user.email : backendUserEmail,
+        permissions: user.permissions.isNotEmpty ? user.permissions : permissions,
+        // Peran dipakai Beranda untuk memilih set Menu Cepat tanpa harus
+        // memanggil server lagi.
+        roles: user.roles.isNotEmpty ? user.roles : roles,
       );
 
       final connection = await _authService.getConnection();
-      state = state.copyWith(connection: connection);
+      state = state.copyWith(connection: connection, clearError: true);
       return true;
+    } on ApiException catch (e) {
+      // Gagal menebus = JANGAN ditandai terhubung, dan kembalikan alamat lama
+      // supaya request berikutnya tidak tertuju ke server yang salah.
+      await _restoreServerUrl(previousUrl, wasProvisioned);
+      state = state.copyWith(
+        error: e.isNetwork
+            ? 'Server tidak terjangkau di $apiUrl. Pastikan perangkat satu '
+                'jaringan dengan server sekolah.'
+            : 'QR ditolak server: ${e.message} Token berlaku 15 menit dan '
+                'sekali pakai — minta QR baru ke admin.',
+      );
+      return false;
     } catch (e) {
+      await _restoreServerUrl(previousUrl, wasProvisioned);
       state = state.copyWith(error: 'Gagal terhubung: $e');
       return false;
+    }
+  }
+
+  /// Kembalikan alamat server ke nilai sebelumnya setelah percobaan gagal.
+  ///
+  /// Kalau sebelumnya belum pernah di-provisioning, alamatnya dikosongkan agar
+  /// kembali ke bawaan build (`--dart-define`) — bukan disetel ke nilai bawaan
+  /// itu secara eksplisit, supaya build berikutnya tetap bisa menggantinya.
+  Future<void> _restoreServerUrl(String previous, bool wasProvisioned) async {
+    if (wasProvisioned) {
+      await AppConfig.setServerUrl(previous);
+    } else {
+      await AppConfig.resetServerUrl();
     }
   }
 
@@ -241,7 +293,10 @@ class LocalSessionController extends StateNotifier<LocalSession> {
 /// Provider for local session.
 final localSessionProvider =
     StateNotifierProvider<LocalSessionController, LocalSession>((ref) {
-  return LocalSessionController(ref.watch(localAuthServiceProvider));
+  return LocalSessionController(
+    ref.watch(localAuthServiceProvider),
+    ref.watch(authRepositoryProvider),
+  );
 });
 
 /// Convenience providers.

@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/auth/local_session_controller.dart';
 import '../../models/action_item.dart';
+import 'connect_required_sheet.dart';
 
 /// Grid aksi dengan ikon modern — 5 menu shortcut ditampilkan dalam grid
 /// responsif dengan ikon bulat berwarna di atas label.
 ///
 /// Layout: 5 item dalam grid, baris pertama 3 kolom, baris kedua 2 kolom
 /// (centered).
-class ActionGrid extends StatelessWidget {
+class ActionGrid extends ConsumerWidget {
   const ActionGrid({super.key, required this.actions});
 
   /// Aksi yang boleh dilihat user (sudah tersaring izin peran).
   final List<ActionItem> actions;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final connected = ref.watch(isConnectedToBackendProvider);
 
     if (actions.isEmpty) {
       return Text(
@@ -33,13 +37,32 @@ class ActionGrid extends StatelessWidget {
       alignment: WrapAlignment.center,
       children: [
         for (final a in actions)
-          _ActionIconCard(
-            title: a.title,
-            caption: a.caption,
-            icon: a.icon,
-            enabled: a.isAvailable,
-            onTap: a.route == null ? null : () => context.push(a.route!),
-          ),
+          () {
+            // Menu dikunci karena dua sebab berbeda, dan pengguna berhak tahu
+            // yang mana: modul belum dibangun (tak ada jalan keluar), atau
+            // perangkat belum tersambung (ada jalan keluar: pindai QR).
+            final blocked = a.route == null
+                ? BlockedReason.notBuilt
+                : (a.requiresBackend && !connected)
+                    ? BlockedReason.notConnected
+                    : null;
+
+            return _ActionIconCard(
+              title: a.title,
+              caption: a.caption,
+              icon: a.icon,
+              enabled: blocked == null,
+              // Selalu bisa diketuk. Kartu yang diam saja bikin orang mengira
+              // aplikasinya rusak — lebih baik menjelaskan kenapa terkunci.
+              onTap: blocked == null
+                  ? () => context.push(a.route!)
+                  : () => showBlockedMenuSheet(
+                        context,
+                        title: a.title,
+                        reason: blocked,
+                      ),
+            );
+          }(),
       ],
     );
   }

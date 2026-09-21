@@ -50,7 +50,7 @@ class ConnectionStatusCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Belum terhubung ke server',
+                    'Belum terhubung ke sekolah',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -119,7 +119,7 @@ class ConnectionStatusCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  connection.schoolName ?? 'Terhubung ke server',
+                  connection.schoolName ?? 'Terhubung ke sekolah',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

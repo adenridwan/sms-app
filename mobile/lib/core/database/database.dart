@@ -42,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
@@ -51,11 +51,13 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // Future migrations go here.
-        // Example:
-        // if (from < 2) {
-        //   await m.addColumn(users, users.newColumn);
-        // }
+        // v2: simpan peran dari server supaya menu benar saat offline.
+        // Kolomnya punya default '[]', jadi perangkat yang sudah terhubung
+        // tidak perlu menghubungkan ulang — perannya terisi saat sinkron
+        // berikutnya, dan sementara itu menu jatuh ke set netral.
+        if (from < 2) {
+          await m.addColumn(backendConnection, backendConnection.rolesJson);
+        }
       },
       beforeOpen: (details) async {
         // Enable foreign keys for referential integrity.

@@ -90,7 +90,7 @@ class _OfflineQueueScreenState extends ConsumerState<OfflineQueueScreen> {
               ? const Center(
                   child: EmptyNote(
                     title: 'Tidak ada antrean',
-                    body: 'Semua absensi sudah tersinkron ke server.',
+                    body: 'Semua absensi sudah terkirim ke sekolah.',
                   ),
                 )
               : ListView(

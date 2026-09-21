@@ -70,7 +70,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Putus Koneksi'),
         content: const Text(
-          'Yakin putus koneksi dari server sekolah? Anda tidak akan bisa '
+          'Yakin memutus koneksi ke sekolah? Anda tidak akan bisa '
           'sinkronisasi data sampai scan QR koneksi lagi.\n\n'
           'Data yang sudah tersimpan tidak akan hilang.',
         ),
@@ -96,7 +96,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(const SnackBar(
-            content: Text('Koneksi ke server diputus'),
+            content: Text('Koneksi ke sekolah diputus'),
           ));
       }
     }
@@ -185,7 +185,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 22),
 
           // ==== KONEKSI SERVER ====
-          const FieldLabel('Koneksi server'),
+          const FieldLabel('Koneksi sekolah'),
           const SizedBox(height: 8),
           Panel(
             child: Column(
@@ -206,7 +206,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       child: Text(
                         connection != null
                             ? 'Terhubung ke ${connection.schoolName ?? 'server'}'
-                            : 'Belum terhubung ke server',
+                            : 'Belum terhubung ke sekolah',
                         style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
@@ -224,12 +224,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   if (connection.backendUserName != null)
                     _InfoRow(
-                      label: 'Akun backend',
+                      label: 'Masuk sebagai',
                       value: connection.backendUserName!,
                     ),
                   if (connection.backendUserEmail != null)
                     _InfoRow(
-                      label: 'Email backend',
+                      label: 'Email',
                       value: connection.backendUserEmail!,
                     ),
                   _InfoRow(
@@ -257,7 +257,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ] else ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Scan QR dari admin sekolah untuk menghubungkan ke server '
+                    'Pindai QR dari admin sekolah untuk menghubungkan aplikasi '
                     'dan sinkronisasi data.',
                     style: TextStyle(
                       fontSize: 12,
@@ -329,13 +329,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2.4, color: Colors.white),
                           )
-                        : const Text('Sinkronkan dengan Server'),
+                        : const Text('Sinkronkan Sekarang'),
                   ),
                 ),
                 if (connection == null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Hubungkan ke server terlebih dahulu untuk sinkronisasi.',
+                    'Hubungkan ke sekolah dulu untuk bisa menyinkronkan.',
                     style: TextStyle(
                       fontSize: 11,
                       color: scheme.onSurfaceVariant,

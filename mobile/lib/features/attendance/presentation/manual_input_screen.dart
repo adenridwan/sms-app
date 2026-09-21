@@ -154,7 +154,7 @@ class _ManualInputViewState extends ConsumerState<ManualInputView> {
         // biarkan tombol simpan tetap hidup.
         if (_offline)
           const InfoStrip(
-            text: 'Tidak terhubung ke server, jadi identitas tidak bisa '
+            text: 'Tidak terhubung ke sekolah, jadi identitas tidak bisa '
                 'dipratinjau. Absensi tetap bisa dicatat dan akan masuk '
                 'antrean untuk disinkronkan nanti.',
           ),

@@ -153,6 +153,7 @@ class LocalAuthService {
     String? backendUserName,
     String? backendUserEmail,
     List<String> permissions = const [],
+    List<String> roles = const [],
   }) async {
     await _db.into(_db.backendConnection).insertOnConflictUpdate(
           BackendConnectionCompanion(
@@ -164,6 +165,7 @@ class LocalAuthService {
             backendUserName: Value(backendUserName),
             backendUserEmail: Value(backendUserEmail),
             permissionsJson: Value(jsonEncode(permissions)),
+            rolesJson: Value(jsonEncode(roles)),
             connectedAt: Value(DateTime.now()),
           ),
         );

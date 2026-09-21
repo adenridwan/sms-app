@@ -22,6 +22,22 @@ class User extends \App\Infrastructure\Persistence\Eloquent\Auth\User
     protected $guard_name = 'web';
 
     /**
+     * Relasi polymorphic (peran & izin Spatie) menyimpan nama KELAS DASAR di
+     * `model_has_roles.model_type`, karena kelas itulah yang dipakai saat
+     * penugasan peran. Tanpa override ini subclass melaporkan dirinya sebagai
+     * `App\Models\User`, tidak ada baris yang cocok, dan `getRoleNames()`
+     * serta `getAllPermissions()` mengembalikan KOSONG — tanpa error apa pun.
+     *
+     * Akibatnya nyata dan sempat lolos: `/auth/redeem-provision` mengirim
+     * `roles: []` dan `permissions: []`, sehingga setiap perangkat yang
+     * dihubungkan lewat QR mengira penggunanya tidak berperan apa pun.
+     */
+    public function getMorphClass(): string
+    {
+        return parent::class;
+    }
+
+    /**
      * Allow legacy controllers to pass profile fields during create/update.
      *
      * @var list<string>

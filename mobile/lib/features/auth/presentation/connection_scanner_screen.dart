@@ -198,7 +198,7 @@ class _ConnectionScannerScreenState
                 Icon(Icons.qr_code_2, size: 32, color: scheme.primary),
                 const SizedBox(height: 8),
                 Text(
-                  'Scan QR dari admin sekolah untuk menghubungkan aplikasi ke server.',
+                  'Pindai QR dari admin sekolah untuk menghubungkan aplikasi ini.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -335,7 +335,7 @@ class _ConnectionScannerScreenState
               TextField(
                 controller: apiCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'API URL',
+                  labelText: 'Alamat Sekolah',
                   hintText: 'http://192.168.1.100:8080/api/v1',
                 ),
               ),
@@ -343,7 +343,7 @@ class _ConnectionScannerScreenState
               TextField(
                 controller: tokenCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Sync Token',
+                  labelText: 'Kode Koneksi',
                 ),
                 maxLines: 2,
               ),
@@ -367,7 +367,7 @@ class _ConnectionScannerScreenState
               Navigator.pop(ctx);
 
               if (apiCtrl.text.isEmpty || tokenCtrl.text.isEmpty) {
-                setState(() => _error = 'API URL dan Token wajib diisi');
+                setState(() => _error = 'Alamat Sekolah dan Kode Koneksi wajib diisi');
                 return;
               }
 

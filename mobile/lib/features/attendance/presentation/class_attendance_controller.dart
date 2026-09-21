@@ -221,7 +221,7 @@ class SaveOutcome {
         SaveOutcomeKind.sent => 'Absensi tersimpan.',
         SaveOutcomeKind.queued =>
           'Tidak ada koneksi — absensi disimpan di antrean '
-              'dan akan dikirim otomatis saat server kembali.',
+              'dan akan dikirim otomatis begitu tersambung lagi.',
         SaveOutcomeKind.failure => message ?? 'Gagal menyimpan absensi.',
       };
 }

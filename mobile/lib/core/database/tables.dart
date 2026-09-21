@@ -16,6 +16,7 @@ class CachedUsers extends Table {
   TextColumn get tenantId => text().nullable()();
   TextColumn get rolesJson => text().withDefault(const Constant('[]'))();
   TextColumn get permissionsJson => text().withDefault(const Constant('[]'))();
+
   DateTimeColumn get syncedAt => dateTime()();
 
   @override
@@ -264,6 +265,16 @@ class BackendConnection extends Table {
   TextColumn get backendUserName => text().nullable()();
   TextColumn get backendUserEmail => text().nullable()();
   TextColumn get permissionsJson => text().withDefault(const Constant('[]'))();
+  /// Peran dari server saat token provisioning ditebus (mis. `["guru"]`).
+  ///
+  /// Sengaja diambil dari jawaban `redeem-provision`, BUKAN dari isi QR: QR
+  /// adalah teks statis yang bisa disunting siapa saja, dan dibuat lebih dulu
+  /// sehingga perannya bisa sudah basi saat dipindai.
+  ///
+  /// Hanya untuk menentukan menu yang tampil saat offline. Otorisasi tetap
+  /// ditegakkan server di tiap request — jangan pernah memakai nilai ini
+  /// sebagai dasar mengizinkan suatu aksi.
+  TextColumn get rolesJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get connectedAt => dateTime()();
   DateTimeColumn get lastSyncAt => dateTime().nullable()();
 

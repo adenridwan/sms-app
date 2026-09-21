@@ -7,8 +7,10 @@ plugins {
 
 android {
     namespace = "id.sch.sms.sms_mobile"
-    // Eksplisit karena beberapa plugin (jni, mobile_scanner) butuh SDK 35
-    compileSdk = 35
+    // Eksplisit karena beberapa plugin (jni, mobile_scanner) butuh SDK tinggi;
+    // sejak androidx.navigationevent 1.0.0 & kawan-kawan masuk, minimumnya 36.
+    // Ini hanya API yang dikompilasi — perilaku runtime ditentukan targetSdk.
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     compileOptions {

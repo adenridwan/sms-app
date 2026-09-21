@@ -132,7 +132,7 @@ class ProfileScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Akun backend: ${connection.backendUserName}',
+                          'Masuk sebagai ${connection.backendUserName}',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -212,7 +212,7 @@ class ProfileScreen extends ConsumerWidget {
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _Row(
                   label: 'Pengaturan & Sinkronisasi',
-                  value: 'Kirim antrean ke server',
+                  value: 'Kirim data yang tertunda',
                   onTap: () => context.push('/settings'),
                   trailing: _chevron(scheme),
                 ),

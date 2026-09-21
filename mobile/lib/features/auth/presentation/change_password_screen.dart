@@ -97,7 +97,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       Expanded(
                         child: Text(
                           'Password ini hanya untuk login di aplikasi ini. '
-                          'Tidak mempengaruhi password akun backend.',
+                          'Tidak mengubah password akun sekolah Anda.',
                           style: TextStyle(
                             fontSize: 12,
                             color: scheme.onSurfaceVariant,

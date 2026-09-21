@@ -5721,6 +5721,14 @@ class $BackendConnectionTable extends BackendConnection
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant('[]'));
+  static const VerificationMeta _rolesJsonMeta =
+      const VerificationMeta('rolesJson');
+  @override
+  late final GeneratedColumn<String> rolesJson = GeneratedColumn<String>(
+      'roles_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('[]'));
   static const VerificationMeta _connectedAtMeta =
       const VerificationMeta('connectedAt');
   @override
@@ -5743,6 +5751,7 @@ class $BackendConnectionTable extends BackendConnection
         backendUserName,
         backendUserEmail,
         permissionsJson,
+        rolesJson,
         connectedAt,
         lastSyncAt
       ];
@@ -5802,6 +5811,10 @@ class $BackendConnectionTable extends BackendConnection
           permissionsJson.isAcceptableOrUnknown(
               data['permissions_json']!, _permissionsJsonMeta));
     }
+    if (data.containsKey('roles_json')) {
+      context.handle(_rolesJsonMeta,
+          rolesJson.isAcceptableOrUnknown(data['roles_json']!, _rolesJsonMeta));
+    }
     if (data.containsKey('connected_at')) {
       context.handle(
           _connectedAtMeta,
@@ -5841,6 +5854,8 @@ class $BackendConnectionTable extends BackendConnection
           DriftSqlType.string, data['${effectivePrefix}backend_user_email']),
       permissionsJson: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}permissions_json'])!,
+      rolesJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}roles_json'])!,
       connectedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}connected_at'])!,
       lastSyncAt: attachedDatabase.typeMapping
@@ -5864,6 +5879,17 @@ class BackendConnectionData extends DataClass
   final String? backendUserName;
   final String? backendUserEmail;
   final String permissionsJson;
+
+  /// Peran dari server saat token provisioning ditebus (mis. `["guru"]`).
+  ///
+  /// Sengaja diambil dari jawaban `redeem-provision`, BUKAN dari isi QR: QR
+  /// adalah teks statis yang bisa disunting siapa saja, dan dibuat lebih dulu
+  /// sehingga perannya bisa sudah basi saat dipindai.
+  ///
+  /// Hanya untuk menentukan menu yang tampil saat offline. Otorisasi tetap
+  /// ditegakkan server di tiap request — jangan pernah memakai nilai ini
+  /// sebagai dasar mengizinkan suatu aksi.
+  final String rolesJson;
   final DateTime connectedAt;
   final DateTime? lastSyncAt;
   const BackendConnectionData(
@@ -5875,6 +5901,7 @@ class BackendConnectionData extends DataClass
       this.backendUserName,
       this.backendUserEmail,
       required this.permissionsJson,
+      required this.rolesJson,
       required this.connectedAt,
       this.lastSyncAt});
   @override
@@ -5896,6 +5923,7 @@ class BackendConnectionData extends DataClass
       map['backend_user_email'] = Variable<String>(backendUserEmail);
     }
     map['permissions_json'] = Variable<String>(permissionsJson);
+    map['roles_json'] = Variable<String>(rolesJson);
     map['connected_at'] = Variable<DateTime>(connectedAt);
     if (!nullToAbsent || lastSyncAt != null) {
       map['last_sync_at'] = Variable<DateTime>(lastSyncAt);
@@ -5921,6 +5949,7 @@ class BackendConnectionData extends DataClass
           ? const Value.absent()
           : Value(backendUserEmail),
       permissionsJson: Value(permissionsJson),
+      rolesJson: Value(rolesJson),
       connectedAt: Value(connectedAt),
       lastSyncAt: lastSyncAt == null && nullToAbsent
           ? const Value.absent()
@@ -5940,6 +5969,7 @@ class BackendConnectionData extends DataClass
       backendUserName: serializer.fromJson<String?>(json['backendUserName']),
       backendUserEmail: serializer.fromJson<String?>(json['backendUserEmail']),
       permissionsJson: serializer.fromJson<String>(json['permissionsJson']),
+      rolesJson: serializer.fromJson<String>(json['rolesJson']),
       connectedAt: serializer.fromJson<DateTime>(json['connectedAt']),
       lastSyncAt: serializer.fromJson<DateTime?>(json['lastSyncAt']),
     );
@@ -5956,6 +5986,7 @@ class BackendConnectionData extends DataClass
       'backendUserName': serializer.toJson<String?>(backendUserName),
       'backendUserEmail': serializer.toJson<String?>(backendUserEmail),
       'permissionsJson': serializer.toJson<String>(permissionsJson),
+      'rolesJson': serializer.toJson<String>(rolesJson),
       'connectedAt': serializer.toJson<DateTime>(connectedAt),
       'lastSyncAt': serializer.toJson<DateTime?>(lastSyncAt),
     };
@@ -5970,6 +6001,7 @@ class BackendConnectionData extends DataClass
           Value<String?> backendUserName = const Value.absent(),
           Value<String?> backendUserEmail = const Value.absent(),
           String? permissionsJson,
+          String? rolesJson,
           DateTime? connectedAt,
           Value<DateTime?> lastSyncAt = const Value.absent()}) =>
       BackendConnectionData(
@@ -5986,6 +6018,7 @@ class BackendConnectionData extends DataClass
             ? backendUserEmail.value
             : this.backendUserEmail,
         permissionsJson: permissionsJson ?? this.permissionsJson,
+        rolesJson: rolesJson ?? this.rolesJson,
         connectedAt: connectedAt ?? this.connectedAt,
         lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
       );
@@ -6008,6 +6041,7 @@ class BackendConnectionData extends DataClass
       permissionsJson: data.permissionsJson.present
           ? data.permissionsJson.value
           : this.permissionsJson,
+      rolesJson: data.rolesJson.present ? data.rolesJson.value : this.rolesJson,
       connectedAt:
           data.connectedAt.present ? data.connectedAt.value : this.connectedAt,
       lastSyncAt:
@@ -6026,6 +6060,7 @@ class BackendConnectionData extends DataClass
           ..write('backendUserName: $backendUserName, ')
           ..write('backendUserEmail: $backendUserEmail, ')
           ..write('permissionsJson: $permissionsJson, ')
+          ..write('rolesJson: $rolesJson, ')
           ..write('connectedAt: $connectedAt, ')
           ..write('lastSyncAt: $lastSyncAt')
           ..write(')'))
@@ -6042,6 +6077,7 @@ class BackendConnectionData extends DataClass
       backendUserName,
       backendUserEmail,
       permissionsJson,
+      rolesJson,
       connectedAt,
       lastSyncAt);
   @override
@@ -6056,6 +6092,7 @@ class BackendConnectionData extends DataClass
           other.backendUserName == this.backendUserName &&
           other.backendUserEmail == this.backendUserEmail &&
           other.permissionsJson == this.permissionsJson &&
+          other.rolesJson == this.rolesJson &&
           other.connectedAt == this.connectedAt &&
           other.lastSyncAt == this.lastSyncAt);
 }
@@ -6070,6 +6107,7 @@ class BackendConnectionCompanion
   final Value<String?> backendUserName;
   final Value<String?> backendUserEmail;
   final Value<String> permissionsJson;
+  final Value<String> rolesJson;
   final Value<DateTime> connectedAt;
   final Value<DateTime?> lastSyncAt;
   const BackendConnectionCompanion({
@@ -6081,6 +6119,7 @@ class BackendConnectionCompanion
     this.backendUserName = const Value.absent(),
     this.backendUserEmail = const Value.absent(),
     this.permissionsJson = const Value.absent(),
+    this.rolesJson = const Value.absent(),
     this.connectedAt = const Value.absent(),
     this.lastSyncAt = const Value.absent(),
   });
@@ -6093,6 +6132,7 @@ class BackendConnectionCompanion
     this.backendUserName = const Value.absent(),
     this.backendUserEmail = const Value.absent(),
     this.permissionsJson = const Value.absent(),
+    this.rolesJson = const Value.absent(),
     required DateTime connectedAt,
     this.lastSyncAt = const Value.absent(),
   })  : apiUrl = Value(apiUrl),
@@ -6107,6 +6147,7 @@ class BackendConnectionCompanion
     Expression<String>? backendUserName,
     Expression<String>? backendUserEmail,
     Expression<String>? permissionsJson,
+    Expression<String>? rolesJson,
     Expression<DateTime>? connectedAt,
     Expression<DateTime>? lastSyncAt,
   }) {
@@ -6119,6 +6160,7 @@ class BackendConnectionCompanion
       if (backendUserName != null) 'backend_user_name': backendUserName,
       if (backendUserEmail != null) 'backend_user_email': backendUserEmail,
       if (permissionsJson != null) 'permissions_json': permissionsJson,
+      if (rolesJson != null) 'roles_json': rolesJson,
       if (connectedAt != null) 'connected_at': connectedAt,
       if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
     });
@@ -6133,6 +6175,7 @@ class BackendConnectionCompanion
       Value<String?>? backendUserName,
       Value<String?>? backendUserEmail,
       Value<String>? permissionsJson,
+      Value<String>? rolesJson,
       Value<DateTime>? connectedAt,
       Value<DateTime?>? lastSyncAt}) {
     return BackendConnectionCompanion(
@@ -6144,6 +6187,7 @@ class BackendConnectionCompanion
       backendUserName: backendUserName ?? this.backendUserName,
       backendUserEmail: backendUserEmail ?? this.backendUserEmail,
       permissionsJson: permissionsJson ?? this.permissionsJson,
+      rolesJson: rolesJson ?? this.rolesJson,
       connectedAt: connectedAt ?? this.connectedAt,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
     );
@@ -6176,6 +6220,9 @@ class BackendConnectionCompanion
     if (permissionsJson.present) {
       map['permissions_json'] = Variable<String>(permissionsJson.value);
     }
+    if (rolesJson.present) {
+      map['roles_json'] = Variable<String>(rolesJson.value);
+    }
     if (connectedAt.present) {
       map['connected_at'] = Variable<DateTime>(connectedAt.value);
     }
@@ -6196,6 +6243,7 @@ class BackendConnectionCompanion
           ..write('backendUserName: $backendUserName, ')
           ..write('backendUserEmail: $backendUserEmail, ')
           ..write('permissionsJson: $permissionsJson, ')
+          ..write('rolesJson: $rolesJson, ')
           ..write('connectedAt: $connectedAt, ')
           ..write('lastSyncAt: $lastSyncAt')
           ..write(')'))
@@ -9413,6 +9461,7 @@ typedef $$BackendConnectionTableCreateCompanionBuilder
   Value<String?> backendUserName,
   Value<String?> backendUserEmail,
   Value<String> permissionsJson,
+  Value<String> rolesJson,
   required DateTime connectedAt,
   Value<DateTime?> lastSyncAt,
 });
@@ -9426,6 +9475,7 @@ typedef $$BackendConnectionTableUpdateCompanionBuilder
   Value<String?> backendUserName,
   Value<String?> backendUserEmail,
   Value<String> permissionsJson,
+  Value<String> rolesJson,
   Value<DateTime> connectedAt,
   Value<DateTime?> lastSyncAt,
 });
@@ -9465,6 +9515,9 @@ class $$BackendConnectionTableFilterComposer
   ColumnFilters<String> get permissionsJson => $composableBuilder(
       column: $table.permissionsJson,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get rolesJson => $composableBuilder(
+      column: $table.rolesJson, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get connectedAt => $composableBuilder(
       column: $table.connectedAt, builder: (column) => ColumnFilters(column));
@@ -9510,6 +9563,9 @@ class $$BackendConnectionTableOrderingComposer
       column: $table.permissionsJson,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get rolesJson => $composableBuilder(
+      column: $table.rolesJson, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get connectedAt => $composableBuilder(
       column: $table.connectedAt, builder: (column) => ColumnOrderings(column));
 
@@ -9549,6 +9605,9 @@ class $$BackendConnectionTableAnnotationComposer
 
   GeneratedColumn<String> get permissionsJson => $composableBuilder(
       column: $table.permissionsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get rolesJson =>
+      $composableBuilder(column: $table.rolesJson, builder: (column) => column);
 
   GeneratedColumn<DateTime> get connectedAt => $composableBuilder(
       column: $table.connectedAt, builder: (column) => column);
@@ -9594,6 +9653,7 @@ class $$BackendConnectionTableTableManager extends RootTableManager<
             Value<String?> backendUserName = const Value.absent(),
             Value<String?> backendUserEmail = const Value.absent(),
             Value<String> permissionsJson = const Value.absent(),
+            Value<String> rolesJson = const Value.absent(),
             Value<DateTime> connectedAt = const Value.absent(),
             Value<DateTime?> lastSyncAt = const Value.absent(),
           }) =>
@@ -9606,6 +9666,7 @@ class $$BackendConnectionTableTableManager extends RootTableManager<
             backendUserName: backendUserName,
             backendUserEmail: backendUserEmail,
             permissionsJson: permissionsJson,
+            rolesJson: rolesJson,
             connectedAt: connectedAt,
             lastSyncAt: lastSyncAt,
           ),
@@ -9618,6 +9679,7 @@ class $$BackendConnectionTableTableManager extends RootTableManager<
             Value<String?> backendUserName = const Value.absent(),
             Value<String?> backendUserEmail = const Value.absent(),
             Value<String> permissionsJson = const Value.absent(),
+            Value<String> rolesJson = const Value.absent(),
             required DateTime connectedAt,
             Value<DateTime?> lastSyncAt = const Value.absent(),
           }) =>
@@ -9630,6 +9692,7 @@ class $$BackendConnectionTableTableManager extends RootTableManager<
             backendUserName: backendUserName,
             backendUserEmail: backendUserEmail,
             permissionsJson: permissionsJson,
+            rolesJson: rolesJson,
             connectedAt: connectedAt,
             lastSyncAt: lastSyncAt,
           ),

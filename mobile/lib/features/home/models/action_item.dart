@@ -19,6 +19,7 @@ class ActionItem {
     required this.caption,
     required this.icon,
     this.route,
+    this.requiresBackend = true,
   });
 
   /// Kunci stabil untuk menyimpan pintasan pilihan pengguna. **Jangan diubah**
@@ -35,6 +36,11 @@ class ActionItem {
 
   /// Tujuan navigasi. `null` = modul belum dibangun (kartu tampil nonaktif).
   final String? route;
+
+  /// `true` bila menu ini tidak berguna tanpa data dari server sekolah
+  /// (daftar siswa, jadwal, kelas). Dipakai Beranda untuk mengunci kartu
+  /// selama perangkat belum dihubungkan, bukan untuk menyembunyikannya.
+  final bool requiresBackend;
 
   bool get isAvailable => route != null;
 }
@@ -132,8 +138,68 @@ const List<ActionItem> kActionCatalog = [
 /// Peran diambil dari akun yang login (`user_type` di token), bukan dari
 /// pilihan di aplikasi — persis seperti rujukan yang menyusun grid dari `role`.
 /// Staf dan super admin memakai set admin karena lingkup kerjanya sama.
+/// Aksi saat peran belum diketahui — akun lokal yang belum tersambung ke
+/// server sekolah.
+///
+/// Sebelumnya kasus ini mengembalikan daftar kosong, sehingga Beranda tampak
+/// melompong begitu login. Menunya sekarang tetap ditampilkan supaya peta
+/// fitur terbaca, tapi keterangannya netral: peran belum diketahui, jadi
+/// jangan menjanjikan "kelola" atau "buat" yang mungkin bukan hak akunnya.
+/// Penguncian dikerjakan Beranda lewat [requiresBackend].
+const List<ActionItem> _unlinkedActions = [
+  ActionItem(
+    key: 'attendance',
+    title: 'Absensi',
+    caption: 'Pindai QR & Ref ID',
+    icon: Icons.qr_code_scanner_rounded,
+    route: '/attendance',
+  ),
+  ActionItem(
+    key: 'timetable',
+    title: 'Jadwal',
+    caption: 'Jadwal mengajar',
+    icon: Icons.calendar_month_rounded,
+  ),
+  ActionItem(
+    key: 'attendance_report',
+    title: 'Laporan Presensi',
+    caption: 'Rekap kehadiran',
+    icon: Icons.assignment_rounded,
+  ),
+  ActionItem(
+    key: 'announcements',
+    title: 'Pengumuman',
+    caption: 'Info sekolah',
+    icon: Icons.campaign_rounded,
+  ),
+  ActionItem(
+    key: 'leave_request',
+    title: 'Pengajuan Izin',
+    caption: 'Izin & sakit',
+    icon: Icons.event_busy_rounded,
+  ),
+];
+
 List<ActionItem> visibleActionsFor(User? user) => switch (user?.userType) {
-      null => const [],
+      null => _unlinkedActions,
       'teacher' => _teacherActions,
       _ => _adminActions,
     };
+
+/// Aksi berdasarkan peran yang tersimpan dari `redeem-provision`.
+///
+/// Dipakai saat sesi backend belum dimuat tapi perangkat sudah terhubung —
+/// kondisi normal pada arsitektur local-first, karena login memakai akun
+/// lokal dan `user` dari token baru terisi belakangan.
+///
+/// Peran tersimpan ini menentukan TAMPILAN saja. Server tetap memeriksa izin
+/// di tiap request; jangan jadikan nilai ini dasar mengizinkan suatu aksi.
+List<ActionItem> visibleActionsForRoles(List<String> roles) {
+  if (roles.isEmpty) return _unlinkedActions;
+  // Guru dan wali kelas memakai set guru; peran staf lain memakai set admin
+  // karena lingkup kerjanya sama di aplikasi ini.
+  if (roles.contains('guru') || roles.contains('wali_kelas')) {
+    return _teacherActions;
+  }
+  return _adminActions;
+}

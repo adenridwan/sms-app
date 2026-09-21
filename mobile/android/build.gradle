@@ -15,7 +15,7 @@ subprojects {
     // (kecuali :app yang punya extension `flutter` asli).
     if (project.name != "app") {
         project.ext.flutter = [
-            compileSdkVersion: 35,
+            compileSdkVersion: 36,
             minSdkVersion    : 23,
             targetSdkVersion : 35,
             ndkVersion       : "27.0.12077973",
@@ -27,8 +27,8 @@ subprojects {
     afterEvaluate { project ->
         if (project.hasProperty("android")) {
             project.android {
-                compileSdkVersion 35
-                buildToolsVersion "35.0.0"
+                compileSdkVersion 36
+                buildToolsVersion "36.0.0"
                 if (project.android.hasProperty("ndkVersion")) {
                     ndkVersion "27.0.12077973"
                 }

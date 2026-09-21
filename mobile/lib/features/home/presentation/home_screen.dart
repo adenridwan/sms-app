@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -37,7 +39,13 @@ class HomeScreen extends ConsumerWidget {
 
     final data = stats.valueOrNull;
     final isTeacher = data?.isTeacher ?? false;
-    final actions = visibleActionsFor(user);
+    // Peran dari sesi backend kalau ada; kalau belum dimuat, pakai peran yang
+    // tersimpan saat perangkat dihubungkan. Tanpa ini Menu Cepat selalu jatuh
+    // ke set netral, karena login memakai akun lokal dan `user` masih null.
+    final storedRoles = _rolesOf(localSession.connection?.rolesJson);
+    final actions = user != null
+        ? visibleActionsFor(user)
+        : visibleActionsForRoles(storedRoles);
 
     final pendingSync =
         scan.queueCount + ref.watch(classAttendanceQueueProvider).count;
@@ -143,6 +151,20 @@ class HomeScreen extends ConsumerWidget {
         tint: SummaryFigure.bad,
       ),
     ];
+  }
+
+  /// Baca `rolesJson` yang disimpan saat menghubungkan ke sekolah.
+  /// Kolomnya bisa berisi apa saja kalau basis data pernah disentuh manual,
+  /// jadi kegagalan parse diperlakukan sebagai "peran tidak diketahui".
+  static List<String> _rolesOf(String? json) {
+    if (json == null || json.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is! List) return const [];
+      return decoded.map((e) => e.toString()).toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   static String _greeting(String? fullName) {
