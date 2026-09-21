@@ -105,16 +105,16 @@ flutter_launcher_icons:
   image_path: assets/branding/logo.png
   android: true
   min_sdk_android: 21
-  adaptive_icon_background: "#292929"
+  adaptive_icon_background: "#1B2340"
   adaptive_icon_foreground: assets/branding/logo_foreground.png
   ios: true
   # iOS menolak ikon bertransparansi; ratakan ke warna dasar logo.
   remove_alpha_ios: true
-  background_color_ios: "#292929"
+  background_color_ios: "#1B2340"
   web:
     generate: true
-    background_color: "#292929"
-    theme_color: "#292929"
+    background_color: "#1B2340"
+    theme_color: "#1B2340"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

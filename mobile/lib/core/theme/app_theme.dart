@@ -14,32 +14,32 @@ class AppTheme {
   const AppTheme._();
 
   /// Aksen utama (ubah ini untuk mengganti nuansa aplikasi).
-  static const Color accent = Color(0xFFEC3013);
-  static const Color accentSoft = Color(0xFFE15B47);
+  static const Color accent = Color(0xFF5267E8);
+  static const Color accentSoft = Color(0xFF7C8CF5);
 
   // Tangga tonal aksen — dari rujukan, dipakai untuk latar lembut & teks aksen.
-  static const Color accent100 = Color(0xFFFFF2EF);
-  static const Color accent200 = Color(0xFFFFE0D9);
-  static const Color accent600 = Color(0xFFDD2B0F);
-  static const Color accent800 = Color(0xFF7C1405);
+  static const Color accent100 = Color(0xFFEEF0FF);
+  static const Color accent200 = Color(0xFFDDE2FF);
+  static const Color accent600 = Color(0xFF4055D5);
+  static const Color accent800 = Color(0xFF26378B);
 
   // Netral hangat (bukan abu-abu biru).
-  static const Color _lightBg = Color(0xFFF3F2F2);
+  static const Color _lightBg = Color(0xFFF7F8FC);
   static const Color _lightSurface = Color(0xFFFFFFFF);
-  static const Color _lightSurfaceAlt = Color(0xFFEAE9E9);
-  static const Color _lightText = Color(0xFF201E1D);
-  static const Color _lightLine = Color(0xFFD7D3D3);
-  static const Color _lightMuted = Color(0xFF7D7979);
+  static const Color _lightSurfaceAlt = Color(0xFFF0F2F8);
+  static const Color _lightText = Color(0xFF1B2340);
+  static const Color _lightLine = Color(0xFFE1E5F0);
+  static const Color _lightMuted = Color(0xFF6F7893);
 
-  static const Color _darkBg = Color(0xFF1A1817);
-  static const Color _darkSurface = Color(0xFF242121);
-  static const Color _darkSurfaceAlt = Color(0xFF2D2B2B);
-  static const Color _darkText = Color(0xFFF8F4F4);
-  static const Color _darkLine = Color(0xFF444141);
-  static const Color _darkMuted = Color(0xFF9B9797);
+  static const Color _darkBg = Color(0xFF11162B);
+  static const Color _darkSurface = Color(0xFF1A2140);
+  static const Color _darkSurfaceAlt = Color(0xFF252E51);
+  static const Color _darkText = Color(0xFFF5F7FF);
+  static const Color _darkLine = Color(0xFF354064);
+  static const Color _darkMuted = Color(0xFFABB5D2);
 
   /// Radius kartu pada rujukan.
-  static const double radius = 16;
+  static const double radius = 20;
 
   static const String fontFamily = 'Archivo';
 
@@ -185,12 +185,29 @@ class AppTheme {
         ),
       ),
 
+      navigationBarTheme: NavigationBarThemeData(
+        height: 70,
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: scheme.primaryContainer,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => t(11, FontWeight.w700).copyWith(
+            color:
+                states.contains(WidgetState.selected) ? scheme.primary : muted,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color:
+                states.contains(WidgetState.selected) ? scheme.primary : muted,
+          ),
+        ),
+      ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         contentTextStyle: TextStyle(fontFamily: fontFamily, color: bg),
         backgroundColor: text,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
