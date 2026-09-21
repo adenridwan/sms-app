@@ -75,7 +75,10 @@ class StaffController extends ApiController
             return $this->error('Konteks sekolah (tenant) tidak ditemukan. Pilih sekolah terlebih dahulu.', 422);
         }
 
-        if (trim((string) ($data['email'] ?? '')) === '' && ! $this->emailGenerator->hasDomain($tenantId)) {
+        // Menautkan ke akun yang sudah ada tidak menerbitkan email apa pun.
+        if (empty($data['user_id'])
+            && trim((string) ($data['email'] ?? '')) === ''
+            && ! $this->emailGenerator->hasDomain($tenantId)) {
             return $this->error(EmailGenerator::domainMissingMessage(), 422);
         }
 

@@ -28,6 +28,13 @@ class StaffRegistrar
      */
     public function create(array $data, string $tenantId): array
     {
+        // Lihat TeacherRegistrar::create() — aturannya sama persis: bila
+        // `user_id` dikirim, akun yang sudah ada tinggal didaftarkan sebagai
+        // staf, tanpa membuat akun/username/password baru.
+        if (! empty($data['user_id'])) {
+            return $this->linkExisting($data, $tenantId);
+        }
+
         $fullName = trim($data['first_name'] . ' ' . ($data['last_name'] ?? ''));
         $password = Carbon::parse($data['birth_date'])->format('dmY');
 
@@ -105,6 +112,43 @@ class StaffRegistrar
                 }
             }
         }
+    }
+
+    /**
+     * Daftarkan akun yang SUDAH ada sebagai staf: hanya menambah baris `staff`,
+     * tanpa menyentuh akun maupun profilnya. Lihat TeacherRegistrar::linkExisting().
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{staff: Staff, username: string, password: null, email: string}
+     */
+    private function linkExisting(array $data, string $tenantId): array
+    {
+        $user = User::withoutGlobalScopes()->findOrFail($data['user_id']);
+
+        $staff = DB::transaction(function () use ($data, $tenantId, $user) {
+            $staff = Staff::create([
+                'tenant_id' => $tenantId,
+                'user_id' => $user->id,
+                'employee_id' => $data['employee_id'] ?? null,
+                'department_id' => $data['department_id'] ?? null,
+                'position_id' => $data['position_id'] ?? null,
+                'join_date' => $data['join_date'] ?? now()->toDateString(),
+                'employment_status' => $data['employment_status'] ?? 'permanent',
+                'education_level' => $data['education_level'] ?? null,
+                'status' => $data['status'] ?? 'active',
+            ]);
+
+            $staff->load(['user.profile', 'department', 'position']);
+
+            return $staff;
+        });
+
+        return [
+            'staff' => $staff,
+            'username' => $user->username,
+            'password' => null,
+            'email' => $user->email,
+        ];
     }
 
     /**

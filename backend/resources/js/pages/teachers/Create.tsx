@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
+import LinkExistingUserField, { type LinkableUser } from '@/components/LinkExistingUserField';
 import axios from 'axios';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -130,6 +131,8 @@ export default function CreateTeacher() {
     // Jenjang "Lainnya" hanya status tampilan; nilainya sendiri (mis.
     // "PESANTREN") tetap disimpan di data.education_level.
     const [educationOther, setEducationOther] = useState(false);
+    // null = buat akun baru (perilaku lama); terisi = tautkan ke akun itu.
+    const [linkedUser, setLinkedUser] = useState<LinkableUser | null>(null);
 
     const update = <K extends keyof TeacherFormData>(field: K, value: TeacherFormData[K]) => {
         setData((d) => ({ ...d, [field]: value }));
@@ -152,7 +155,12 @@ export default function CreateTeacher() {
         setErrors({});
         setFormError(null);
 
-        const missing = requiredFields.filter(({ field }) => !String(data[field] ?? '').trim());
+        // Menautkan akun yang sudah ada: identitasnya diambil dari akun itu,
+        // jadi field akun & data pribadi tidak lagi wajib (backend memakai
+        // aturan `required_without:user_id` yang sama).
+        const missing = linkedUser
+            ? []
+            : requiredFields.filter(({ field }) => !String(data[field] ?? '').trim());
         if (missing.length > 0) {
             setErrors(
                 Object.fromEntries(missing.map(({ field, label }) => [field, `${label} wajib diisi.`]))
@@ -166,7 +174,9 @@ export default function CreateTeacher() {
         setProcessing(true);
 
         try {
-            const response = await teachersApi.create(data);
+            const response = await teachersApi.create(
+                linkedUser ? { ...data, user_id: linkedUser.id } : data
+            );
             setCredentials(response.data.data);
             toast.success('Guru berhasil ditambahkan');
         } catch (error) {
@@ -245,6 +255,16 @@ export default function CreateTeacher() {
 
                                 {/* Tab 1: Akun & Pribadi */}
                                 <TabsContent value="akun" className="space-y-4">
+                                    <LinkExistingUserField
+                                        type="teacher"
+                                        label="guru"
+                                        value={linkedUser}
+                                        onChange={setLinkedUser}
+                                    />
+
+                                    {/* Identitas diambil dari akun yang ditautkan — isian di bawah
+                                        hanya relevan saat membuat akun baru. */}
+                                    <div className={linkedUser ? 'pointer-events-none opacity-50' : ''}>
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
                                             <Label htmlFor="first_name">Nama Depan *</Label>
@@ -397,6 +417,7 @@ export default function CreateTeacher() {
                                             value={data.address}
                                             onChange={(e) => update('address', e.target.value)}
                                         />
+                                    </div>
                                     </div>
                                 </TabsContent>
 

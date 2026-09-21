@@ -98,7 +98,11 @@ class TeacherController extends ApiController
         // Email dikosongkan → dibuatkan otomatis oleh registrar, tapi butuh
         // domain sekolah. Dicek di sini supaya pesannya mengarahkan admin ke
         // Pengaturan → Umum, bukan muncul sebagai exception 500.
-        if (trim((string) ($data['email'] ?? '')) === '' && ! $this->emailGenerator->hasDomain($tenantId)) {
+        // Hanya relevan saat akun baru dibuat. Menautkan ke akun yang sudah ada
+        // tidak menerbitkan email apa pun, jadi domain sekolah tidak diperlukan.
+        if (empty($data['user_id'])
+            && trim((string) ($data['email'] ?? '')) === ''
+            && ! $this->emailGenerator->hasDomain($tenantId)) {
             return $this->error(EmailGenerator::domainMissingMessage(), 422);
         }
 

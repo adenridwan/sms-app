@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class UserController extends ApiController
@@ -352,6 +353,66 @@ class UserController extends ApiController
      * Opsi staf yang belum tertaut ke akun (untuk dropdown pemilihan).
      * Jika $userId diberikan (edit mode), staf yang sudah tertaut ke user tsb juga dikembalikan.
      */
+    /**
+     * Akun pengguna yang boleh ditautkan ke data master (kebalikan arah dari
+     * staffOptions()): akun bertipe tertentu yang BELUM punya baris di tabel
+     * data masternya, sehingga tampil di menu Pengguna tapi hilang di menu
+     * Data Guru/Staf/Siswa.
+     *
+     * Dipakai oleh form "Tambah" ketiga menu itu untuk menawarkan opsi
+     * "tautkan ke akun yang sudah ada" — tanpa ini satu-satunya jalan adalah
+     * membuat akun kedua yang duplikat untuk orang yang sama.
+     */
+    public function linkableUsers(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'type' => ['required', Rule::in(['teacher', 'staff', 'student'])],
+            'search' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $table = match ($data['type']) {
+            'teacher' => 'teachers',
+            'staff' => 'staff',
+            'student' => 'students',
+        };
+
+        $search = trim((string) ($data['search'] ?? ''));
+        $tenantId = $this->currentTenantId($request);
+
+        $users = User::query()
+            ->with('profile')
+            ->where('user_type', $data['type'])
+            ->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
+            ->whereNotExists(function ($q) use ($table) {
+                $q->selectRaw(1)
+                    ->from($table)
+                    ->whereColumn($table . '.user_id', 'users.id');
+
+                if (Schema::hasColumn($table, 'deleted_at')) {
+                    $q->whereNull($table . '.deleted_at');
+                }
+            })
+            ->when($search !== '', fn ($q) => $q->where(function ($query) use ($search) {
+                $query->where('username', 'ilike', "%{$search}%")
+                    ->orWhere('email', 'ilike', "%{$search}%")
+                    ->orWhereHas('profile', fn ($p) => $p
+                        ->where('first_name', 'ilike', "%{$search}%")
+                        ->orWhere('last_name', 'ilike', "%{$search}%"));
+            }))
+            ->orderBy('username')
+            ->limit(50)
+            ->get()
+            ->map(fn (User $u) => [
+                'id' => $u->id,
+                'username' => $u->username,
+                'email' => $u->email,
+                'full_name' => $u->full_name,
+                'status' => $u->status,
+            ]);
+
+        return $this->success($users);
+    }
+
     public function staffOptions(Request $request): JsonResponse
     {
         $search = trim((string) $request->get('search', ''));

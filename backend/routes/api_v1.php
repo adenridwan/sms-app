@@ -583,6 +583,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Announcements
         Route::get('announcements/statistics', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'statistics'])->name('announcements.statistics');
+        // Umpan ikon lonceng — terbuka untuk semua pengguna login, isinya hanya
+        // pengumuman yang sudah tayang. WAJIB sebelum apiResource: kalau tidak,
+        // 'feed' ketangkap wildcard {announcement} lebih dulu (jebakan yang sama
+        // pernah membuat qr/teachers/bulk 500).
+        Route::get('announcements/feed', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'feed'])->name('announcements.feed');
         Route::apiResource('announcements', \App\Http\Controllers\Api\V1\Notification\AnnouncementController::class);
         Route::post('announcements/{announcement}/publish', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'publish'])->name('announcements.publish');
         Route::post('announcements/{announcement}/read', [\App\Http\Controllers\Api\V1\Notification\AnnouncementController::class, 'markAsRead'])->name('announcements.read');
@@ -617,6 +622,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Admin Only Routes
     // ===========================================
     Route::middleware(['role:super_admin|admin'])->prefix('admin')->name('admin.')->group(function () {
+        // Akun yang belum punya data master — dipakai opsi "tautkan ke akun yang
+        // sudah ada" pada form Tambah Guru/Staf/Siswa. SENGAJA di luar subgrup
+        // super_admin di bawah: form-form itu dipakai admin sekolah juga, bukan
+        // hanya super admin. Dibatasi izin membuat data masternya.
+        Route::get('users/linkable', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'linkableUsers'])
+            ->middleware('permission:teachers.create|staff.create|students.create')
+            ->name('users.linkable');
+
         // Users Management (super admin only)
         Route::middleware(['role:super_admin'])->group(function () {
             Route::get('users/roles', [\App\Http\Controllers\Api\V1\Admin\UserController::class, 'roles'])->name('users.roles');

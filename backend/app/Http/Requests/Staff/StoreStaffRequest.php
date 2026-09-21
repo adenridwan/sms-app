@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Staff;
 
+use App\Rules\LinkableUser;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,15 +26,19 @@ class StoreStaffRequest extends FormRequest
         $tenantId = $this->user()?->tenant_id ?? $this->header('X-Tenant-ID');
 
         return [
+            // Tautkan ke akun yang SUDAH ada alih-alih membuat akun baru.
+            // Lihat StoreTeacherRequest — alasannya sama persis.
+            'user_id' => ['nullable', 'uuid', new LinkableUser($tenantId, 'staff', 'staff', 'staf')],
+
             // Akun & Pribadi
-            'first_name' => ['required', 'string', 'max:100'],
+            'first_name' => ['required_without:user_id', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
             'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
             'contact_email' => ['nullable', 'string', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:20'],
-            'gender' => ['required', 'in:male,female'],
+            'gender' => ['required_without:user_id', 'in:male,female'],
             'birth_place' => ['nullable', 'string', 'max:100'],
-            'birth_date' => ['required', 'date', 'before:today'],
+            'birth_date' => ['required_without:user_id', 'date', 'before:today'],
             'religion' => ['nullable', 'string', 'in:islam,kristen,katolik,hindu,buddha,konghucu'],
             'address' => ['nullable', 'string', 'max:500'],
             'id_number' => ['nullable', 'string', 'max:20'],
@@ -60,13 +65,13 @@ class StoreStaffRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'first_name.required' => 'Nama depan wajib diisi.',
+            'first_name.required_without' => 'Nama depan wajib diisi.',
             'email.email' => 'Format email tidak valid.',
             'contact_email.email' => 'Format email kontak tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
-            'gender.required' => 'Jenis kelamin wajib diisi.',
+            'gender.required_without' => 'Jenis kelamin wajib diisi.',
             'gender.in' => 'Jenis kelamin tidak valid.',
-            'birth_date.required' => 'Tanggal lahir wajib diisi (dipakai sebagai password awal).',
+            'birth_date.required_without' => 'Tanggal lahir wajib diisi (dipakai sebagai password awal).',
             'birth_date.before' => 'Tanggal lahir harus sebelum hari ini.',
             'employee_id.unique' => 'ID Pegawai sudah digunakan staf lain.',
             'department_id.exists' => 'Bidang tidak ditemukan.',

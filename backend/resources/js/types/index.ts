@@ -226,6 +226,11 @@ export interface TeacherFormData {
     education_major: string;
     university: string;
     teaching_experience_years: string;
+    /**
+     * Diisi hanya saat menautkan ke akun pengguna yang sudah ada — lihat
+     * LinkExistingUserField. Kosong berarti akun baru dibuat (perilaku lama).
+     */
+    user_id?: string;
 }
 
 // Dokumen pemberkasan guru (Fase G2 — semua opsional, lihat TEACHER-MODULE-PLAN.md)

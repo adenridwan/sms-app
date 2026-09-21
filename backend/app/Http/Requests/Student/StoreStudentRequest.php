@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Student;
 
+use App\Rules\LinkableUser;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreStudentRequest extends FormRequest
@@ -21,7 +22,13 @@ class StoreStudentRequest extends FormRequest
      */
     public function rules(): array
     {
+        $tenantId = $this->user()?->tenant_id ?? $this->header('X-Tenant-ID');
+
         return [
+            // Tautkan ke akun yang SUDAH ada alih-alih membuat akun baru.
+            // Lihat StoreTeacherRequest — alasannya sama persis.
+            'user_id' => ['nullable', 'uuid', new LinkableUser($tenantId, 'student', 'students', 'siswa')],
+
             // User data
             'username' => ['nullable', 'string', 'min:3', 'max:50', 'unique:users,username', 'alpha_dash'],
             // Dikosongkan = dibuatkan otomatis dari nama depan + NIS
@@ -31,14 +38,14 @@ class StoreStudentRequest extends FormRequest
             'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
             'contact_email' => ['nullable', 'string', 'email', 'max:255'],
             'password' => ['nullable', 'string', 'min:8'],
-            'first_name' => ['required', 'string', 'max:100'],
+            'first_name' => ['required_without:user_id', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
 
             // Student data
             'nis' => ['required', 'string', 'max:20', 'unique:students,nis'],
             'nisn' => ['nullable', 'string', 'max:20', 'unique:students,nisn'],
             'nik' => ['nullable', 'string', 'max:20'],
-            'gender' => ['required', 'in:male,female'],
+            'gender' => ['required_without:user_id', 'in:male,female'],
             'birth_place' => ['nullable', 'string', 'max:100'],
             'birth_date' => ['nullable', 'date', 'before:today'],
             'religion' => ['nullable', 'string', 'in:islam,kristen,katolik,hindu,buddha,konghucu'],

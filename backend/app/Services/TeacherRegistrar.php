@@ -28,7 +28,7 @@ class TeacherRegistrar
 {
     /**
      * @param  array<string, mixed>  $data
-     * @return array{teacher: Teacher, username: string, password: string, email: string}
+     * @return array{teacher: Teacher, username: string, password: string|null, email: string}
      */
     /**
      * uniqueUsername() mengecek dulu baru insert (bukan atomik) — kalau ada
@@ -44,6 +44,14 @@ class TeacherRegistrar
 
     public function create(array $data, string $tenantId): array
     {
+        // Menautkan ke akun yang sudah ada: tidak ada akun baru, tidak ada
+        // username/password/email yang digenerate. Kelayakan akunnya (tenant
+        // cocok, bertipe teacher, belum terdaftar) sudah divalidasi oleh
+        // App\Rules\LinkableUser sebelum sampai ke sini.
+        if (! empty($data['user_id'])) {
+            return $this->linkExisting($data, $tenantId);
+        }
+
         $fullName = trim($data['first_name'] . ' ' . ($data['last_name'] ?? ''));
         $password = Carbon::parse($data['birth_date'])->format('dmY');
 
@@ -129,6 +137,53 @@ class TeacherRegistrar
                 }
             }
         }
+    }
+
+    /**
+     * Daftarkan akun yang SUDAH ada sebagai guru: hanya menambah baris
+     * `teachers`, tanpa menyentuh akun maupun profilnya.
+     *
+     * Profil sengaja tidak ditimpa — data pribadi pemilik akun adalah miliknya,
+     * dan form ini dipakai untuk melengkapi data kepegawaian, bukan mengedit
+     * identitas. Perubahan identitas tetap lewat menu Pengguna.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{teacher: Teacher, username: string, password: null, email: string}
+     */
+    private function linkExisting(array $data, string $tenantId): array
+    {
+        $user = User::withoutGlobalScopes()->findOrFail($data['user_id']);
+
+        $teacher = DB::transaction(function () use ($data, $tenantId, $user) {
+            $teacher = Teacher::create([
+                'tenant_id' => $tenantId,
+                'user_id' => $user->id,
+                'nip' => $data['nip'] ?? null,
+                'nuptk' => $data['nuptk'] ?? null,
+                'no_hp' => $data['phone'] ?? $user->profile?->phone,
+                'join_date' => $data['join_date'] ?? now()->toDateString(),
+                'employment_status' => $data['employment_status'] ?? 'permanent',
+                'status' => $data['status'] ?? 'active',
+                'certification_status' => $data['certification_status'] ?? 'not_certified',
+                'certification_number' => $data['certification_number'] ?? null,
+                'education_level' => $data['education_level'] ?? null,
+                'education_major' => $data['education_major'] ?? null,
+                'university' => $data['university'] ?? null,
+                'teaching_experience_years' => $data['teaching_experience_years'] ?? 0,
+            ]);
+
+            $teacher->load(['user.profile']);
+
+            return $teacher;
+        });
+
+        return [
+            'teacher' => $teacher,
+            'username' => $user->username,
+            // null, bukan string: tidak ada kredensial baru untuk disampaikan.
+            'password' => null,
+            'email' => $user->email,
+        ];
     }
 
     /**

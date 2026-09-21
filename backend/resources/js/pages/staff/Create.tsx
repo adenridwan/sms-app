@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { FormEvent, useState, useEffect } from 'react';
+import LinkExistingUserField, { type LinkableUser } from '@/components/LinkExistingUserField';
 import axios from 'axios';
 import MainLayout from '@/layouts/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -101,6 +102,8 @@ export default function CreateStaff() {
 
     const [departments, setDepartments] = useState<DepartmentOption[]>([]);
     const [positions, setPositions] = useState<PositionOption[]>([]);
+    // null = buat akun baru (perilaku lama); terisi = tautkan ke akun itu.
+    const [linkedUser, setLinkedUser] = useState<LinkableUser | null>(null);
     const [loadingOptions, setLoadingOptions] = useState(true);
 
     useEffect(() => {
@@ -130,7 +133,10 @@ export default function CreateStaff() {
         setErrors({});
         setFormError(null);
 
-        const missing = requiredFields.filter(({ field }) => !String(data[field] ?? '').trim());
+        // Menautkan akun yang sudah ada: identitas diambil dari akun itu.
+        const missing = linkedUser
+            ? []
+            : requiredFields.filter(({ field }) => !String(data[field] ?? '').trim());
         if (missing.length > 0) {
             setErrors(
                 Object.fromEntries(missing.map(({ field, label }) => [field, `${label} wajib diisi.`]))
@@ -144,7 +150,9 @@ export default function CreateStaff() {
         setProcessing(true);
 
         try {
-            const response = await staffApi.create(data);
+            const response = await staffApi.create(
+                linkedUser ? { ...data, user_id: linkedUser.id } : data
+            );
             setCredentials(response.data.data);
             toast.success('Staf berhasil ditambahkan');
         } catch (error) {
@@ -221,6 +229,13 @@ export default function CreateStaff() {
 
                                 {/* Tab 1: Akun & Pribadi */}
                                 <TabsContent value="akun" className="space-y-4">
+                                    <LinkExistingUserField
+                                        type="staff"
+                                        label="staf"
+                                        value={linkedUser}
+                                        onChange={setLinkedUser}
+                                    />
+
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
                                             <Label htmlFor="first_name">Nama Depan *</Label>

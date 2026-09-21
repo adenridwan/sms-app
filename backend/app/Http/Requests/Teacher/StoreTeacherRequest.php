@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Teacher;
 
+use App\Rules\LinkableUser;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -26,8 +27,15 @@ class StoreTeacherRequest extends FormRequest
         $tenantId = $this->user()?->tenant_id ?? $this->header('X-Tenant-ID');
 
         return [
+            // Tautkan ke akun yang SUDAH ada, alih-alih membuat akun baru.
+            // Dipakai untuk akun bertipe `teacher` yang muncul di menu Pengguna
+            // tapi belum punya baris di `teachers` sehingga tidak pernah tampil
+            // di Daftar Guru. Bila diisi, seluruh field akun & data pribadi di
+            // bawah tidak lagi wajib — datanya sudah ada pada akun itu.
+            'user_id' => ['nullable', 'uuid', new LinkableUser($tenantId, 'teacher', 'teachers', 'guru')],
+
             // Akun & Pribadi (Tab 1)
-            'first_name' => ['required', 'string', 'max:100'],
+            'first_name' => ['required_without:user_id', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
             // Dikosongkan = dibuatkan otomatis dari username
             // (docs/EMAIL-OTOMATIS-AKUN.md). Guru yang punya alamat asli
@@ -36,10 +44,10 @@ class StoreTeacherRequest extends FormRequest
             'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
             'contact_email' => ['nullable', 'string', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:20'],
-            'gender' => ['required', 'in:male,female'],
+            'gender' => ['required_without:user_id', 'in:male,female'],
             'birth_place' => ['nullable', 'string', 'max:100'],
             // Wajib: sumber password awal (format ddmmyyyy)
-            'birth_date' => ['required', 'date', 'before:today'],
+            'birth_date' => ['required_without:user_id', 'date', 'before:today'],
             'religion' => ['nullable', 'string', 'in:islam,kristen,katolik,hindu,buddha,konghucu'],
             'address' => ['nullable', 'string', 'max:500'],
             'id_number' => ['nullable', 'string', 'max:20'],
@@ -76,13 +84,16 @@ class StoreTeacherRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'first_name.required' => 'Nama depan wajib diisi.',
+            // Kunci `required_without`, bukan `required`: field ini hanya wajib
+            // saat akun baru dibuat. Kalau `user_id` dikirim (menautkan ke akun
+            // yang sudah ada), datanya diambil dari akun tersebut.
+            'first_name.required_without' => 'Nama depan wajib diisi.',
             'email.email' => 'Format email tidak valid.',
             'contact_email.email' => 'Format email kontak tidak valid.',
             'email.unique' => 'Email sudah terdaftar.',
-            'gender.required' => 'Jenis kelamin wajib diisi.',
+            'gender.required_without' => 'Jenis kelamin wajib diisi.',
             'gender.in' => 'Jenis kelamin tidak valid.',
-            'birth_date.required' => 'Tanggal lahir wajib diisi (dipakai sebagai password awal).',
+            'birth_date.required_without' => 'Tanggal lahir wajib diisi (dipakai sebagai password awal).',
             'birth_date.before' => 'Tanggal lahir harus sebelum hari ini.',
             'nip.unique' => 'NIP sudah digunakan guru lain.',
             'nuptk.unique' => 'NUPTK sudah digunakan guru lain.',

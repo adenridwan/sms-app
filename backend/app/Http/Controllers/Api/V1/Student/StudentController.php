@@ -83,7 +83,9 @@ class StudentController extends ApiController
         // Email dikosongkan → dibuatkan otomatis dari nama depan + NIS.
         // Jalur ini belum memakai StudentRegistrar (lihat catatan di bawah),
         // jadi generatornya dipanggil langsung di sini.
-        $emailIsGenerated = trim((string) ($data['email'] ?? '')) === '';
+        // Saat menautkan akun yang sudah ada, tidak ada email yang diterbitkan —
+        // jangan minta domain sekolah dan jangan membuat alamat yang tak dipakai.
+        $emailIsGenerated = empty($data['user_id']) && trim((string) ($data['email'] ?? '')) === '';
 
         if ($emailIsGenerated) {
             $tenantId = $this->currentTenantId($request);
@@ -108,7 +110,14 @@ class StudentController extends ApiController
             // App\Models\User mutators route them there via
             // pendingProfileData; passing them to Student::create() below
             // would silently drop them (not in Student::$fillable).
-            $user = User::create([
+            // Menautkan ke akun yang SUDAH ada: akun bertipe `student` yang
+            // tampil di menu Pengguna tapi belum punya baris di `students`,
+            // sehingga tidak pernah muncul di Data Siswa. Kelayakannya sudah
+            // divalidasi App\Rules\LinkableUser. Profil akun tidak disentuh —
+            // identitas tetap dikelola dari menu Pengguna.
+            $user = ! empty($data['user_id'])
+                ? User::withoutGlobalScopes()->findOrFail($data['user_id'])
+                : User::create([
                 'username' => $data['username'] ?? Str::slug($data['first_name'] . '-' . Str::random(4)),
                 'email' => $data['email'],
                 'contact_email' => $data['contact_email'] ?? null,

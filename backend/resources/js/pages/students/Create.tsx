@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
+import LinkExistingUserField, { type LinkableUser } from '@/components/LinkExistingUserField';
 import axios from 'axios';
 import { toast } from 'sonner';
 import MainLayout from '@/layouts/MainLayout';
@@ -64,6 +65,8 @@ export default function CreateStudent() {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [processing, setProcessing] = useState(false);
+    // null = buat akun baru (perilaku lama); terisi = tautkan ke akun itu.
+    const [linkedUser, setLinkedUser] = useState<LinkableUser | null>(null);
 
     const setData = <K extends keyof typeof emptyForm>(field: K, value: string) => {
         setDataRaw((d) => ({ ...d, [field]: value }));
@@ -77,6 +80,9 @@ export default function CreateStudent() {
         try {
             const formData = new FormData();
             Object.entries(data).forEach(([key, value]) => formData.append(key, value));
+            // Menautkan ke akun yang sudah ada: backend melewati pembuatan akun
+            // dan field identitas di atas tidak lagi wajib.
+            if (linkedUser) formData.append('user_id', linkedUser.id);
 
             const response = await studentsApi.create(formData);
             toast.success('Siswa berhasil ditambahkan');
@@ -131,6 +137,13 @@ export default function CreateStudent() {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
+                                <LinkExistingUserField
+                                    type="student"
+                                    label="siswa"
+                                    value={linkedUser}
+                                    onChange={setLinkedUser}
+                                />
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="first_name">Nama Depan *</Label>
