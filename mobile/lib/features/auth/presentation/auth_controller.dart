@@ -274,9 +274,9 @@ class AuthController extends StateNotifier<AuthState> {
     state = const AuthState(status: AuthStatus.authenticating);
     try {
       debugPrint('[Auth] _signIn: calling authenticate...');
-      await authenticate();
+      await authenticate().timeout(_onlineLoginTimeout, onTimeout: _timedOut);
       debugPrint('[Auth] _signIn: authenticate success, calling me()...');
-      final user = await _repo.me();
+      final user = await _repo.me().timeout(_onlineLoginTimeout, onTimeout: _timedOut);
       debugPrint('[Auth] _signIn: me() success, user: ${user.email}');
 
       if (await _rejectIfNotStaff(user)) {
