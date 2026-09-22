@@ -149,7 +149,63 @@ Domain per sekolah disimpan di tabel `settings` (`group=account`, `key=email_dom
 
 Test: `GeneratedEmailTest` (16 kasus) & `GeneratedEmailImportTest` (8 kasus).
 
-## Ringkasan implementasi terkini (update 2026-08-02)
+## Menu Bantuan & Tentang Aplikasi (dibuat 2026-09-22)
+
+Fitur Help dan About untuk super admin, ada di **user dropdown menu** (klik avatar/nama di pojok kanan atas navbar).
+
+### Lokasi di UI
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [Logo] School Name          [Tenant▼] [🔔] [Avatar▼]      │  ← Header/Navbar
+└─────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+                                    ┌──────────────────────┐
+                                    │ Nama User            │
+                                    │ email@sekolah.id     │
+                                    │ [Role Badge]         │
+                                    ├──────────────────────┤
+                                    │ 👤 Profil Saya       │
+                                    │ 🔑 Ganti Password    │
+                                    ├──────────────────────┤
+                                    │ Tampilan             │
+                                    │ ☀️ Mode Terang       │
+                                    │ 🌙 Mode Gelap        │
+                                    ├──────────────────────┤
+                                    │ Informasi            │  ← BARU (super admin only)
+                                    │ ❓ Bantuan           │  → /help
+                                    │ ℹ️ Tentang Aplikasi  │  → Dialog popup
+                                    ├──────────────────────┤
+                                    │ 🚪 Keluar            │
+                                    └──────────────────────┘
+```
+
+### File yang diubah/ditambah
+
+| File | Perubahan |
+|------|-----------|
+| `resources/js/layouts/MainLayout.tsx` | Tambah menu "Bantuan" & "Tentang Aplikasi" di user dropdown (super admin only) |
+| `resources/js/pages/Help.tsx` | **BARU** — Halaman bantuan dengan FAQ per modul |
+| `resources/js/types/index.ts` | Tambah `env: string` di PageProps.app |
+| `app/Http/Controllers/Web/PageController.php` | Tambah method `help()` |
+| `app/Http/Middleware/HandleInertiaRequests.php` | Tambah `env` ke app settings |
+| `routes/web.php` | Tambah route `/help` dengan middleware `role:super_admin` |
+
+### Isi Dialog "Tentang Aplikasi"
+
+- Versi aplikasi (dari `settings` tabel, default 1.0.0)
+- Nama sekolah aktif
+- Environment (local/production)
+- Deskripsi singkat & copyright
+
+### Isi Halaman Bantuan (`/help`)
+
+- Info aplikasi & kontak support
+- Pintasan keyboard
+- FAQ per modul: Akademik, Siswa & Guru, Absensi, Keuangan, Pengaturan
+
+## Ringkasan implementasi terkini (update 2026-09-22)
 
 Panduan cara pakai (bukan aturan wajib) ada di [docs/TUTORIAL-APLIKASI.md](docs/TUTORIAL-APLIKASI.md) — termasuk analisis kelayakan "pisah database per tenant".
 
@@ -157,4 +213,5 @@ Panduan cara pakai (bukan aturan wajib) ada di [docs/TUTORIAL-APLIKASI.md](docs/
 - **Menu Akademik** — Kurikulum, Mata Pelajaran, Jadwal: model/controller/route/halaman React lengkap (sebelumnya cuma skema tanpa implementasi atau malah controller rusak). Detail & keputusan desain: [docs/academic/00-ANALISA-KURIKULUM-MAPEL-JADWAL.md](docs/academic/00-ANALISA-KURIKULUM-MAPEL-JADWAL.md), [01-UIUX-KURIKULUM.md](docs/academic/01-UIUX-KURIKULUM.md), [02-ANALISA-UIUX-JADWAL.md](docs/academic/02-ANALISA-UIUX-JADWAL.md).
 - **Backup rutin** — `backup:run` + Windows Task Scheduler harian + menu UI, lihat § Backup rutin di atas.
 - **Ubah Koneksi Database dari UI** — menyatu di menu Backup Database, password akses terpisah, lihat § di atas (termasuk cara reset & cara pindah ke DB baru).
+- **Help & About** — Menu Bantuan (`/help`) dan dialog Tentang Aplikasi di user dropdown, lihat § Menu Bantuan & Tentang Aplikasi di atas.
 - Semua fitur di atas: super_admin saja, sudah ada test Feature (`AcademicCurriculumSubjectTest`, `AcademicScheduleTest`, `BackupTest`, `DatabaseConnectionTest`) dan lulus penuh bersama suite yang sudah ada.

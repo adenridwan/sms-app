@@ -218,9 +218,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 if (connection != null) ...[
                   const SizedBox(height: 8),
-                  _InfoRow(
-                    label: 'API URL',
-                    value: connection.apiUrl,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(
+                        width: 100,
+                        child: Text(
+                          'API URL',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          connection.apiUrl,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ),
+                      // Tombol edit URL
+                      InkWell(
+                        onTap: () => context.push('/server-config'),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.edit, size: 14, color: Colors.grey),
+                        ),
+                      ),
+                    ],
                   ),
                   if (connection.backendUserName != null)
                     _InfoRow(
@@ -271,6 +296,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       onPressed: () => context.push('/connect-scan'),
                       icon: const Icon(Icons.qr_code_scanner, size: 18),
                       label: const Text('Scan QR Koneksi'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/server-config'),
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: const Text('Input Server Manual'),
                     ),
                   ),
                 ],

@@ -200,6 +200,7 @@ class HandleInertiaRequests extends Middleware
                 'locale' => app()->getLocale(),
                 'timezone' => config('app.timezone'),
                 'version' => Setting::getGlobal('app', 'version') ?? '1.0.0',
+                'env' => config('app.env'),
             ];
         });
     }

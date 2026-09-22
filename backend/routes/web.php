@@ -216,6 +216,11 @@ Route::middleware(['auth', 'password.current'])->group(function () {
 
     // Profile Routes
     Route::get('/profile', [PageController::class, 'profile'])->name('profile.edit');
+
+    // Help Page (super admin only)
+    Route::get('/help', [PageController::class, 'help'])
+        ->middleware('role:super_admin')
+        ->name('help');
 });
 
 // Fallback: elegant 404 page for unknown routes

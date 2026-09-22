@@ -708,6 +708,14 @@ class PageController extends Controller
     }
 
     /**
+     * Display the help page (super admin only).
+     */
+    public function help(): Response
+    {
+        return Inertia::render('Help');
+    }
+
+    /**
      * Display menu visibility settings page (Pengaturan Menu).
      * Data matriks diambil halaman via API (GET /api/v1/settings/menu).
      */

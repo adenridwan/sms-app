@@ -17,6 +17,7 @@ import '../../features/finance/presentation/finance_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/notifications/presentation/notification_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/profile/presentation/server_config_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
 import '../auth/local_session_controller.dart';
 import 'app_shell.dart';
@@ -129,6 +130,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/settings',
         builder: (_, __) => const SettingsScreen(),
+      ),
+      // Konfigurasi server manual — hanya bisa diakses setelah login
+      // untuk alasan keamanan (mencegah phishing ke server palsu).
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/server-config',
+        builder: (_, __) => const ServerConfigScreen(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

@@ -58,7 +58,17 @@ import {
     Sun,
     Building2,
     Wallet,
+    HelpCircle,
+    Info,
 } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 
 interface MenuChild {
     /** Kunci stabil, sinkron dengan App\Support\MenuRegistry (backend) */
@@ -602,6 +612,76 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                                 Mode Gelap
                                 {isDark && <Check className="ml-auto h-4 w-4 text-primary" />}
                             </DropdownMenuItem>
+                            {isSuperAdmin && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                                        Informasi
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuItem asChild>
+                                        <Link href="/help">
+                                            <HelpCircle className="mr-2 h-4 w-4" />
+                                            Bantuan
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                                <Info className="mr-2 h-4 w-4" />
+                                                Tentang Aplikasi
+                                            </DropdownMenuItem>
+                                        </DialogTrigger>
+                                        <DialogContent className="sm:max-w-md">
+                                            <DialogHeader>
+                                                <DialogTitle className="flex items-center gap-2">
+                                                    {schoolLogo ? (
+                                                        <img
+                                                            src={schoolLogo}
+                                                            alt={schoolName}
+                                                            className="h-8 w-8 rounded-lg object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                                                            <GraduationCap className="h-5 w-5" />
+                                                        </div>
+                                                    )}
+                                                    School Management System
+                                                </DialogTitle>
+                                                <DialogDescription asChild>
+                                                    <div className="space-y-3 pt-2">
+                                                        <div className="rounded-lg border bg-muted/50 p-3">
+                                                            <div className="grid gap-2 text-sm">
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Versi</span>
+                                                                    <span className="font-medium">{app.version || '1.0.0'}</span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Sekolah</span>
+                                                                    <span className="font-medium">{schoolName}</span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Environment</span>
+                                                                    <Badge variant="outline" className="font-mono text-xs">
+                                                                        {app.env || 'production'}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Sistem informasi manajemen sekolah terpadu untuk
+                                                            pengelolaan data akademik, siswa, guru, keuangan,
+                                                            dan absensi.
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            &copy; {new Date().getFullYear()} {schoolName}. Hak cipta dilindungi.
+                                                        </p>
+                                                    </div>
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                        </DialogContent>
+                                    </Dialog>
+                                </>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                                 asChild

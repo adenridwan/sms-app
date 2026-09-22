@@ -69,6 +69,7 @@ export interface PageProps {
         locale: string;
         timezone: string;
         version: string;
+        env: string;
     };
     [key: string]: unknown;
 }
