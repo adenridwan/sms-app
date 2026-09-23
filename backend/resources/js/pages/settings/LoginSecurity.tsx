@@ -124,9 +124,16 @@ export default function LoginSecurity() {
         const ctx = canvas.getContext('2d');
         const img = new Image();
         img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx?.drawImage(img, 0, 0);
+            // Add extra padding to ensure QR code is not cut off
+            const padding = 20;
+            canvas.width = img.width + padding * 2;
+            canvas.height = img.height + padding * 2;
+            // Fill white background
+            if (ctx) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, padding, padding);
+            }
             const pngUrl = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.download = `qr-akses-${provisionData.user.name.replace(/\s+/g, '-').toLowerCase()}.png`;
@@ -200,13 +207,14 @@ export default function LoginSecurity() {
                         {provisionData && (
                             <div className="rounded-md border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
                                 <div className="flex items-start gap-4">
-                                    <div className="rounded-lg bg-white p-3">
+                                    <div className="rounded-lg bg-white p-4 shadow-sm">
                                         <QRCodeSVG
                                             id="provision-qr-svg"
                                             value={provisionData.qr_content}
-                                            size={160}
-                                            level="M"
-                                            includeMargin={false}
+                                            size={180}
+                                            level="H"
+                                            includeMargin={true}
+                                            marginSize={2}
                                         />
                                     </div>
                                     <div className="flex-1 space-y-2">

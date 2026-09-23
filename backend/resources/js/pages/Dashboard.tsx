@@ -280,6 +280,41 @@ function FinanceSummaryCard({ finance }: { finance: FinanceSummary }) {
 function QuickActions() {
     const { canAny } = usePermissions();
 
+    const quickItems = [
+        {
+            title: 'Absensi',
+            href: '/attendance',
+            icon: Clock,
+            color: 'text-blue-600',
+            bg: 'bg-blue-50 dark:bg-blue-900/20',
+            hoverBg: 'hover:bg-blue-100 dark:hover:bg-blue-900/30',
+        },
+        ...(canAny('attendance.scan-students', 'attendance.scan-staff') ? [{
+            title: 'Scanner',
+            href: '/scanner',
+            icon: ScanLine,
+            color: 'text-purple-600',
+            bg: 'bg-purple-50 dark:bg-purple-900/20',
+            hoverBg: 'hover:bg-purple-100 dark:hover:bg-purple-900/30',
+        }] : []),
+        {
+            title: 'Perizinan',
+            href: '/attendance/permissions',
+            icon: FileText,
+            color: 'text-orange-600',
+            bg: 'bg-orange-50 dark:bg-orange-900/20',
+            hoverBg: 'hover:bg-orange-100 dark:hover:bg-orange-900/30',
+        },
+        {
+            title: 'Laporan',
+            href: '/attendance/reports',
+            icon: TrendingUp,
+            color: 'text-emerald-600',
+            bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+            hoverBg: 'hover:bg-emerald-100 dark:hover:bg-emerald-900/30',
+        },
+    ];
+
     return (
         <Card>
             <CardHeader>
@@ -288,32 +323,20 @@ function QuickActions() {
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
-                        <Link href="/attendance">
-                            <Clock className="h-5 w-5" />
-                            <span>Absensi</span>
+                    {quickItems.map((item) => (
+                        <Link key={item.href} href={item.href}>
+                            <div className={cn(
+                                'flex flex-col items-center gap-3 rounded-xl p-4 ring-1 ring-inset ring-black/5 transition-all hover:shadow-md dark:ring-white/5',
+                                item.bg,
+                                item.hoverBg
+                            )}>
+                                <div className={cn('rounded-lg p-2', item.bg)}>
+                                    <item.icon className={cn('h-6 w-6', item.color)} />
+                                </div>
+                                <span className="text-sm font-medium">{item.title}</span>
+                            </div>
                         </Link>
-                    </Button>
-                    {canAny('attendance.scan-students', 'attendance.scan-staff') && (
-                        <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
-                            <Link href="/scanner">
-                                <ScanLine className="h-5 w-5" />
-                                <span>Scanner</span>
-                            </Link>
-                        </Button>
-                    )}
-                    <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
-                        <Link href="/attendance/permissions">
-                            <FileText className="h-5 w-5" />
-                            <span>Perizinan</span>
-                        </Link>
-                    </Button>
-                    <Button asChild variant="outline" className="h-auto flex-col gap-2 py-4">
-                        <Link href="/attendance/reports">
-                            <TrendingUp className="h-5 w-5" />
-                            <span>Laporan</span>
-                        </Link>
-                    </Button>
+                    ))}
                 </div>
             </CardContent>
         </Card>
