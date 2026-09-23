@@ -483,11 +483,67 @@ class PageController extends Controller
     }
 
     /**
-     * Display attendance page.
+     * Display attendance dashboard/landing page with today's stats.
      */
     public function attendance(): Response
     {
-        return Inertia::render('attendance/Index');
+        $today = now()->toDateString();
+
+        // Today's student attendance summary
+        $studentAttendance = \App\Infrastructure\Persistence\Eloquent\Attendance\StudentAttendance::whereDate('attendance_date', $today);
+
+        $summary = [
+            'hadir' => (clone $studentAttendance)->where('status', 'hadir')->count(),
+            'sakit' => (clone $studentAttendance)->where('status', 'sakit')->count(),
+            'izin' => (clone $studentAttendance)->where('status', 'izin')->count(),
+            'alfa' => (clone $studentAttendance)->whereIn('status', ['alfa', 'tanpa_keterangan'])->count(),
+            'belum_scan' => (clone $studentAttendance)->where('status', 'belum_scan')->count(),
+        ];
+
+        // Top late students (highest violation points)
+        $topLate = \App\Infrastructure\Persistence\Eloquent\Student\Student::where('poin_pelanggaran', '>', 0)
+            ->orderByDesc('poin_pelanggaran')
+            ->limit(5)
+            ->with(['user.profile', 'currentClass'])
+            ->get()
+            ->map(fn($s) => [
+                'student_id' => $s->id,
+                'name' => $s->user?->full_name ?? '-',
+                'nis' => $s->nis,
+                'poin_pelanggaran' => $s->poin_pelanggaran,
+            ]);
+
+        // Students with 3+ consecutive absences
+        $consecutiveAbsences = \App\Infrastructure\Persistence\Eloquent\Student\Student::query()
+            ->whereHas('attendances', function ($q) {
+                $q->whereIn('status', ['alfa', 'tanpa_keterangan'])
+                    ->where('attendance_date', '>=', now()->subDays(7)->toDateString());
+            })
+            ->withCount(['attendances as consecutive_days' => function ($q) {
+                $q->whereIn('status', ['alfa', 'tanpa_keterangan'])
+                    ->where('attendance_date', '>=', now()->subDays(7)->toDateString());
+            }])
+            ->having('consecutive_days', '>=', 3)
+            ->orderByDesc('consecutive_days')
+            ->limit(5)
+            ->with(['user.profile', 'currentClass'])
+            ->get()
+            ->map(fn($s) => [
+                'student_id' => $s->id,
+                'name' => $s->user?->full_name ?? '-',
+                'nis' => $s->nis,
+                'classroom' => $s->currentClass?->name ?? '-',
+                'consecutive_days' => $s->consecutive_days,
+            ]);
+
+        return Inertia::render('attendance/Index', [
+            'stats' => [
+                'today' => now()->translatedFormat('l, j F Y'),
+                'summary' => $summary,
+                'top_late' => $topLate,
+                'consecutive_absences' => $consecutiveAbsences,
+            ],
+        ]);
     }
 
     /**
@@ -773,6 +829,94 @@ class PageController extends Controller
     // =========================================================================
     // Finance Module
     // =========================================================================
+
+    /**
+     * Display finance dashboard/landing page.
+     */
+    public function finance(): Response
+    {
+        $academicYear = AcademicYear::where('is_active', true)->first();
+
+        // Get fee summary
+        $feeQuery = \App\Infrastructure\Persistence\Eloquent\Finance\StudentFee::query()
+            ->when($academicYear, fn($q) => $q->where('academic_year_id', $academicYear->id));
+
+        $totalBilled = (clone $feeQuery)->sum('total_amount');
+        $totalPaid = (clone $feeQuery)->sum('paid_amount');
+        $totalRemaining = (clone $feeQuery)->sum('remaining_amount');
+
+        $countByStatus = [
+            'unpaid' => (clone $feeQuery)->where('status', 'unpaid')->count(),
+            'partial' => (clone $feeQuery)->where('status', 'partial')->count(),
+            'paid' => (clone $feeQuery)->where('status', 'paid')->count(),
+            'overdue' => (clone $feeQuery)->where('status', 'overdue')->count(),
+            'waived' => (clone $feeQuery)->where('status', 'waived')->count(),
+        ];
+
+        // Pending payments (awaiting verification)
+        $pendingPayments = \App\Infrastructure\Persistence\Eloquent\Finance\Payment::whereIn('status', ['pending', 'processing']);
+        $pendingCount = (clone $pendingPayments)->count();
+        $pendingAmount = (clone $pendingPayments)->sum('grand_total');
+
+        // Top outstanding students
+        $topOutstanding = \App\Infrastructure\Persistence\Eloquent\Finance\StudentFee::query()
+            ->select('student_id')
+            ->selectRaw('SUM(remaining_amount) as total_outstanding')
+            ->where('remaining_amount', '>', 0)
+            ->when($academicYear, fn($q) => $q->where('academic_year_id', $academicYear->id))
+            ->groupBy('student_id')
+            ->orderByDesc('total_outstanding')
+            ->limit(5)
+            ->with(['student.user.profile', 'student.currentClass'])
+            ->get()
+            ->map(fn($item) => [
+                'student_id' => $item->student_id,
+                'name' => $item->student?->user?->full_name ?? '-',
+                'nis' => $item->student?->nis ?? '-',
+                'classroom' => $item->student?->currentClass?->name ?? '-',
+                'total_outstanding' => $item->total_outstanding,
+                'total_outstanding_formatted' => 'Rp ' . number_format($item->total_outstanding, 0, ',', '.'),
+            ]);
+
+        // Recent payments
+        $recentPayments = \App\Infrastructure\Persistence\Eloquent\Finance\Payment::with(['student.user.profile'])
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get()
+            ->map(fn($payment) => [
+                'id' => $payment->id,
+                'invoice_number' => $payment->invoice_number,
+                'student_name' => $payment->student?->user?->full_name ?? '-',
+                'amount' => $payment->grand_total,
+                'amount_formatted' => 'Rp ' . number_format($payment->grand_total, 0, ',', '.'),
+                'status' => $payment->status,
+                'paid_at' => $payment->paid_at?->format('d M Y H:i'),
+            ]);
+
+        $collectionRate = $totalBilled > 0 ? round(($totalPaid / $totalBilled) * 100, 1) : 0;
+
+        return Inertia::render('finance/Index', [
+            'stats' => [
+                'today' => now()->translatedFormat('l, j F Y'),
+                'academic_year' => $academicYear?->name ?? 'Tidak Ada Tahun Ajaran Aktif',
+                'summary' => [
+                    'total_billed' => $totalBilled,
+                    'total_billed_formatted' => 'Rp ' . number_format($totalBilled, 0, ',', '.'),
+                    'total_paid' => $totalPaid,
+                    'total_paid_formatted' => 'Rp ' . number_format($totalPaid, 0, ',', '.'),
+                    'total_remaining' => $totalRemaining,
+                    'total_remaining_formatted' => 'Rp ' . number_format($totalRemaining, 0, ',', '.'),
+                    'collection_rate' => $collectionRate,
+                    'count_by_status' => $countByStatus,
+                    'pending_payments' => $pendingCount,
+                    'pending_payments_amount' => $pendingAmount,
+                    'pending_payments_formatted' => 'Rp ' . number_format($pendingAmount, 0, ',', '.'),
+                ],
+                'top_outstanding' => $topOutstanding,
+                'recent_payments' => $recentPayments,
+            ],
+        ]);
+    }
 
     /**
      * Display fee types (jenis biaya) master data page.

@@ -112,6 +112,7 @@ Route::middleware(['auth', 'password.current'])->group(function () {
 
     // Finance Module
     Route::prefix('finance')->name('finance.')->group(function () {
+        Route::get('/', [PageController::class, 'finance'])->name('index');
         Route::get('/fee-types', [PageController::class, 'feeTypes'])->name('fee-types');
         Route::get('/fee-structures', [PageController::class, 'feeStructures'])->name('fee-structures');
         Route::get('/payment-methods', [PageController::class, 'paymentMethods'])->name('payment-methods');

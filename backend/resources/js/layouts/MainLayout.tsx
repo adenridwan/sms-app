@@ -139,6 +139,7 @@ const menuItems: MenuItem[] = [
         key: 'attendance',
         title: 'Absensi',
         icon: Calendar,
+        href: '/attendance',
         permission: 'attendance.view',
         children: [
             { key: 'attendance.me', title: 'Absensi Saya', href: '/attendance/me', permission: 'attendance.check-in' },
@@ -162,15 +163,16 @@ const menuItems: MenuItem[] = [
         key: 'finance',
         title: 'Keuangan',
         icon: DollarSign,
+        href: '/finance',
         permission: 'finance.view',
         children: [
+            { key: 'finance.fees', title: 'Tagihan', href: '/finance/fees' },
+            { key: 'finance.payments', title: 'Pembayaran', href: '/finance/payments' },
+            { key: 'finance.reports', title: 'Laporan', href: '/finance/reports', permission: 'finance.report' },
             { key: 'finance.fee-types', title: 'Jenis Biaya', href: '/finance/fee-types', permission: 'finance.manage' },
             { key: 'finance.fee-structures', title: 'Struktur Biaya', href: '/finance/fee-structures', permission: 'finance.manage' },
             { key: 'finance.payment-methods', title: 'Metode Pembayaran', href: '/finance/payment-methods', permission: 'finance.manage' },
             { key: 'finance.discounts', title: 'Potongan', href: '/finance/discounts', permission: 'finance.manage' },
-            { key: 'finance.fees', title: 'Tagihan', href: '/finance/fees' },
-            { key: 'finance.payments', title: 'Pembayaran', href: '/finance/payments' },
-            { key: 'finance.reports', title: 'Laporan', href: '/finance/reports', permission: 'finance.report' },
         ],
     },
     {

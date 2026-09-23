@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/security/app_lock.dart';
@@ -17,9 +18,13 @@ class ScanCameraScreen extends ConsumerStatefulWidget {
 
 class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
   final _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal,
+    // noDuplicates lebih cepat dari normal, dan sudah mencegah kode sama
+    // terdeteksi berulang dalam satu sesi. Tidak perlu debounce manual.
+    detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
   );
+
+  final _imagePicker = ImagePicker();
 
   bool _busy = false;
   String? _lastCode;
@@ -32,20 +37,29 @@ class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_busy || !mounted) return;
+    // Untuk scan dari galeri, _busy sudah true. Untuk kamera live, cek _busy.
+    if (!_waitingGalleryResult && _busy) return;
+    if (!mounted) return;
     if (capture.barcodes.isEmpty) return;
     final code = capture.barcodes.first.rawValue;
     if (code == null || code.isEmpty) return;
 
-    // Debounce kode sama dalam 3 detik agar tidak dobel.
+    // Dengan DetectionSpeed.noDuplicates, mobile_scanner sudah mencegah kode
+    // sama terdeteksi berulang. Debounce manual tetap dipertahankan sebagai
+    // pengaman tambahan (misal: pengguna menggerakkan kamera keluar-masuk
+    // frame QR dalam waktu singkat).
     final now = DateTime.now();
-    if (_lastCode == code &&
+    if (!_waitingGalleryResult &&
+        _lastCode == code &&
         _lastAt != null &&
-        now.difference(_lastAt!) < const Duration(seconds: 3)) {
+        now.difference(_lastAt!) < const Duration(seconds: 2)) {
       return;
     }
 
-    setState(() => _busy = true);
+    // Set busy untuk kamera live (untuk galeri sudah di-set sebelumnya)
+    if (!_waitingGalleryResult) {
+      setState(() => _busy = true);
+    }
     _lastCode = code;
     _lastAt = now;
 
@@ -55,7 +69,82 @@ class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
 
     final result = await ref.read(scanControllerProvider.notifier).submit(code);
     if (mounted) await showResultSheet(context, result);
-    if (mounted) setState(() => _busy = false);
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _waitingGalleryResult = false;
+      });
+    }
+  }
+
+  /// Pilih gambar dari galeri dan pindai QR di dalamnya.
+  ///
+  /// mobile_scanner v5+ menggunakan `analyzeImage` yang mengembalikan bool
+  /// dan mengirim hasil lewat callback `onDetect` yang sama dengan kamera live.
+  /// Jadi kita set flag `_waitingGalleryResult` supaya `_onDetect` tahu bahwa
+  /// deteksi berasal dari gambar galeri, bukan kamera langsung.
+  bool _waitingGalleryResult = false;
+
+  Future<void> _scanFromGallery() async {
+    if (_busy) return;
+
+    final XFile? image = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 100,
+    );
+    if (image == null || !mounted) return;
+
+    setState(() {
+      _busy = true;
+      _waitingGalleryResult = true;
+    });
+
+    try {
+      final found = await _controller.analyzeImage(image.path);
+
+      if (!mounted) return;
+
+      // Jika QR tidak ditemukan, analyzeImage mengembalikan false dan
+      // onDetect tidak dipanggil.
+      if (!found) {
+        setState(() {
+          _busy = false;
+          _waitingGalleryResult = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('QR Code tidak ditemukan dalam gambar'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Jika ditemukan, onDetect akan dipanggil otomatis oleh mobile_scanner.
+      // Kita tunggu sebentar untuk memastikan callback selesai.
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Reset flag setelah delay
+      if (mounted && _waitingGalleryResult) {
+        setState(() {
+          _busy = false;
+          _waitingGalleryResult = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _waitingGalleryResult = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal memindai gambar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -117,14 +206,25 @@ class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
             left: 0,
             right: 0,
             bottom: 32,
-            child: Center(
-              child: TextButton.icon(
-                onPressed: () => context.pushReplacement('/manual'),
-                icon: const Icon(Icons.keyboard_alt_outlined,
-                    color: Colors.white),
-                label: const Text('Input manual',
-                    style: TextStyle(color: Colors.white)),
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton.icon(
+                  onPressed: _busy ? null : _scanFromGallery,
+                  icon: const Icon(Icons.photo_library_outlined,
+                      color: Colors.white),
+                  label: const Text('Galeri',
+                      style: TextStyle(color: Colors.white)),
+                ),
+                const SizedBox(width: 24),
+                TextButton.icon(
+                  onPressed: () => context.pushReplacement('/manual'),
+                  icon: const Icon(Icons.keyboard_alt_outlined,
+                      color: Colors.white),
+                  label: const Text('Input manual',
+                      style: TextStyle(color: Colors.white)),
+                ),
+              ],
             ),
           ),
         ],
