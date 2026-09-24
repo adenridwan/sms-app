@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/auth/local_session_controller.dart';
+import 'auth_controller.dart';
 
 /// Screen for changing local account password.
 class ChangePasswordScreen extends ConsumerStatefulWidget {
@@ -38,16 +38,18 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     setState(() => _busy = true);
     FocusScope.of(context).unfocus();
 
-    final success =
-        await ref.read(localSessionProvider.notifier).changePassword(
-              currentPassword: _currentCtrl.text,
-              newPassword: _newCtrl.text,
-            );
+    // Password akun sekolah diubah di server, bukan di perangkat. Catatan
+    // offline ikut diperbarui di dalam controller supaya login offline
+    // berikutnya menerima password yang baru.
+    final error = await ref.read(authControllerProvider.notifier).changePassword(
+          currentPassword: _currentCtrl.text,
+          newPassword: _newCtrl.text,
+        );
 
     if (!mounted) return;
     setState(() => _busy = false);
 
-    if (success) {
+    if (error == null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(const SnackBar(
@@ -56,11 +58,10 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         ));
       context.pop();
     } else {
-      final error = ref.read(localSessionProvider).error;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
-          content: Text(error ?? 'Gagal mengubah password'),
+          content: Text(error),
           backgroundColor: Colors.red,
         ));
     }

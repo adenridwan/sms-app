@@ -7,6 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/auth/local_session_controller.dart';
+import '../../../core/qr/qr_image_decoder.dart';
+import '../models/user.dart';
+import 'auth_controller.dart';
 
 /// Screen for scanning QR code to connect to school backend.
 ///
@@ -56,17 +59,27 @@ class _ConnectionScannerScreenState
         _error = null;
       });
 
-      // In mobile_scanner 3.x, analyzeImage returns bool and triggers onDetect callback
-      // The detected barcode will be handled by _onDetect method
-      final bool success = await _controller.analyzeImage(image.path);
+      // Didekode di Dart, bukan lewat `_controller.analyzeImage`: jalur plugin
+      // itu tidak ada di Windows dan melempar MissingPluginException walau
+      // dialog pilih berkas berhasil.
+      final raw = await decodeQrFromImageFile(image.path);
 
-      if (!success) {
+      if (!mounted) return;
+
+      if (raw == null) {
         setState(() {
           _error = 'Tidak dapat menemukan QR code dalam gambar.';
           _processing = false;
         });
+        return;
       }
-      // If success, _onDetect will be triggered automatically
+
+      await _processQrContent(raw);
+    } on QrImageReadException catch (e) {
+      setState(() {
+        _error = e.message;
+        _processing = false;
+      });
     } catch (e) {
       setState(() {
         _error = 'Gagal memproses gambar: $e';
@@ -96,7 +109,7 @@ class _ConnectionScannerScreenState
       }
 
       // Save connection
-      final success =
+      final user =
           await ref.read(localSessionProvider.notifier).connectToBackend(
                 apiUrl: data['api'] as String,
                 syncToken: data['token'] as String,
@@ -109,28 +122,65 @@ class _ConnectionScannerScreenState
 
       if (!mounted) return;
 
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Terhubung ke ${data['school'] ?? 'server'}',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-        context.pop(true);
-      } else {
+      if (user == null) {
         setState(() {
-          _error = 'Gagal menyimpan koneksi.';
+          _error = ref.read(localSessionProvider).error ??
+              'Gagal menyimpan koneksi.';
           _processing = false;
         });
+        return;
       }
+
+      await _finishConnected(schoolName: data['school'] as String?, user: user);
     } catch (e) {
       setState(() {
         _error = 'Error: $e';
         _processing = false;
       });
     }
+  }
+
+  /// Langkah setelah koneksi tersimpan: akui sesinya, lalu **langsung masuk**.
+  ///
+  /// Sesi harus diakui di [AuthController] — bukan hanya dicatat sebagai
+  /// koneksi — karena auth gate dan seluruh fitur absensi membaca sesi itu.
+  /// Tanpa langkah ini, penebusan token yang sudah berhasil tetap berakhir di
+  /// layar login dengan pesan "Email atau password salah".
+  ///
+  /// Tidak ada yang ditanyakan di sini. Tawaran menyimpan password untuk mode
+  /// offline muncul sebagai baris yang bisa diabaikan di Beranda: memindai QR
+  /// justru dipilih supaya tak perlu mengetik password, jadi memunculkan kotak
+  /// password sebelum Beranda membuat seolah masuknya gagal.
+  Future<void> _finishConnected({
+    required String? schoolName,
+    required User user,
+  }) async {
+    final auth = ref.read(authControllerProvider.notifier);
+
+    await auth.adoptSession(user);
+    if (!mounted) return;
+
+    // `adoptSession` bisa menolak persona non-petugas; jangan berpura-pura
+    // berhasil kalau gerbangnya menutup.
+    final authState = ref.read(authControllerProvider);
+    if (!authState.isAuthenticated) {
+      setState(() {
+        _error = authState.error ?? 'Akun ini tidak bisa memakai aplikasi.';
+        _processing = false;
+      });
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Terhubung ke ${schoolName ?? 'server'}'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    // `go`, bukan `pop`: layar ini bisa dibuka dari login (tidak ada yang
+    // di-pop ke mana-mana) maupun dari Profil.
+    context.go('/home');
   }
 
   Map<String, dynamic>? _parseQrData(String raw) {
@@ -373,26 +423,30 @@ class _ConnectionScannerScreenState
 
               setState(() => _processing = true);
 
-              final success = await ref
+              final school = schoolCtrl.text.trim().isEmpty
+                  ? null
+                  : schoolCtrl.text.trim();
+
+              final user = await ref
                   .read(localSessionProvider.notifier)
                   .connectToBackend(
                     apiUrl: apiCtrl.text.trim(),
                     syncToken: tokenCtrl.text.trim(),
-                    schoolName: schoolCtrl.text.trim().isEmpty
-                        ? null
-                        : schoolCtrl.text.trim(),
+                    schoolName: school,
                   );
 
-              if (mounted) {
-                if (success) {
-                  context.pop(true);
-                } else {
-                  setState(() {
-                    _error = 'Gagal menyimpan koneksi.';
-                    _processing = false;
-                  });
-                }
+              if (!mounted) return;
+
+              if (user == null) {
+                setState(() {
+                  _error = ref.read(localSessionProvider).error ??
+                      'Gagal menyimpan koneksi.';
+                  _processing = false;
+                });
+                return;
               }
+
+              await _finishConnected(schoolName: school, user: user);
             },
             child: const Text('Simpan'),
           ),

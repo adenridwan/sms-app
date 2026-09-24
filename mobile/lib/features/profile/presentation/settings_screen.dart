@@ -8,6 +8,7 @@ import '../../../core/storage/sync_status_store.dart';
 import '../../../core/theme/ui_kit.dart';
 import '../../attendance/presentation/class_attendance_queue_controller.dart';
 import '../../attendance/presentation/scan_controller.dart';
+import '../../auth/presentation/auth_controller.dart';
 
 /// Waktu sinkron terakhir. Dibaca ulang tiap layar dibuka dan sesudah sinkron.
 final lastSyncedProvider = FutureProvider.autoDispose<DateTime?>(
@@ -110,21 +111,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ref.watch(classAttendanceQueueProvider).count;
     final session = ref.watch(localSessionProvider);
     final connection = session.connection;
-    final account = session.account;
+    final user = ref.watch(authControllerProvider).user;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pengaturan')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
         children: [
-          // ==== AKUN LOKAL ====
-          const FieldLabel('Akun lokal'),
+          // ==== AKUN SEKOLAH ====
+          const FieldLabel('Akun sekolah'),
           const SizedBox(height: 8),
           Panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (account != null) ...[
+                if (user != null) ...[
                   Row(
                     children: [
                       Container(
@@ -136,7 +137,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          _initials(account.fullName),
+                          _initials(user.fullName),
                           style: TextStyle(
                             color: scheme.onPrimaryContainer,
                             fontWeight: FontWeight.w700,
@@ -150,14 +151,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              account.fullName,
+                              user.fullName,
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             Text(
-                              account.email,
+                              user.email,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: scheme.onSurfaceVariant,

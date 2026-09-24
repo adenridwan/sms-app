@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/models/user.dart';
 import '../config/app_config.dart';
 import '../database/database.dart';
 import '../database/database_providers.dart';
@@ -9,20 +10,25 @@ import '../providers.dart';
 import 'local_auth_service.dart';
 
 /// Session state for local-first authentication.
+/// Catatan sekolah yang terhubung di perangkat ini.
+///
+/// **Bukan** sesi login. Sejak gerbang autentikasi dipegang
+/// `authControllerProvider`, kelas ini hanya menyimpan ke server mana
+/// perangkat menunjuk dan identitas yang diberikan server saat provisioning.
+/// Dulu ia juga punya tabel akun lokal berikut passwordnya sendiri; password
+/// itu tidak pernah bisa diverifikasi server, sehingga pemiliknya selalu
+/// ditolak begitu menyentuh API.
 class LocalSession {
   const LocalSession({
     this.status = LocalSessionStatus.unknown,
-    this.account,
     this.connection,
     this.error,
   });
 
   final LocalSessionStatus status;
-  final LocalAccount? account;
   final BackendConnectionData? connection;
   final String? error;
 
-  bool get isLoggedIn => status == LocalSessionStatus.authenticated;
   bool get isConnectedToBackend => connection != null;
 
   String? get schoolName => connection?.schoolName;
@@ -30,7 +36,6 @@ class LocalSession {
 
   LocalSession copyWith({
     LocalSessionStatus? status,
-    LocalAccount? account,
     BackendConnectionData? connection,
     String? error,
     bool clearError = false,
@@ -38,19 +43,14 @@ class LocalSession {
   }) {
     return LocalSession(
       status: status ?? this.status,
-      account: account ?? this.account,
       connection: clearConnection ? null : (connection ?? this.connection),
       error: clearError ? null : (error ?? this.error),
     );
   }
 }
 
-enum LocalSessionStatus {
-  unknown,
-  unauthenticated,
-  authenticating,
-  authenticated,
-}
+/// Sekadar penanda bahwa catatan koneksi sudah selesai dibaca dari disk.
+enum LocalSessionStatus { unknown, ready }
 
 /// Controller for local session management.
 class LocalSessionController extends StateNotifier<LocalSession> {
@@ -70,135 +70,17 @@ class LocalSessionController extends StateNotifier<LocalSession> {
     if (connection != null) {
       state = state.copyWith(connection: connection);
     }
-    state = state.copyWith(status: LocalSessionStatus.unauthenticated);
-  }
-
-  /// Create new local account.
-  Future<bool> signUp({
-    required String email,
-    required String fullName,
-    required String password,
-  }) async {
-    state = state.copyWith(
-      status: LocalSessionStatus.authenticating,
-      clearError: true,
-    );
-
-    try {
-      final account = await _authService.createAccount(
-        email: email,
-        fullName: fullName,
-        password: password,
-      );
-
-      state = state.copyWith(
-        status: LocalSessionStatus.authenticated,
-        account: account,
-      );
-      return true;
-    } on LocalAuthException catch (e) {
-      state = state.copyWith(
-        status: LocalSessionStatus.unauthenticated,
-        error: e.message,
-      );
-      return false;
-    } catch (e) {
-      state = state.copyWith(
-        status: LocalSessionStatus.unauthenticated,
-        error: 'Gagal membuat akun: $e',
-      );
-      return false;
-    }
-  }
-
-  /// Login with local credentials.
-  Future<bool> login({
-    required String email,
-    required String password,
-  }) async {
-    state = state.copyWith(
-      status: LocalSessionStatus.authenticating,
-      clearError: true,
-    );
-
-    try {
-      final account = await _authService.login(email, password);
-
-      if (account == null) {
-        state = state.copyWith(
-          status: LocalSessionStatus.unauthenticated,
-          error: 'Email atau password salah.',
-        );
-        return false;
-      }
-
-      // Also load connection if exists
-      final connection = await _authService.getConnection();
-
-      state = state.copyWith(
-        status: LocalSessionStatus.authenticated,
-        account: account,
-        connection: connection,
-      );
-      return true;
-    } catch (e) {
-      state = state.copyWith(
-        status: LocalSessionStatus.unauthenticated,
-        error: 'Gagal masuk: $e',
-      );
-      return false;
-    }
-  }
-
-  /// Logout.
-  Future<void> logout() async {
-    state = const LocalSession(status: LocalSessionStatus.unauthenticated);
-  }
-
-  /// Change password.
-  Future<bool> changePassword({
-    required String currentPassword,
-    required String newPassword,
-  }) async {
-    if (state.account == null) return false;
-
-    try {
-      await _authService.changePassword(
-        id: state.account!.id,
-        currentPassword: currentPassword,
-        newPassword: newPassword,
-      );
-      return true;
-    } on LocalAuthException catch (e) {
-      state = state.copyWith(error: e.message);
-      return false;
-    }
-  }
-
-  /// Update profile.
-  Future<bool> updateProfile({required String fullName}) async {
-    if (state.account == null) return false;
-
-    try {
-      await _authService.updateProfile(
-        id: state.account!.id,
-        fullName: fullName,
-      );
-
-      // Reload account
-      final account = await _authService.getAccountById(state.account!.id);
-      if (account != null) {
-        state = state.copyWith(account: account);
-      }
-      return true;
-    } catch (e) {
-      state = state.copyWith(error: 'Gagal update profil: $e');
-      return false;
-    }
+    state = state.copyWith(status: LocalSessionStatus.ready);
   }
 
   /// Connect to backend via QR data.
-  Future<bool> connectToBackend({
+  ///
+  /// Mengembalikan user hasil penebusan token bila berhasil, `null` bila
+  /// gagal. Usernya dikembalikan — bukan sekadar `true` — karena penebusan di
+  /// sini sudah menerbitkan token sesi yang sah, dan token provisioning cuma
+  /// sekali pakai: pemanggil harus bisa menyerahkan sesi itu ke
+  /// `AuthController.adoptSession` tanpa menebus ulang.
+  Future<User?> connectToBackend({
     required String apiUrl,
     required String syncToken,
     String? schoolName,
@@ -238,7 +120,7 @@ class LocalSessionController extends StateNotifier<LocalSession> {
 
       final connection = await _authService.getConnection();
       state = state.copyWith(connection: connection, clearError: true);
-      return true;
+      return user;
     } on ApiException catch (e) {
       // Gagal menebus = JANGAN ditandai terhubung, dan kembalikan alamat lama
       // supaya request berikutnya tidak tertuju ke server yang salah.
@@ -250,11 +132,11 @@ class LocalSessionController extends StateNotifier<LocalSession> {
             : 'QR ditolak server: ${e.message} Token berlaku 15 menit dan '
                 'sekali pakai — minta QR baru ke admin.',
       );
-      return false;
+      return null;
     } catch (e) {
       await _restoreServerUrl(previousUrl, wasProvisioned);
       state = state.copyWith(error: 'Gagal terhubung: $e');
-      return false;
+      return null;
     }
   }
 
@@ -300,16 +182,8 @@ final localSessionProvider =
 });
 
 /// Convenience providers.
-final isLoggedInProvider = Provider<bool>((ref) {
-  return ref.watch(localSessionProvider).isLoggedIn;
-});
-
 final isConnectedToBackendProvider = Provider<bool>((ref) {
   return ref.watch(localSessionProvider).isConnectedToBackend;
-});
-
-final currentLocalAccountProvider = Provider<LocalAccount?>((ref) {
-  return ref.watch(localSessionProvider).account;
 });
 
 final backendConnectionProvider = Provider<BackendConnectionData?>((ref) {

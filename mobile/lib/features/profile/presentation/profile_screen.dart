@@ -28,12 +28,13 @@ class ProfileScreen extends ConsumerWidget {
     final localSession = ref.watch(localSessionProvider);
     final scheme = Theme.of(context).colorScheme;
     final user = auth.user;
-    final localAccount = localSession.account;
     final connection = localSession.connection;
 
-    // Prefer local account name for display
-    final displayName = localAccount?.fullName ?? user?.fullName ?? 'Petugas';
-    final displayEmail = localAccount?.email ?? user?.email;
+    // Identitas dari sesi sekolah; `connection` cuma cadangan saat profil
+    // lengkap belum termuat (mis. baru masuk lewat QR lalu langsung offline).
+    final displayName =
+        user?.fullName ?? connection?.backendUserName ?? 'Petugas';
+    final displayEmail = user?.email ?? connection?.backendUserEmail;
 
     return Scaffold(
       appBar: AppBar(
@@ -108,10 +109,13 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
 
-          // Show backend identity if different from local
+          // Tampilkan identitas server hanya bila memang berbeda dari yang
+          // sedang dipakai. Dibandingkan dengan `displayName`, bukan akun
+          // lokal: akun lokal tidak lagi dipakai untuk masuk, jadi
+          // membandingkannya dengan null akan memunculkan kartu ini terus.
           if (connection != null &&
               connection.backendUserName != null &&
-              connection.backendUserName != localAccount?.fullName) ...[
+              connection.backendUserName != displayName) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
@@ -321,8 +325,9 @@ class ProfileScreen extends ConsumerWidget {
     );
 
     if (ok == true) {
-      // Logout from both local session and auth controller
-      await ref.read(localSessionProvider.notifier).logout();
+      // Catatan koneksi sekolah sengaja dibiarkan: keluar bukan berarti
+      // perangkat ini berpindah sekolah, dan memutusnya akan memaksa minta
+      // QR baru ke admin hanya untuk masuk kembali.
       await ref.read(authControllerProvider.notifier).logout();
     }
   }

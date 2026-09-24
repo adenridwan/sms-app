@@ -10,6 +10,7 @@ import '../../../core/widgets/connection_status_card.dart';
 import '../../attendance/presentation/class_attendance_queue_controller.dart';
 import '../../attendance/presentation/scan_controller.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../auth/presentation/widgets/offline_password_sheet.dart';
 import '../data/dashboard_repository.dart';
 import '../models/action_item.dart';
 import '../models/dashboard_stats.dart';
@@ -34,8 +35,8 @@ class HomeScreen extends ConsumerWidget {
     final localSession = ref.watch(localSessionProvider);
     final user = auth.user;
 
-    // Use local account name if available, fallback to backend user
-    final displayName = localSession.account?.fullName ?? user?.fullName;
+    final displayName =
+        user?.fullName ?? localSession.connection?.backendUserName;
 
     final data = stats.valueOrNull;
     final isTeacher = data?.isTeacher ?? false;
@@ -83,6 +84,17 @@ class HomeScreen extends ConsumerWidget {
                 const InfoStrip(
                   text: 'Akun Anda belum terhubung ke kelas mana pun. '
                       'Hubungi administrator sekolah.',
+                ),
+
+              // Masuk lewat QR tidak pernah mengetik password, jadi perangkat
+              // ini belum punya apa pun untuk diverifikasi saat server mati.
+              // Ditawarkan di sini, bukan menghadang sesudah scan: memindai QR
+              // justru dipilih supaya tak perlu mengetik password.
+              if (ref.watch(needsOfflinePasswordProvider).valueOrNull ?? false)
+                InfoStrip(
+                  onTap: () => showOfflinePasswordSheet(context),
+                  text: 'Perangkat ini belum bisa dipakai masuk saat offline. '
+                      'Ketuk untuk menyimpan password sekolah Anda.',
                 ),
 
               if (pendingSync > 0)

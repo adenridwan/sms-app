@@ -114,8 +114,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
-                            onPressed: busy ? null : () => context.push('/provision-scan'),
-                            tooltip: 'Scan QR Akses',
+                            // `/connect-scan`, bukan `/provision-scan`: yang
+                            // pertama ikut memasang alamat server dari QR,
+                            // sedangkan yang kedua mengandalkan alamat yang
+                            // sudah terpasang — dan di perangkat baru alamat
+                            // itu belum ada, sehingga penebusan tertuju ke
+                            // server yang salah.
+                            onPressed: busy ? null : () => context.push('/connect-scan'),
+                            tooltip: 'Scan QR Koneksi',
                             icon: Icon(
                               Icons.qr_code_scanner_rounded,
                               color: scheme.primary,

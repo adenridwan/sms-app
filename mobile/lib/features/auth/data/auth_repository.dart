@@ -80,18 +80,9 @@ class AuthRepository {
   /// scan QR di perangkat baru untuk langsung login tanpa ketik password.
   Future<User> redeemProvision({required String provisionToken}) async {
     try {
-      // Debug: log the URL being used
-      // ignore: avoid_print
-      print('[AuthRepo] redeemProvision to: ${_dio.options.baseUrl}/auth/redeem-provision');
-      // ignore: avoid_print
-      print('[AuthRepo] Token (first 10): ${provisionToken.substring(0, 10)}...');
-
       final res = await _dio.post('/auth/redeem-provision', data: {
         'provision_token': provisionToken,
       });
-
-      // ignore: avoid_print
-      print('[AuthRepo] Response status: ${res.statusCode}');
 
       final data = (res.data as Map)['data'] as Map;
       final token = data['token'] as String;
@@ -106,15 +97,8 @@ class AuthRepository {
           User.fromJson(userJson, permissions: permissions, roles: roles);
       await _userCache.save(user);
 
-      // ignore: avoid_print
-      print('[AuthRepo] User logged in: ${user.email}');
-
       return user;
     } on DioException catch (e) {
-      // ignore: avoid_print
-      print('[AuthRepo] DioException: ${e.message}');
-      // ignore: avoid_print
-      print('[AuthRepo] Response: ${e.response?.data}');
       throw ApiException.fromDio(e);
     }
   }
@@ -150,6 +134,26 @@ class AuthRepository {
     required User user,
   }) =>
       _offline.save(email: email, password: password, user: user);
+
+  /// PUT /auth/password → ganti password akun sekolah di server.
+  ///
+  /// Password lama diverifikasi server, bukan di perangkat: perangkat hanya
+  /// menyimpan hash untuk login offline, dan hash itu bisa saja tertinggal
+  /// bila admin sempat mereset password.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.put('/auth/password', data: {
+        'current_password': currentPassword,
+        'password': newPassword,
+        'password_confirmation': newPassword,
+      });
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
 
   /// Verifikasi kredensial terhadap catatan lokal; `null` bila tak cocok.
   Future<User?> verifyOffline({

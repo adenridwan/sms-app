@@ -10,8 +10,8 @@ import '../../features/attendance/presentation/scanner_home_screen.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/connection_scanner_screen.dart';
 import '../../features/auth/presentation/provision_scanner_screen.dart';
-import '../../features/auth/presentation/local_login_screen.dart';
-import '../../features/auth/presentation/signup_screen.dart';
+import '../../features/auth/presentation/auth_controller.dart';
+import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/finance/presentation/finance_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -19,43 +19,54 @@ import '../../features/notifications/presentation/notification_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/server_config_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
-import '../auth/local_session_controller.dart';
 import 'app_shell.dart';
 
 /// Menjembatani perubahan state Riverpod ke GoRouter (refresh + redirect).
+///
+/// Gerbangnya memakai [authControllerProvider] — sesi **backend** — bukan
+/// `localSessionProvider`. Seluruh isi aplikasi (absensi, antrean, kunci layar)
+/// sudah membaca sesi backend, jadi gerbang yang menanyakan tabel akun lokal
+/// menolak masuk orang yang sebenarnya sudah punya token sah: itulah sebabnya
+/// "Scan QR Koneksi" berhasil tapi tetap terdampar di layar login.
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
-    _ref.listen<LocalSession>(
-      localSessionProvider,
+    _ref.listen<AuthState>(
+      authControllerProvider,
       (_, __) => notifyListeners(),
     );
   }
 
   final Ref _ref;
 
-  String? redirect(BuildContext context, GoRouterState state) {
-    final session = _ref.read(localSessionProvider);
-    final loc = state.matchedLocation;
+  String? redirect(BuildContext context, GoRouterState state) =>
+      authRedirect(_ref.read(authControllerProvider), state.matchedLocation);
+}
 
-    // Still initializing
-    if (session.status == LocalSessionStatus.unknown) {
-      return loc == '/splash' ? null : '/splash';
-    }
+/// Layar yang boleh dibuka tanpa sesi.
+///
+/// `/connect-scan` dan `/provision-scan` ada di sini karena keduanya justru
+/// cara memperoleh sesi. `/provision-scan` sempat tidak terdaftar, sehingga
+/// deep link `smsapp://provision?token=…` di perangkat yang belum masuk
+/// dilempar ke `/login` dan tokennya terbuang.
+const kPublicRoutes = {'/login', '/connect-scan', '/provision-scan'};
 
-    // Authenticated - redirect away from auth screens
-    if (session.isLoggedIn) {
-      if (loc == '/login' || loc == '/splash' || loc == '/signup') {
-        return '/home';
-      }
-      return null;
-    }
-
-    // Not authenticated - allow auth screens only
-    if (loc == '/login' || loc == '/signup' || loc == '/connect-scan') {
-      return null;
-    }
-    return '/login';
+/// Aturan gerbang autentikasi, dipisah dari GoRouter supaya bisa diuji tanpa
+/// merakit seluruh aplikasi. Inilah bagian yang dulu menanyakan sistem yang
+/// salah, jadi ia layak punya uji sendiri.
+String? authRedirect(AuthState auth, String loc) {
+  // Masih memulihkan sesi dari token tersimpan.
+  if (auth.status == AuthStatus.unknown) {
+    return loc == '/splash' ? null : '/splash';
   }
+
+  if (auth.isAuthenticated) {
+    // `/connect-scan` sengaja tidak ikut dilempar: pengguna yang sudah masuk
+    // membukanya dari Profil untuk berpindah sekolah / server.
+    if (loc == '/login' || loc == '/splash') return '/home';
+    return null;
+  }
+
+  return kPublicRoutes.contains(loc) ? null : '/login';
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -73,13 +84,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         builder: (_, __) => const SplashScreen(),
       ),
+      // Login memakai akun **sekolah** (email + password di server), dengan
+      // cadangan offline lewat OfflineCredentialStore. Tabel `local_accounts`
+      // beserta layar Buat Akun tidak lagi jadi jalan masuk: passwordnya tak
+      // pernah bisa diverifikasi server, sehingga akun yang dibuat di sana
+      // selalu tertolak begitu menyentuh API.
       GoRoute(
         path: '/login',
-        builder: (_, __) => const LocalLoginScreen(),
-      ),
-      GoRoute(
-        path: '/signup',
-        builder: (_, __) => const SignupScreen(),
+        builder: (_, __) => const LoginScreen(),
       ),
       // Scan QR for backend connection (can be accessed before or after login)
       GoRoute(

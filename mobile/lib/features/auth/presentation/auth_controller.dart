@@ -268,6 +268,75 @@ class AuthController extends StateNotifier<AuthState> {
     return _signIn(() => _repo.redeemProvision(provisionToken: provisionToken));
   }
 
+  /// Akui sesi yang **sudah** diterbitkan di tempat lain.
+  ///
+  /// Dipakai jalur QR Koneksi: di sana token provisioning sudah ditebus untuk
+  /// mendapat alamat server + catatan sekolah, dan token itu sekali pakai —
+  /// menebusnya lagi lewat [loginWithProvision] pasti ditolak server. Yang
+  /// tersisa cuma mengakui sesinya di sini, supaya auth gate ikut terbuka.
+  Future<void> adoptSession(User user) async {
+    if (await _rejectIfNotStaff(user)) return;
+
+    state = AuthState(status: AuthStatus.authenticated, user: user);
+    _heartbeat.start();
+  }
+
+  /// Simpan password sekolah agar perangkat ini bisa dipakai masuk saat
+  /// offline. Mengembalikan `null` bila berhasil, atau pesan kesalahan.
+  ///
+  /// Passwordnya **diverifikasi ke server lebih dulu**: menyimpan hash dari
+  /// password yang salah ketik berarti login offline berikutnya ditolak tanpa
+  /// ada cara mengetahui sebabnya. Ini juga alasan tidak ada password baru
+  /// yang dibuat di sini — satu-satunya password yang berlaku tetap milik
+  /// server, sehingga reset oleh admin langsung berdampak ke perangkat.
+  Future<String?> rememberPasswordForOffline(String password) async {
+    final email = state.user?.email;
+    if (email == null || email.isEmpty) {
+      return 'Belum ada sesi aktif untuk disimpan.';
+    }
+
+    try {
+      final user = await _repo
+          .login(email: email, password: password)
+          .timeout(_onlineLoginTimeout, onTimeout: _timedOut);
+      await _repo.rememberForOffline(
+          email: email, password: password, user: user);
+      return null;
+    } on ApiException catch (e) {
+      if (e.isUnauthorized) return 'Password salah.';
+      return e.isNetwork
+          ? 'Server tidak menjawab. Coba lagi saat koneksi stabil.'
+          : e.message;
+    }
+  }
+
+  /// Ganti password akun sekolah. `null` bila berhasil, pesan bila gagal.
+  ///
+  /// Catatan offline ikut diperbarui begitu server menerima perubahan —
+  /// kalau tidak, perangkat ini akan terus menerima password **lama** saat
+  /// offline dan menolak yang baru.
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final email = state.user?.email;
+    if (email == null || email.isEmpty) return 'Belum ada sesi aktif.';
+
+    try {
+      await _repo.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      await _repo.rememberForOffline(
+          email: email, password: newPassword, user: state.user!);
+      return null;
+    } on ApiException catch (e) {
+      return e.isNetwork
+          ? 'Ganti password butuh koneksi ke sekolah.'
+          : e.message;
+    }
+  }
+
   /// Alur bersama kedua cara masuk: terbitkan sesi, muat profil lengkap
   /// (permissions), lalu tegakkan guard persona.
   Future<void> _signIn(Future<User> Function() authenticate) async {
