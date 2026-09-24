@@ -71,6 +71,8 @@ dependencies:
   connectivity_plus: ^6.0.3
   network_info_plus: ^5.0.3
   uuid: ^4.6.0
+  zxing2: ^0.2.4
+  image: ^4.10.1
 
 dev_dependencies:
   flutter_test:
@@ -89,6 +91,7 @@ dev_dependencies:
 
   # Pembangkit ikon peluncur dari satu berkas sumber.
   flutter_launcher_icons: ^0.14.1
+  qr: ^3.0.2
 
 # Ikon peluncur SMS-APP. Regenerasi setelah mengubah berkas di assets/branding:
 #   flutter pub run flutter_launcher_icons

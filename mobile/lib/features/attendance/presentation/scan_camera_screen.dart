@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../core/qr/qr_image_decoder.dart';
 import '../../../core/security/app_lock.dart';
 import 'scan_controller.dart';
 import 'widgets/result_sheet.dart';
@@ -79,10 +80,12 @@ class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
 
   /// Pilih gambar dari galeri dan pindai QR di dalamnya.
   ///
-  /// mobile_scanner v5+ menggunakan `analyzeImage` yang mengembalikan bool
-  /// dan mengirim hasil lewat callback `onDetect` yang sama dengan kamera live.
-  /// Jadi kita set flag `_waitingGalleryResult` supaya `_onDetect` tahu bahwa
-  /// deteksi berasal dari gambar galeri, bukan kamera langsung.
+  /// Gambar didekode di Dart lewat [decodeQrFromImageFile], bukan lewat
+  /// `MobileScannerController.analyzeImage`: jalur plugin itu tidak ada di
+  /// Windows dan melempar `MissingPluginException` walau pemilih berkasnya
+  /// berhasil. Karena hasilnya kembali langsung — tidak lewat callback
+  /// `onDetect` — `_waitingGalleryResult` dipakai supaya `_onDetect` tahu
+  /// deteksi ini berasal dari gambar, sehingga debounce kamera dilewati.
   bool _waitingGalleryResult = false;
 
   Future<void> _scanFromGallery() async {
@@ -100,13 +103,11 @@ class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
     });
 
     try {
-      final found = await _controller.analyzeImage(image.path);
+      final raw = await decodeQrFromImageFile(image.path);
 
       if (!mounted) return;
 
-      // Jika QR tidak ditemukan, analyzeImage mengembalikan false dan
-      // onDetect tidak dipanggil.
-      if (!found) {
+      if (raw == null) {
         setState(() {
           _busy = false;
           _waitingGalleryResult = false;
@@ -120,16 +121,18 @@ class _ScanCameraScreenState extends ConsumerState<ScanCameraScreen> {
         return;
       }
 
-      // Jika ditemukan, onDetect akan dipanggil otomatis oleh mobile_scanner.
-      // Kita tunggu sebentar untuk memastikan callback selesai.
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Reset flag setelah delay
-      if (mounted && _waitingGalleryResult) {
+      await _onDetect(
+        BarcodeCapture(barcodes: [Barcode(rawValue: raw)]),
+      );
+    } on QrImageReadException catch (e) {
+      if (mounted) {
         setState(() {
           _busy = false;
           _waitingGalleryResult = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
       }
     } catch (e) {
       if (mounted) {
