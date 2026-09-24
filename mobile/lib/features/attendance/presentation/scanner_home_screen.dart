@@ -11,24 +11,25 @@ import 'manual_input_screen.dart';
 import 'my_attendance_view.dart';
 import 'scan_controller.dart';
 
-/// Metode absensi — daftar dan namanya mengikuti `attMethodOptions` pada
+/// Metode absensi — daftar dan namanya mengikuti `attMethodCards` pada
 /// rujukan desain (artifact `0af1e5c5`).
 enum AttendanceMethod { qr, refId, checklist, mine }
 
-/// Metode yang sedang dipilih di tab Absensi.
+/// Metode yang sedang dibuka di tab Absensi; `null` berarti **menu kartu**.
 ///
 /// Disimpan di provider, bukan `State` layar, supaya pilihan bertahan saat
 /// pengguna berpindah tab lalu kembali — seperti rujukan yang menyimpan
 /// `attScreen` di state aplikasi.
 final attendanceMethodProvider =
-    StateProvider<AttendanceMethod>((ref) => AttendanceMethod.qr);
+    StateProvider<AttendanceMethod?>((ref) => null);
 
 /// Tab Absensi.
 ///
-/// Mengikuti rujukan desain: judul, satu baris pil metode, lalu **isi yang
-/// berganti di tempat** — bukan tombol yang membuka layar lain. Hanya kamera
-/// yang tetap layar penuh, karena viewfinder butuh seluruh layar dan punya
-/// siklus hidup sendiri.
+/// Mengikuti rujukan desain terbaru: layar pertama adalah **menu kartu dua
+/// kolom** berisi metode presensi, dan memilih satu kartu membuka isinya di
+/// tempat dengan panah kembali ke menu. Bentuk kartu menggantikan baris pil
+/// tab: empat label tidak nyaman dimampatkan dalam satu baris pil di layar
+/// ponsel, dan kartu memberi ruang untuk keterangan singkat tiap metode.
 class ScannerHomeScreen extends ConsumerWidget {
   const ScannerHomeScreen({super.key});
 
@@ -41,40 +42,196 @@ class ScannerHomeScreen extends ConsumerWidget {
     // menampilkan QR miliknya sendiri.
     final isAdmin = (user?.userType ?? '') != 'teacher';
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Absensi'),
-        actions: const [
-          Center(child: BackendStatusDot()),
-          SizedBox(width: 20),
-        ],
+    void backToMenu() =>
+        ref.read(attendanceMethodProvider.notifier).state = null;
+
+    return PopScope(
+      // Tombol kembali perangkat mengembalikan ke menu dulu, bukan keluar dari
+      // tab — sejajar dengan panah kembali di AppBar.
+      canPop: method == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) backToMenu();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: method == null
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: backToMenu,
+                ),
+          title: Text(_titleOf(method, isAdmin)),
+          actions: const [
+            Center(child: BackendStatusDot()),
+            SizedBox(width: 20),
+          ],
+        ),
+        body: switch (method) {
+          null => _MethodMenu(isAdmin: isAdmin),
+          AttendanceMethod.qr => const _ScanPane(),
+          AttendanceMethod.refId => const ManualInputView(),
+          AttendanceMethod.checklist => const ClassAttendanceView(),
+          AttendanceMethod.mine => const MyAttendanceView(),
+        },
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-            child: PillTabs<AttendanceMethod>(
-              options: AttendanceMethod.values,
-              selected: method,
-              labelOf: (m) => switch (m) {
-                AttendanceMethod.qr => isAdmin ? 'Pindai QR' : 'Tampilkan QR',
-                AttendanceMethod.refId => 'Ref ID',
-                AttendanceMethod.checklist => 'Checklist',
-                AttendanceMethod.mine => 'Absensi Saya',
-              },
-              onChanged: (m) =>
-                  ref.read(attendanceMethodProvider.notifier).state = m,
-            ),
+    );
+  }
+
+  static String _titleOf(AttendanceMethod? m, bool isAdmin) => switch (m) {
+        null => 'Absensi',
+        AttendanceMethod.qr => isAdmin ? 'Pindai QR' : 'Tampilkan QR',
+        AttendanceMethod.refId => 'Ref ID',
+        AttendanceMethod.checklist => 'Absen Manual',
+        AttendanceMethod.mine => 'Absensi Saya',
+      };
+}
+
+/// Menu kartu metode presensi — grid dua kolom, satu kartu per metode.
+class _MethodMenu extends ConsumerWidget {
+  const _MethodMenu({required this.isAdmin});
+
+  final bool isAdmin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+
+    final cards = <_MethodCardData>[
+      _MethodCardData(
+        method: AttendanceMethod.qr,
+        title: isAdmin ? 'Pindai QR' : 'Tampilkan QR',
+        caption: isAdmin ? 'Scan kode siswa' : 'Tampilkan kode kelas',
+        icon: Icons.qr_code_scanner_rounded,
+      ),
+      const _MethodCardData(
+        method: AttendanceMethod.refId,
+        title: 'Ref ID',
+        caption: 'Input kode / RFID',
+        icon: Icons.badge_outlined,
+      ),
+      const _MethodCardData(
+        method: AttendanceMethod.checklist,
+        title: 'Absen Manual',
+        caption: 'Tandai H / A / I',
+        icon: Icons.checklist_rounded,
+      ),
+      const _MethodCardData(
+        method: AttendanceMethod.mine,
+        title: 'Absensi Saya',
+        caption: 'QR & riwayat pribadi',
+        icon: Icons.person_outline_rounded,
+      ),
+    ];
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+      children: [
+        Text(
+          'Pilih metode presensi',
+          style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 14),
+        GridView.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: .98,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            for (final c in cards)
+              _MethodCard(
+                data: c,
+                onTap: () =>
+                    ref.read(attendanceMethodProvider.notifier).state = c.method,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Isi satu kartu metode, dipisah dari widgetnya supaya daftar di atas terbaca
+/// sebagai daftar data — bukan pohon widget.
+class _MethodCardData {
+  const _MethodCardData({
+    required this.method,
+    required this.title,
+    required this.caption,
+    required this.icon,
+  });
+
+  final AttendanceMethod method;
+  final String title;
+  final String caption;
+  final IconData icon;
+}
+
+/// Kartu metode: ikon beraksen di atas, judul dan keterangan menempel di bawah.
+class _MethodCard extends StatelessWidget {
+  const _MethodCard({required this.data, required this.onTap});
+
+  final _MethodCardData data;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(data.icon, size: 20, color: scheme.primary),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    data.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.2,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    data.caption,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          Expanded(
-            child: switch (method) {
-              AttendanceMethod.qr => const _ScanPane(),
-              AttendanceMethod.refId => const ManualInputView(),
-              AttendanceMethod.checklist => const ClassAttendanceView(),
-              AttendanceMethod.mine => const MyAttendanceView(),
-            },
-          ),
-        ],
+        ),
       ),
     );
   }

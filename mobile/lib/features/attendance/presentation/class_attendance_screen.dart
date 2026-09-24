@@ -35,22 +35,78 @@ class ClassAttendanceScreen extends StatelessWidget {
 /// Semua siswa mulai berstatus **Hadir**; guru hanya menandai pengecualian.
 /// Daftar kelas & siswa dibatasi server sesuai peran — guru hanya melihat
 /// kelas yang ia ampu, admin melihat semuanya.
-class ClassAttendanceView extends ConsumerWidget {
+class ClassAttendanceView extends ConsumerStatefulWidget {
   const ClassAttendanceView({super.key, this.initialClassroomId});
 
   final String? initialClassroomId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final provider = classAttendanceControllerProvider(initialClassroomId);
+  ConsumerState<ClassAttendanceView> createState() =>
+      _ClassAttendanceViewState();
+}
+
+class _ClassAttendanceViewState extends ConsumerState<ClassAttendanceView> {
+  final _searchCtrl = TextEditingController();
+
+  /// Kata kunci pencarian, disimpan di `State` layar dan bukan di controller:
+  /// ini murni penyaring tampilan, tidak ikut disimpan maupun dikirim, dan
+  /// guru mengharapkannya kosong lagi begitu meninggalkan daftar.
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Cocokkan nama **atau** NIS. Guru menghafal nama, tapi papan absen dan
+  /// kartu siswa memakai NIS — keduanya dipakai untuk mencari orang yang sama.
+  List<ClassStudent> _visible(List<ClassStudent> students) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return students;
+
+    return [
+      for (final s in students)
+        if (s.name.toLowerCase().contains(q) ||
+            (s.nis?.toLowerCase().contains(q) ?? false))
+          s,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider =
+        classAttendanceControllerProvider(widget.initialClassroomId);
     final state = ref.watch(provider);
     final controller = ref.read(provider.notifier);
     final scheme = Theme.of(context).colorScheme;
 
+    // Ganti kelas berarti daftar siswanya lain sama sekali; menyisakan kata
+    // kunci lama akan menyambut guru dengan daftar kosong yang seolah salah.
+    ref.listen(provider.select((s) => s.selectedClassId), (_, __) {
+      if (_query.isEmpty) return;
+      _searchCtrl.clear();
+      setState(() => _query = '');
+    });
+
+    final visible = _visible(state.students);
+
     return Column(
       children: [
-        _Toolbar(state: state, controller: controller),
-        Expanded(child: _Body(state: state, controller: controller)),
+        _Toolbar(
+          state: state,
+          controller: controller,
+          searchController: _searchCtrl,
+          onSearchChanged: (v) => setState(() => _query = v),
+        ),
+        Expanded(
+          child: _Body(
+            state: state,
+            controller: controller,
+            students: visible,
+            searching: _query.trim().isNotEmpty,
+          ),
+        ),
         if (state.students.isNotEmpty)
           _SaveBar(
             state: state,
@@ -76,10 +132,17 @@ class ClassAttendanceView extends ConsumerWidget {
 }
 
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.state, required this.controller});
+  const _Toolbar({
+    required this.state,
+    required this.controller,
+    required this.searchController,
+    required this.onSearchChanged,
+  });
 
   final ClassAttendanceState state;
   final ClassAttendanceController controller;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +211,44 @@ class _Toolbar extends StatelessWidget {
               ),
             ],
           ),
-          if (state.students.isNotEmpty)
+          if (state.students.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: searchController,
+              onChanged: onSearchChanged,
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Cari siswa',
+                hintStyle:
+                    TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                prefixIcon: Icon(Icons.search_rounded,
+                    size: 18, color: scheme.onSurfaceVariant),
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 34, minHeight: 34),
+                // Tombol bersihkan hanya muncul saat ada isinya — kalau selalu
+                // tampil, ia terbaca sebagai "tutup pencarian" dan bikin ragu.
+                suffixIcon: searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 16),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          searchController.clear();
+                          onSearchChanged('');
+                        },
+                      ),
+                isDense: true,
+                filled: true,
+                fillColor: scheme.surfaceContainerHighest,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -162,6 +262,7 @@ class _Toolbar extends StatelessWidget {
                 ),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -197,10 +298,21 @@ class _Field extends StatelessWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.state, required this.controller});
+  const _Body({
+    required this.state,
+    required this.controller,
+    required this.students,
+    required this.searching,
+  });
 
   final ClassAttendanceState state;
   final ClassAttendanceController controller;
+
+  /// Siswa yang lolos pencarian. Dipisah dari `state.students` supaya ringkasan
+  /// dan penyimpanan tetap memakai **seluruh** kelas — menyaring tampilan tidak
+  /// boleh diam-diam mempersempit apa yang tersimpan.
+  final List<ClassStudent> students;
+  final bool searching;
 
   @override
   Widget build(BuildContext context) {
@@ -230,13 +342,23 @@ class _Body extends StatelessWidget {
       );
     }
 
+    if (students.isEmpty && searching) {
+      return const Center(
+        child: EmptyNote(
+          title: 'Tidak ditemukan',
+          body: 'Tidak ada siswa yang cocok dengan kata kunci itu. '
+              'Coba potongan nama atau NIS-nya saja.',
+        ),
+      );
+    }
+
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      itemCount: state.students.length,
+      itemCount: students.length,
       separatorBuilder: (_, __) =>
           Divider(height: 1, color: scheme.outlineVariant),
       itemBuilder: (context, i) {
-        final s = state.students[i];
+        final s = students[i];
         final mark = state.marks[s.id] ?? AttendanceMark.hadir;
 
         return Padding(

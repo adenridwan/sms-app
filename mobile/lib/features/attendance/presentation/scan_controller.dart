@@ -74,7 +74,7 @@ class ScanController extends StateNotifier<ScanState> {
         loadingBootstrap: false,
         bootstrapError: e.isForbidden
             ? 'Akun Anda tidak berwenang mengoperasikan scanner gerbang. '
-                'Gunakan Checklist untuk mengabsen kelas Anda.'
+                'Gunakan Absen Manual untuk mengabsen kelas Anda.'
             : e.message,
       );
     }
