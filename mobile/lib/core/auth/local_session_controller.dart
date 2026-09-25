@@ -9,40 +9,61 @@ import '../network/api_exception.dart';
 import '../providers.dart';
 import 'local_auth_service.dart';
 
-/// Session state for local-first authentication.
-/// Catatan sekolah yang terhubung di perangkat ini.
+/// Catatan sekolah yang terhubung di perangkat ini, **plus** sesi akun lokal.
 ///
-/// **Bukan** sesi login. Sejak gerbang autentikasi dipegang
-/// `authControllerProvider`, kelas ini hanya menyimpan ke server mana
-/// perangkat menunjuk dan identitas yang diberikan server saat provisioning.
-/// Dulu ia juga punya tabel akun lokal berikut passwordnya sendiri; password
-/// itu tidak pernah bisa diverifikasi server, sehingga pemiliknya selalu
-/// ditolak begitu menyentuh API.
+/// Akun lokal adalah akun yang hanya ada di perangkat: dipakai untuk menyiapkan
+/// dan menguji perangkat sebelum ada sekolah yang dituju — mengatur alamat API,
+/// mencoba tampilan, memastikan aplikasi jalan. Passwordnya tidak pernah bisa
+/// diverifikasi server.
+///
+/// Karena itu ia **dibatasi**: [canUseLocalAccount] hanya benar selama
+/// perangkat belum tersambung ke sekolah mana pun. Tanpa batas itu, dua sistem
+/// autentikasi hidup berdampingan dan gerbang aplikasi bisa terbuka untuk akun
+/// yang ditolak server di setiap panggilan API.
 class LocalSession {
   const LocalSession({
     this.status = LocalSessionStatus.unknown,
+    this.account,
     this.connection,
     this.error,
   });
 
   final LocalSessionStatus status;
+
+  /// Akun lokal yang sedang masuk, bila ada.
+  final LocalAccount? account;
+
   final BackendConnectionData? connection;
   final String? error;
 
   bool get isConnectedToBackend => connection != null;
+
+  /// Sedang masuk memakai akun lokal.
+  bool get isLocalLoggedIn => account != null;
+
+  /// Akun lokal masih boleh dipakai di perangkat ini.
+  ///
+  /// `false` selama perangkat tersambung ke sekolah. Kalau koneksinya diputus,
+  /// jawabannya kembali `true` — tapi akun-akun **lama sudah dihapus** saat
+  /// menyambung, jadi yang terbuka adalah kesempatan membuat akun **baru**,
+  /// bukan menghidupkan yang lama.
+  bool get canUseLocalAccount => connection == null;
 
   String? get schoolName => connection?.schoolName;
   String? get backendUserName => connection?.backendUserName;
 
   LocalSession copyWith({
     LocalSessionStatus? status,
+    LocalAccount? account,
     BackendConnectionData? connection,
     String? error,
     bool clearError = false,
     bool clearConnection = false,
+    bool clearAccount = false,
   }) {
     return LocalSession(
       status: status ?? this.status,
+      account: clearAccount ? null : (account ?? this.account),
       connection: clearConnection ? null : (connection ?? this.connection),
       error: clearError ? null : (error ?? this.error),
     );
@@ -72,6 +93,98 @@ class LocalSessionController extends StateNotifier<LocalSession> {
     }
     state = state.copyWith(status: LocalSessionStatus.ready);
   }
+
+  /// Buat akun lokal baru.
+  ///
+  /// Ditolak bila perangkat sudah tersambung ke sekolah: di situ akun yang
+  /// berlaku adalah akun sekolah, dan membuat akun perangkat hanya akan
+  /// menghasilkan kredensial yang ditolak server di setiap panggilan API.
+  Future<bool> signUp({
+    required String email,
+    required String fullName,
+    required String password,
+  }) async {
+    if (!state.canUseLocalAccount) {
+      state = state.copyWith(error: _connectedMessage);
+      return false;
+    }
+
+    state = state.copyWith(clearError: true);
+
+    try {
+      final account = await _authService.createAccount(
+        email: email,
+        fullName: fullName,
+        password: password,
+      );
+
+      state = state.copyWith(account: account);
+      return true;
+    } on LocalAuthException catch (e) {
+      state = state.copyWith(error: e.message);
+      return false;
+    } catch (e) {
+      state = state.copyWith(error: 'Gagal membuat akun: $e');
+      return false;
+    }
+  }
+
+  /// Masuk dengan akun lokal.
+  Future<bool> localLogin({
+    required String email,
+    required String password,
+  }) async {
+    if (!state.canUseLocalAccount) {
+      state = state.copyWith(error: _connectedMessage);
+      return false;
+    }
+
+    state = state.copyWith(clearError: true);
+
+    try {
+      final account = await _authService.login(email, password);
+      if (account == null) {
+        state = state.copyWith(error: 'Email atau password salah.');
+        return false;
+      }
+
+      state = state.copyWith(account: account);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: 'Gagal masuk: $e');
+      return false;
+    }
+  }
+
+  /// Keluar dari akun lokal. Catatan koneksi tidak disentuh.
+  void localLogout() {
+    state = state.copyWith(clearAccount: true, clearError: true);
+  }
+
+  /// Ganti password akun lokal.
+  Future<bool> changeLocalPassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final account = state.account;
+    if (account == null) return false;
+
+    try {
+      await _authService.changePassword(
+        id: account.id,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      return true;
+    } on LocalAuthException catch (e) {
+      state = state.copyWith(error: e.message);
+      return false;
+    }
+  }
+
+  static const _connectedMessage =
+      'Perangkat ini sudah terhubung ke sekolah. Gunakan user dan password '
+      'akun sekolah Anda — akun lokal tidak berlaku lagi.';
 
   /// Connect to backend via QR data.
   ///
@@ -118,8 +231,20 @@ class LocalSessionController extends StateNotifier<LocalSession> {
         roles: user.roles.isNotEmpty ? user.roles : roles,
       );
 
+      // Akun lokal dihapus, bukan sekadar dikunci. Mengunci saja menyisakan
+      // barisnya berikut hash password, sehingga memutus koneksi nanti akan
+      // menghidupkannya kembali — dan catatan absensi berikutnya bisa
+      // terkirim atas nama siapa pun yang kebetulan menyambungkan perangkat.
+      //
+      // Antrean absensi ada di tabel lain dan tidak ikut terhapus.
+      await _authService.deleteAllAccounts();
+
       final connection = await _authService.getConnection();
-      state = state.copyWith(connection: connection, clearError: true);
+      state = state.copyWith(
+        connection: connection,
+        clearAccount: true,
+        clearError: true,
+      );
       return user;
     } on ApiException catch (e) {
       // Gagal menebus = JANGAN ditandai terhubung, dan kembalikan alamat lama
@@ -182,6 +307,18 @@ final localSessionProvider =
 });
 
 /// Convenience providers.
+final isLocalLoggedInProvider = Provider<bool>((ref) {
+  return ref.watch(localSessionProvider).isLocalLoggedIn;
+});
+
+final canUseLocalAccountProvider = Provider<bool>((ref) {
+  return ref.watch(localSessionProvider).canUseLocalAccount;
+});
+
+final currentLocalAccountProvider = Provider<LocalAccount?>((ref) {
+  return ref.watch(localSessionProvider).account;
+});
+
 final isConnectedToBackendProvider = Provider<bool>((ref) {
   return ref.watch(localSessionProvider).isConnectedToBackend;
 });

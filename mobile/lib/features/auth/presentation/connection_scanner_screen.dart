@@ -8,6 +8,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/auth/local_session_controller.dart';
 import '../../../core/qr/qr_image_decoder.dart';
+import '../../attendance/presentation/class_attendance_queue_controller.dart';
+import '../../attendance/presentation/scan_controller.dart';
 import '../models/user.dart';
 import 'auth_controller.dart';
 
@@ -108,6 +110,9 @@ class _ConnectionScannerScreenState
         return;
       }
 
+      // Dibaca sebelum `connectToBackend` menutup sesi akun lokal.
+      final hadLocalAccount = ref.read(localSessionProvider).isLocalLoggedIn;
+
       // Save connection
       final user =
           await ref.read(localSessionProvider.notifier).connectToBackend(
@@ -131,7 +136,11 @@ class _ConnectionScannerScreenState
         return;
       }
 
-      await _finishConnected(schoolName: data['school'] as String?, user: user);
+      await _finishConnected(
+        schoolName: data['school'] as String?,
+        user: user,
+        hadLocalAccount: hadLocalAccount,
+      );
     } catch (e) {
       setState(() {
         _error = 'Error: $e';
@@ -154,6 +163,7 @@ class _ConnectionScannerScreenState
   Future<void> _finishConnected({
     required String? schoolName,
     required User user,
+    bool hadLocalAccount = false,
   }) async {
     final auth = ref.read(authControllerProvider.notifier);
 
@@ -175,8 +185,51 @@ class _ConnectionScannerScreenState
       SnackBar(
         content: Text('Terhubung ke ${schoolName ?? 'server'}'),
         backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
       ),
     );
+
+    // Perangkat yang tadinya dipakai dengan akun lokal perlu diberi tahu dua
+    // hal: akun itu sudah dihapus, dan antrean yang terkumpul akan tercatat
+    // atas nama siapa. Yang kedua bukan basa-basi — antrean tidak menyimpan
+    // pemilik, dan server menetapkan pencatatnya dari token pengirim
+    // (`recorded_by` = pemilik token). Jadi memindahkan kepemilikan diam-diam
+    // adalah hal yang paling mudah terjadi di sini, dan paling sulit
+    // ditelusuri setelahnya.
+    if (hadLocalAccount) {
+      final pending = ref.read(scanControllerProvider).queueCount +
+          ref.read(classAttendanceQueueProvider).count;
+
+      final buffer = StringBuffer()
+        ..write('Perangkat ini sekarang terhubung ke ')
+        ..write(schoolName ?? 'server sekolah')
+        ..write('. Mulai sekarang gunakan user dan password akun sekolah '
+            'Anda — akun lokal yang dipakai untuk menyiapkan perangkat sudah '
+            'dihapus.');
+
+      if (pending > 0) {
+        buffer
+          ..writeln()
+          ..writeln()
+          ..write('$pending catatan absensi yang belum terkirim tetap aman, ')
+          ..write('dan akan tercatat atas nama ${user.fullName}.');
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Akun lokal tidak berlaku lagi'),
+          content: Text(buffer.toString()),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Mengerti'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+    }
 
     // `go`, bukan `pop`: layar ini bisa dibuka dari login (tidak ada yang
     // di-pop ke mana-mana) maupun dari Profil.
@@ -427,6 +480,8 @@ class _ConnectionScannerScreenState
                   ? null
                   : schoolCtrl.text.trim();
 
+              final hadLocal = ref.read(localSessionProvider).isLocalLoggedIn;
+
               final user = await ref
                   .read(localSessionProvider.notifier)
                   .connectToBackend(
@@ -446,7 +501,11 @@ class _ConnectionScannerScreenState
                 return;
               }
 
-              await _finishConnected(schoolName: school, user: user);
+              await _finishConnected(
+                schoolName: school,
+                user: user,
+                hadLocalAccount: hadLocal,
+              );
             },
             child: const Text('Simpan'),
           ),

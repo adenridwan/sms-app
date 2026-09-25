@@ -125,6 +125,21 @@ class LocalAuthService {
     await (_db.delete(_db.localAccounts)..where((t) => t.id.equals(id))).go();
   }
 
+  /// Hapus **semua** akun lokal di perangkat ini.
+  ///
+  /// Dipanggil sekali, saat perangkat berhasil tersambung ke sekolah. Sejak
+  /// saat itu yang berlaku adalah akun sekolah, dan akun perangkat tidak boleh
+  /// bisa dipakai lagi — termasuk seandainya koneksinya diputus nanti.
+  /// Mengunci saja tidak cukup: barisnya tetap ada berikut hash passwordnya,
+  /// sehingga memutus koneksi akan menghidupkannya kembali.
+  ///
+  /// Yang dihapus hanya kredensialnya. Antrean absensi ada di tabel lain dan
+  /// **tidak disentuh** — isinya tetap terkirim, dan server mencatatnya atas
+  /// nama pemilik token yang mengirim.
+  Future<int> deleteAllAccounts() {
+    return _db.delete(_db.localAccounts).go();
+  }
+
   // ===========================================================================
   // LOGIN
   // ===========================================================================

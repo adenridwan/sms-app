@@ -12,6 +12,8 @@ import '../../features/auth/presentation/connection_scanner_screen.dart';
 import '../../features/auth/presentation/provision_scanner_screen.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/signup_screen.dart';
+import '../auth/local_session_controller.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/finance/presentation/finance_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -34,12 +36,20 @@ class _RouterNotifier extends ChangeNotifier {
       authControllerProvider,
       (_, __) => notifyListeners(),
     );
+    // Akun lokal juga membuka gerbang, selama perangkat belum tersambung.
+    _ref.listen<bool>(
+      localSessionProvider.select((s) => s.isLocalLoggedIn),
+      (_, __) => notifyListeners(),
+    );
   }
 
   final Ref _ref;
 
-  String? redirect(BuildContext context, GoRouterState state) =>
-      authRedirect(_ref.read(authControllerProvider), state.matchedLocation);
+  String? redirect(BuildContext context, GoRouterState state) => authRedirect(
+        _ref.read(authControllerProvider),
+        state.matchedLocation,
+        localLoggedIn: _ref.read(localSessionProvider).isLocalLoggedIn,
+      );
 }
 
 /// Layar yang boleh dibuka tanpa sesi.
@@ -48,18 +58,31 @@ class _RouterNotifier extends ChangeNotifier {
 /// cara memperoleh sesi. `/provision-scan` sempat tidak terdaftar, sehingga
 /// deep link `smsapp://provision?token=…` di perangkat yang belum masuk
 /// dilempar ke `/login` dan tokennya terbuang.
-const kPublicRoutes = {'/login', '/connect-scan', '/provision-scan'};
+const kPublicRoutes = {
+  '/login',
+  '/signup',
+  '/connect-scan',
+  '/provision-scan',
+};
 
 /// Aturan gerbang autentikasi, dipisah dari GoRouter supaya bisa diuji tanpa
 /// merakit seluruh aplikasi. Inilah bagian yang dulu menanyakan sistem yang
 /// salah, jadi ia layak punya uji sendiri.
-String? authRedirect(AuthState auth, String loc) {
+/// [localLoggedIn] — masuk memakai akun lokal, yang hanya mungkin di perangkat
+/// yang belum tersambung ke sekolah mana pun (lihat
+/// `LocalSession.canUseLocalAccount`). Akun itu tidak punya token, jadi ia
+/// membuka aplikasi tanpa menjanjikan apa pun soal API.
+String? authRedirect(
+  AuthState auth,
+  String loc, {
+  bool localLoggedIn = false,
+}) {
   // Masih memulihkan sesi dari token tersimpan.
   if (auth.status == AuthStatus.unknown) {
     return loc == '/splash' ? null : '/splash';
   }
 
-  if (auth.isAuthenticated) {
+  if (auth.isAuthenticated || localLoggedIn) {
     // `/connect-scan` sengaja tidak ikut dilempar: pengguna yang sudah masuk
     // membukanya dari Profil untuk berpindah sekolah / server.
     if (loc == '/login' || loc == '/splash') return '/home';
@@ -92,6 +115,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (_, __) => const LoginScreen(),
+      ),
+      // Akun lokal untuk menyiapkan perangkat sebelum ada sekolah yang dituju.
+      // Tertutup sendiri begitu QR Koneksi sukses — lihat
+      // `LocalSession.canUseLocalAccount`.
+      GoRoute(
+        path: '/signup',
+        builder: (_, __) => const SignupScreen(),
       ),
       // Scan QR for backend connection (can be accessed before or after login)
       GoRoute(

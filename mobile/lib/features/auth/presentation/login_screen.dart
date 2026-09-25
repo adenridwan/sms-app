@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/backend_status_dot.dart';
 import '../../../core/theme/theme_mode_button.dart';
+import '../../../core/auth/local_session_controller.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -34,25 +35,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
+
+    final email = _emailCtrl.text.trim();
     final notifier = ref.read(authControllerProvider.notifier);
+
     if (_useOtp) {
-      await notifier.loginWithOtp(
-        email: _emailCtrl.text.trim(),
-        code: _codeCtrl.text.trim(),
-      );
-    } else {
-      await notifier.login(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
-        remember: _remember,
-      );
+      await notifier.loginWithOtp(email: email, code: _codeCtrl.text.trim());
+      return;
     }
+
+    // Perangkat yang belum tersambung ke sekolah dicoba lewat akun lokal
+    // lebih dulu. Urutan ini disengaja: di perangkat seperti itu tidak ada
+    // alamat server yang berarti, jadi menembak /auth/login duluan hanya
+    // menghabiskan waktu tunggu sebelum gagal.
+    if (ref.read(canUseLocalAccountProvider)) {
+      final ok = await ref.read(localSessionProvider.notifier).localLogin(
+            email: email,
+            password: _passwordCtrl.text,
+          );
+      if (ok) return;
+    }
+
+    await notifier.login(
+      email: email,
+      password: _passwordCtrl.text,
+      remember: _remember,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final scheme = Theme.of(context).colorScheme;
+    final canUseLocal = ref.watch(canUseLocalAccountProvider);
     final busy = auth.isBusy;
 
     // Tampilkan error sebagai SnackBar saat berubah.
@@ -61,6 +76,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(content: Text(next.error!)));
+      }
+    });
+
+    // Galat dari jalur akun lokal punya salurannya sendiri.
+    ref.listen<LocalSession>(localSessionProvider, (prev, next) {
+      if (next.error != null && next.error != prev?.error) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(next.error!)));
+        ref.read(localSessionProvider.notifier).clearError();
       }
     });
 
@@ -241,6 +266,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ? 'Masuk dengan password'
                           : 'Masuk dengan kode akses'),
                     ),
+
+                    // Hanya selama perangkat belum tersambung ke sekolah.
+                    // Setelah itu akun lokal tidak berlaku, jadi menawarkannya
+                    // cuma mengundang orang membuat akun yang langsung ditolak.
+                    if (canUseLocal) ...[
+                      const SizedBox(height: 18),
+                      const Divider(),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Belum terhubung ke sekolah mana pun. Anda bisa '
+                        'membuat akun lokal untuk menyiapkan dan menguji '
+                        'perangkat ini lebih dulu.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.45,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed:
+                            busy ? null : () => context.push('/signup'),
+                        icon: const Icon(Icons.person_add_alt_1_outlined,
+                            size: 18),
+                        label: const Text('Buat Akun Lokal'),
+                      ),
+                    ],
                   ],
                 ),
               ),
