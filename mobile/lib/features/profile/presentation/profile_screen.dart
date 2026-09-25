@@ -10,6 +10,7 @@ import '../../../core/theme/theme_controller.dart';
 import '../../../core/theme/ui_kit.dart';
 import '../../attendance/presentation/scanner_home_screen.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../auth/presentation/widgets/logout_dialog.dart';
 import '../../notifications/presentation/notification_controller.dart';
 
 /// Tab Profil: identitas, peran, status koneksi, tema, versi, keluar.
@@ -272,7 +273,7 @@ class ProfileScreen extends ConsumerWidget {
 
           const SizedBox(height: 22),
           OutlinedButton(
-            onPressed: () => _confirmLogout(context, ref),
+            onPressed: () => confirmLogout(context, ref),
             style: OutlinedButton.styleFrom(
               foregroundColor: scheme.primary,
               side: BorderSide(color: scheme.primary.withValues(alpha: .4)),
@@ -302,35 +303,6 @@ class ProfileScreen extends ConsumerWidget {
     return verified ? 'Terhubung' : 'Terhubung — menyinkronkan sesi';
   }
 
-  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Keluar'),
-        content: const Text(
-          'Yakin keluar dari aplikasi? Antrean scan offline tidak akan terhapus, '
-          'dan koneksi ke server tetap tersimpan.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Keluar'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok == true) {
-      // Catatan koneksi sekolah sengaja dibiarkan: keluar bukan berarti
-      // perangkat ini berpindah sekolah, dan memutusnya akan memaksa minta
-      // QR baru ke admin hanya untuk masuk kembali.
-      await ref.read(authControllerProvider.notifier).logout();
-    }
-  }
 }
 
 /// Baris pengaturan: label kiri, nilai kanan — tanpa ikon pembuka, sesuai

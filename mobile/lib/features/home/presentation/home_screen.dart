@@ -10,11 +10,13 @@ import '../../../core/widgets/connection_status_card.dart';
 import '../../attendance/presentation/class_attendance_queue_controller.dart';
 import '../../attendance/presentation/scan_controller.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../auth/presentation/widgets/logout_dialog.dart';
 import '../../auth/presentation/widgets/offline_password_sheet.dart';
 import '../data/dashboard_repository.dart';
 import '../models/action_item.dart';
 import '../models/dashboard_stats.dart';
 import 'widgets/action_grid.dart';
+import 'widgets/connect_required_sheet.dart';
 import 'widgets/home_hero.dart';
 import 'widgets/section_header.dart';
 
@@ -54,83 +56,143 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: RefreshIndicator(
-          onRefresh: () async {
-            invalidateDashboardStats(ref);
-            await ref.read(scanControllerProvider.notifier).loadBootstrap();
-          },
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
-            children: [
-              HomeHero(
-                greeting: _greeting(displayName),
-                roleLabel: _roleLabel(user?.userType),
-                dateLabel: _prettyDate(scan.bootstrap?.today),
-                schoolName: localSession.connection?.schoolName,
+        child: Column(
+          children: [
+            HomeTopBar(
+              schoolName: localSession.connection?.schoolName,
+              // Menunjuk sasaran yang sama dengan kartu "Pengumuman" di grid,
+              // termasuk saat modulnya belum dibangun: yang muncul lembar
+              // penjelasan yang sama, bukan layar kosong yang terlihat rusak.
+              onAnnouncements: () => _openAnnouncements(context, ref, actions),
+              onLogout: () => confirmLogout(context, ref),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  invalidateDashboardStats(ref);
+                  await ref
+                      .read(scanControllerProvider.notifier)
+                      .loadBootstrap();
+                },
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                  children: [
+                    // Nama sekolah tidak lagi diteruskan ke lencana: bar atas sudah
+                    // menyebutnya, dan mengulanginya dua kali dalam satu layar hanya
+                    // mengaburkan peran — satu-satunya keterangan yang tersisa.
+                    HomeHero(
+                      greeting: _greeting(displayName),
+                      roleLabel: _roleLabel(user?.userType),
+                      dateLabel: _prettyDate(scan.bootstrap?.today),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // Connection status card
+                    const ConnectionStatusCard(),
+
+                    if (!auth.isSessionVerified &&
+                        localSession.isConnectedToBackend)
+                      const InfoStrip(
+                        text:
+                            'Memakai sesi tersimpan — belum terhubung ke server. '
+                            'Absensi tetap disimpan dan disinkronkan nanti.',
+                      ),
+
+                    if (isTeacher && data?.linked == false)
+                      const InfoStrip(
+                        text: 'Akun Anda belum terhubung ke kelas mana pun. '
+                            'Hubungi administrator sekolah.',
+                      ),
+
+                    // Masuk lewat QR tidak pernah mengetik password, jadi perangkat
+                    // ini belum punya apa pun untuk diverifikasi saat server mati.
+                    // Ditawarkan di sini, bukan menghadang sesudah scan: memindai QR
+                    // justru dipilih supaya tak perlu mengetik password.
+                    if (ref.watch(needsOfflinePasswordProvider).valueOrNull ??
+                        false)
+                      InfoStrip(
+                        onTap: () => showOfflinePasswordSheet(context),
+                        text:
+                            'Perangkat ini belum bisa dipakai masuk saat offline. '
+                            'Ketuk untuk menyimpan password sekolah Anda.',
+                      ),
+
+                    if (pendingSync > 0)
+                      InfoStrip(
+                        onTap: () => context.push('/queue'),
+                        text: '$pendingSync data menunggu sinkron — ketuk '
+                            'untuk melihat antrean.',
+                      ),
+
+                    SummaryCard(
+                      title: isTeacher
+                          ? 'Hari ini · Kelas Anda'
+                          : 'Hari ini · Seluruh Sekolah',
+                      figures: _figures(data),
+                    ),
+
+                    const SizedBox(height: 24),
+                    const SectionHeader(title: 'Menu Cepat'),
+                    const SizedBox(height: 16),
+                    ActionGrid(actions: actions),
+
+                    if (isTeacher && (data?.myClasses.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: 26),
+                      const SectionHeader(title: 'Kelas Saya'),
+                      const SizedBox(height: 10),
+                      for (final c in data!.myClasses)
+                        _ClassRow(
+                          item: c,
+                          isHomeroom: c.id == data.homeroomClassroomId,
+                          onTap: () => context
+                              .push('/class-attendance?classroom=${c.id}'),
+                        ),
+                    ],
+                  ],
+                ),
               ),
-
-              const SizedBox(height: 18),
-
-              // Connection status card
-              const ConnectionStatusCard(),
-
-              if (!auth.isSessionVerified && localSession.isConnectedToBackend)
-                const InfoStrip(
-                  text: 'Memakai sesi tersimpan — belum terhubung ke server. '
-                      'Absensi tetap disimpan dan disinkronkan nanti.',
-                ),
-
-              if (isTeacher && data?.linked == false)
-                const InfoStrip(
-                  text: 'Akun Anda belum terhubung ke kelas mana pun. '
-                      'Hubungi administrator sekolah.',
-                ),
-
-              // Masuk lewat QR tidak pernah mengetik password, jadi perangkat
-              // ini belum punya apa pun untuk diverifikasi saat server mati.
-              // Ditawarkan di sini, bukan menghadang sesudah scan: memindai QR
-              // justru dipilih supaya tak perlu mengetik password.
-              if (ref.watch(needsOfflinePasswordProvider).valueOrNull ?? false)
-                InfoStrip(
-                  onTap: () => showOfflinePasswordSheet(context),
-                  text: 'Perangkat ini belum bisa dipakai masuk saat offline. '
-                      'Ketuk untuk menyimpan password sekolah Anda.',
-                ),
-
-              if (pendingSync > 0)
-                InfoStrip(
-                  onTap: () => context.push('/queue'),
-                  text: '$pendingSync data menunggu sinkron — ketuk '
-                      'untuk melihat antrean.',
-                ),
-
-              SummaryCard(
-                title: isTeacher ? 'Hari ini · Kelas Anda' : 'Hari ini · Seluruh Sekolah',
-                figures: _figures(data),
-              ),
-
-              const SizedBox(height: 24),
-              const SectionHeader(title: 'Menu Cepat'),
-              const SizedBox(height: 16),
-              ActionGrid(actions: actions),
-
-              if (isTeacher && (data?.myClasses.isNotEmpty ?? false)) ...[
-                const SizedBox(height: 26),
-                const SectionHeader(title: 'Kelas Saya'),
-                const SizedBox(height: 10),
-                for (final c in data!.myClasses)
-                  _ClassRow(
-                    item: c,
-                    isHomeroom: c.id == data.homeroomClassroomId,
-                    onTap: () =>
-                        context.push('/class-attendance?classroom=${c.id}'),
-                  ),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  /// Buka Pengumuman dari ikon bar atas.
+  ///
+  /// Tujuannya dibaca dari katalog aksi yang sama dengan grid, bukan ditulis
+  /// ulang di sini — supaya ikon dan kartunya tidak bisa menunjuk ke tempat
+  /// berbeda begitu modulnya dibangun nanti.
+  static void _openAnnouncements(
+    BuildContext context,
+    WidgetRef ref,
+    List<ActionItem> actions,
+  ) {
+    final item = actions.where((a) => a.key == 'announcements').firstOrNull;
+
+    if (item == null) {
+      // Peran ini memang tidak punya menu Pengumuman.
+      showBlockedMenuSheet(
+        context,
+        title: 'Pengumuman',
+        reason: BlockedReason.notBuilt,
+      );
+      return;
+    }
+
+    final blocked = item.route == null
+        ? BlockedReason.notBuilt
+        : (item.requiresBackend && !ref.read(isConnectedToBackendProvider))
+            ? BlockedReason.notConnected
+            : null;
+
+    if (blocked != null) {
+      showBlockedMenuSheet(context, title: item.title, reason: blocked);
+      return;
+    }
+
+    context.push(item.route!);
   }
 
   /// Tiga angka ringkasan. Sengaja **tidak** memakai kategori "Terlambat"
@@ -208,11 +270,27 @@ class HomeScreen extends ConsumerWidget {
     if (d == null) return iso;
 
     const days = [
-      'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu',
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
     ];
     const months = [
-      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
     ];
     return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }

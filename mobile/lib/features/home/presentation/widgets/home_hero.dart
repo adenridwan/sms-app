@@ -168,3 +168,104 @@ class SummaryFigure {
   static Color get warn => AppTheme.accentSoft;
   static Color get bad => AppTheme.accent200;
 }
+
+/// Bar atas Beranda: identitas sekolah di kiri, pintasan di kanan.
+///
+/// Mengikuti rujukan desain, dengan satu perbedaan yang disengaja: di rujukan
+/// bar ini global untuk semua tab, di sini hanya Beranda. Tiga tab lain sudah
+/// punya AppBar sendiri, sehingga bar global akan menumpuk jadi dua header —
+/// menyeragamkannya berarti membongkar navigasi keempat tab sekaligus, dan itu
+/// pekerjaan tersendiri.
+///
+/// Ikonnya sengaja hanya dua. Pengaturan dan Sinkronkan sudah punya tempat
+/// yang jelas di Profil; menyalinnya ke sini cuma menambah barang di pojok
+/// yang sama tanpa menambah kemampuan.
+class HomeTopBar extends StatelessWidget {
+  const HomeTopBar({
+    super.key,
+    this.schoolName,
+    required this.onAnnouncements,
+    required this.onLogout,
+  });
+
+  final String? schoolName;
+  final VoidCallback onAnnouncements;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 6, 12, 6),
+          child: Row(
+            children: [
+              Container(width: 14, height: 14, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  schoolName?.trim().isNotEmpty == true
+                      ? schoolName!.trim()
+                      : 'SMS Absensi',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -.2,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _TopIcon(
+                icon: Icons.campaign_rounded,
+                tooltip: 'Pengumuman',
+                onTap: onAnnouncements,
+              ),
+              _TopIcon(
+                icon: Icons.logout_rounded,
+                tooltip: 'Keluar',
+                // Satu-satunya ikon beraksen di baris ini: keluar adalah aksi
+                // yang paling tidak ingin ditekan orang tanpa sadar.
+                color: scheme.primary,
+                onTap: onLogout,
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, thickness: 1, color: scheme.outlineVariant),
+      ],
+    );
+  }
+}
+
+class _TopIcon extends StatelessWidget {
+  const _TopIcon({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onTap,
+      tooltip: tooltip,
+      icon: Icon(icon, size: 20),
+      color: color ?? Theme.of(context).colorScheme.onSurface,
+      visualDensity: VisualDensity.compact,
+      // Bidang sentuh tetap 40x40 walau ikonnya kecil — pojok kanan atas
+      // adalah tempat paling sulit dijangkau ibu jari.
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      padding: EdgeInsets.zero,
+    );
+  }
+}
