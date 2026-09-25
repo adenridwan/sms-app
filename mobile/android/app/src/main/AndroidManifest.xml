@@ -10,6 +10,11 @@
     <!-- Heartbeat: deteksi status dan nama jaringan WiFi. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <!-- Buka kunci aplikasi dengan sidik jari / wajah. Sensornya opsional:
+         perangkat tanpa biometrik tetap bisa memakai aplikasi dengan password,
+         jadi jangan sampai tersaring keluar dari Play Store. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false"/>
     <application
         android:label="SMS Absensi"
         android:name="${applicationName}"

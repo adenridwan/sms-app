@@ -73,6 +73,7 @@ dependencies:
   uuid: ^4.6.0
   zxing2: ^0.2.4
   image: ^4.10.1
+  local_auth: ^3.0.2
 
 dev_dependencies:
   flutter_test:

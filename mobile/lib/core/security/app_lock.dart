@@ -36,8 +36,25 @@ class AppLockController extends StateNotifier<bool> {
   }
 
   void unlock() {
+    _unlockedAt = DateTime.now();
     state = false;
     poke();
+  }
+
+  DateTime? _unlockedAt;
+
+  /// Baru saja dibuka.
+  ///
+  /// Dialog biometrik sistem membuat aplikasi sempat berpindah ke latar, jadi
+  /// peristiwa `resumed` menyusul tepat setelah kunci terbuka. Tanpa penanda
+  /// ini, setelan "minta biometrik saat dibuka" akan langsung mengunci lagi
+  /// apa yang barusan dibuka — sidik jari diterima, layar kunci muncul lagi.
+  /// Urutan kedua peristiwa itu berbeda-beda antar perangkat, sehingga yang
+  /// dipakai adalah jarak waktu, bukan urutannya.
+  bool get justUnlocked {
+    final at = _unlockedAt;
+    return at != null &&
+        DateTime.now().difference(at) < const Duration(seconds: 3);
   }
 
   /// Berhenti menghitung (mis. saat pengguna keluar dari sesi).

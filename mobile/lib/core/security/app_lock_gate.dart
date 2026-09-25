@@ -6,6 +6,8 @@ import '../config/app_config.dart';
 import '../providers.dart';
 import '../theme/ui_kit.dart';
 import 'app_lock.dart';
+import 'biometric_service.dart';
+import 'biometric_settings.dart';
 
 /// Membungkus seluruh aplikasi: menghitung waktu menganggur, dan menutupi layar
 /// dengan permintaan password begitu batasnya lewat.
@@ -34,9 +36,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     // token tersimpan), jadi hitungan dimulai sekali di sini.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (ref.read(authControllerProvider).isAuthenticated) {
-        ref.read(appLockProvider.notifier).poke();
-      }
+      _resolveLaunch(ref.read(authControllerProvider).status);
     });
   }
 
@@ -44,6 +44,56 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Nasib sesi saat aplikasi dibuka sudah diputuskan.
+  bool _launchResolved = false;
+
+  /// Putuskan perlakuan untuk sesi yang **dipulihkan** saat aplikasi dibuka.
+  ///
+  /// Harus dipisah dari login biasa. Sesi yang dipulihkan dari token tersimpan
+  /// belum membuktikan apa pun, jadi ia yang dikenai "minta biometrik saat
+  /// dibuka"; orang yang baru saja mengetik password atau memindai QR sudah
+  /// membuktikan dirinya sedetik lalu, dan mengunci dia seketika hanya akan
+  /// terasa seperti kerusakan.
+  ///
+  /// Status bisa masih `unknown` di frame pertama karena `_bootstrap()`
+  /// menunggu `/auth/me`. Karena itu keputusannya ditunda sampai status
+  /// benar-benar terisi — tanpa ini, setelan tersebut terlewat persis pada
+  /// pembukaan aplikasi yang menjadi alasan keberadaannya.
+  void _resolveLaunch(AuthStatus status) {
+    if (_launchResolved || status == AuthStatus.unknown) return;
+
+    if (status != AuthStatus.authenticated) {
+      // Selesai tanpa sesi: login setelah ini dihitung login baru.
+      _launchResolved = true;
+      return;
+    }
+
+    // Setelan biometrik juga dibaca dari disk dan bisa belum siap.
+    final settings = ref.read(biometricSettingsProvider);
+    if (!settings.loaded) {
+      late final ProviderSubscription<BiometricSettings> sub;
+      sub = ref.listenManual(biometricSettingsProvider, (_, next) {
+        if (!next.loaded) return;
+        sub.close();
+        if (mounted) _applyLaunchPolicy(next);
+      });
+      return;
+    }
+
+    _applyLaunchPolicy(settings);
+  }
+
+  /// Kunci langsung bila diminta, selain itu mulai hitungan menganggur.
+  void _applyLaunchPolicy(BiometricSettings settings) {
+    _launchResolved = true;
+
+    if (settings.requireOnLaunch) {
+      ref.read(appLockProvider.notifier).lock();
+    } else {
+      ref.read(appLockProvider.notifier).poke();
+    }
   }
 
   @override
@@ -55,9 +105,20 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       // selama lima menit sama rawannya dengan yang tergeletak di meja.
       final since = _pausedAt;
       _pausedAt = null;
-      if (since != null &&
-          DateTime.now().difference(since) >= AppConfig.idleLockTimeout &&
-          ref.read(authControllerProvider).isAuthenticated) {
+      if (since == null || !ref.read(authControllerProvider).isAuthenticated) {
+        return;
+      }
+
+      // Latar belakang yang barusan terjadi adalah dialog biometriknya
+      // sendiri, bukan pengguna meninggalkan aplikasi.
+      if (lock.justUnlocked) return;
+
+      // Dengan "minta biometrik saat dibuka", kembali dari latar selalu
+      // mengunci — tak peduli sebentarnya. Tanpa itu, hanya lewat batas
+      // menganggur yang mengunci.
+      final always = ref.read(biometricSettingsProvider).requireOnLaunch;
+      if (always ||
+          DateTime.now().difference(since) >= AppConfig.idleLockTimeout) {
         lock.lock();
       }
       return;
@@ -78,11 +139,23 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
 
     // Hitungan hanya berjalan selama ada sesi. Di layar login tak ada yang
     // perlu dilindungi, dan mengunci layar login hanya membuat orang terjebak.
-    ref.listen<bool>(
-      authControllerProvider.select((s) => s.isAuthenticated),
-      (_, next) => next
-          ? ref.read(appLockProvider.notifier).poke()
-          : ref.read(appLockProvider.notifier).stop(),
+    ref.listen<AuthStatus>(
+      authControllerProvider.select((s) => s.status),
+      (_, next) {
+        if (next != AuthStatus.authenticated) {
+          if (next != AuthStatus.unknown) _launchResolved = true;
+          ref.read(appLockProvider.notifier).stop();
+          return;
+        }
+
+        // Sesi yang muncul sebelum pembukaan diputuskan berarti sesi
+        // pulihan — itulah yang boleh dikunci sejak awal.
+        if (!_launchResolved) {
+          _resolveLaunch(next);
+        } else {
+          ref.read(appLockProvider.notifier).poke();
+        }
+      },
     );
 
     return Listener(
@@ -114,10 +187,58 @@ class _LockScreenState extends ConsumerState<_LockScreen> {
   bool _checking = false;
   String? _error;
 
+  /// Biometrik sudah ditawarkan sekali untuk penguncian ini.
+  ///
+  /// Dialog sistem dimunculkan otomatis saat layar kunci tampil — itu yang
+  /// diharapkan orang dari kunci biometrik. Tapi hanya **sekali**: kalau yang
+  /// gagal langsung ditawari lagi, pengguna terjebak dalam dialog yang tak
+  /// bisa ditutup untuk beralih ke password.
+  bool _biometricOffered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryBiometric(auto: true));
+  }
+
   @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  /// Buka kunci dengan sidik jari / wajah.
+  ///
+  /// Tidak ada password yang dicocokkan di sini, dan memang tidak perlu:
+  /// sesinya belum berakhir — yang diminta cuma bukti bahwa pemegang perangkat
+  /// masih orang yang sama.
+  Future<void> _tryBiometric({bool auto = false}) async {
+    final settings = ref.read(biometricSettingsProvider);
+    if (!settings.unlockEnabled) return;
+    if (auto && _biometricOffered) return;
+    _biometricOffered = true;
+
+    final outcome = await ref.read(biometricServiceProvider).authenticate(
+          reason: 'Buka kunci aplikasi absensi',
+        );
+
+    if (!mounted) return;
+
+    switch (outcome) {
+      case BiometricOutcome.success:
+        _ctrl.clear();
+        ref.read(appLockProvider.notifier).unlock();
+      case BiometricOutcome.failed:
+        // Diam saja saat tawaran otomatis: layar passwordnya sudah terlihat,
+        // dan memerahkannya tanpa pengguna melakukan apa pun cuma bikin cemas.
+        if (!auto) {
+          setState(() => _error = 'Tidak dikenali. Coba lagi atau '
+              'masukkan password.');
+        }
+      case BiometricOutcome.unavailable:
+        setState(() => _error = 'Biometrik sedang tidak bisa dipakai. '
+            'Masukkan password.');
+    }
   }
 
   Future<void> _unlock() async {
@@ -161,6 +282,8 @@ class _LockScreenState extends ConsumerState<_LockScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final user = ref.watch(authControllerProvider).user;
+    final biometricOn = ref.watch(biometricSettingsProvider).unlockEnabled;
+    final capability = ref.watch(biometricCapabilityProvider).valueOrNull;
 
     return Material(
       color: scheme.surface,
@@ -201,10 +324,41 @@ class _LockScreenState extends ConsumerState<_LockScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+              if (biometricOn) ...[
+                OutlinedButton.icon(
+                  onPressed: _checking ? null : () => _tryBiometric(),
+                  icon: const Icon(Icons.fingerprint_rounded, size: 22),
+                  label: Text('Buka dengan ${capability?.label ?? 'Biometrik'}'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: scheme.outlineVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        'atau password',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: scheme.outlineVariant)),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
               TextField(
                 controller: _ctrl,
                 obscureText: true,
-                autofocus: true,
+                // Papan ketik tidak dimunculkan saat biometrik menyala —
+                // dialog sistem sedang tampil di atasnya, dan naiknya papan
+                // ketik di belakang dialog membuat layar terlihat kacau.
+                autofocus: !biometricOn,
                 onSubmitted: (_) => _unlock(),
                 decoration: const InputDecoration(labelText: 'Password'),
               ),

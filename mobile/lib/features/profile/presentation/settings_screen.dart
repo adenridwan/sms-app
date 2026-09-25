@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/local_session_controller.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/security/biometric_service.dart';
+import '../../../core/security/biometric_settings.dart';
 import '../../../core/storage/sync_status_store.dart';
 import '../../../core/theme/ui_kit.dart';
 import '../../attendance/presentation/class_attendance_queue_controller.dart';
@@ -182,6 +184,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+
+          const SizedBox(height: 22),
+
+          // ==== KEAMANAN ====
+          const FieldLabel('Keamanan'),
+          const SizedBox(height: 8),
+          const _BiometricPanel(),
 
           const SizedBox(height: 22),
 
@@ -456,6 +465,223 @@ class _InfoRow extends StatelessWidget {
               style: const TextStyle(fontSize: 11),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Setelan biometrik.
+///
+/// Sakelar utama hanya bisa dinyalakan setelah sensornya **benar-benar
+/// menjawab** sekali: menyalakannya berdasarkan janji saja akan mengunci
+/// pengguna di layar kunci yang tak bisa dibuka biometrik, padahal ia mengira
+/// sudah aktif.
+class _BiometricPanel extends ConsumerStatefulWidget {
+  const _BiometricPanel();
+
+  @override
+  ConsumerState<_BiometricPanel> createState() => _BiometricPanelState();
+}
+
+class _BiometricPanelState extends ConsumerState<_BiometricPanel> {
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sidik jari bisa saja baru didaftarkan lewat Setelan sistem sejak layar
+    // ini terakhir dibuka.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => ref.invalidate(biometricCapabilityProvider),
+    );
+  }
+
+  Future<void> _toggleUnlock(bool value) async {
+    final notifier = ref.read(biometricSettingsProvider.notifier);
+
+    if (!value) {
+      await notifier.setUnlockEnabled(false);
+      return;
+    }
+
+    setState(() => _busy = true);
+    final outcome = await ref.read(biometricServiceProvider).authenticate(
+          reason: 'Pastikan sidik jari atau wajah Anda dikenali',
+        );
+    if (!mounted) return;
+    setState(() => _busy = false);
+
+    if (outcome == BiometricOutcome.success) {
+      await notifier.setUnlockEnabled(true);
+      return;
+    }
+
+    ref.invalidate(biometricCapabilityProvider);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(
+          outcome == BiometricOutcome.unavailable
+              ? 'Biometrik belum bisa dipakai. Daftarkan sidik jari atau '
+                  'wajah lebih dulu di Setelan perangkat.'
+              : 'Tidak dikenali — biometrik belum diaktifkan.',
+        ),
+      ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final settings = ref.watch(biometricSettingsProvider);
+    final capability = ref.watch(biometricCapabilityProvider);
+
+    return Panel(
+      child: capability.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          child: Center(
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2.2),
+            ),
+          ),
+        ),
+        error: (_, __) => Text(
+          'Status biometrik tidak bisa dibaca di perangkat ini.',
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+        data: (cap) {
+          if (!cap.available) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.fingerprint_rounded,
+                    size: 20, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Biometrik tidak tersedia',
+                          style: TextStyle(
+                              fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Perangkat ini belum punya sidik jari atau wajah yang '
+                        'terdaftar. Daftarkan lebih dulu lewat Setelan '
+                        'perangkat, lalu buka layar ini lagi.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          height: 1.45,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _BiometricSwitch(
+                icon: Icons.fingerprint_rounded,
+                title: 'Buka kunci dengan ${cap.label}',
+                subtitle: 'Aplikasi mengunci diri setelah menganggur. '
+                    'Buka tanpa mengetik password.',
+                value: settings.unlockEnabled,
+                busy: _busy,
+                onChanged: _toggleUnlock,
+              ),
+              Divider(height: 22, color: scheme.outlineVariant),
+              _BiometricSwitch(
+                icon: Icons.lock_clock_rounded,
+                title: 'Minta biometrik saat membuka aplikasi',
+                subtitle: settings.unlockEnabled
+                    ? 'Kunci dipasang tiap aplikasi dibuka atau kembali dari '
+                        'latar, tanpa menunggu waktu menganggur.'
+                    : 'Nyalakan sakelar di atas lebih dulu.',
+                value: settings.requireOnLaunch,
+                enabled: settings.unlockEnabled && !_busy,
+                onChanged: (v) => ref
+                    .read(biometricSettingsProvider.notifier)
+                    .setRequireOnLaunch(v),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BiometricSwitch extends StatelessWidget {
+  const _BiometricSwitch({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+    this.busy = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool enabled;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final on = enabled && !busy;
+
+    return Opacity(
+      opacity: on ? 1 : .55,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.45,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          busy
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.2),
+                  ),
+                )
+              : Switch(value: value, onChanged: on ? onChanged : null),
         ],
       ),
     );
